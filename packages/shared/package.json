@@ -1,0 +1,10 @@
+{
+  "name": "@boba-fett-v3/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Optional shared workspace placeholder for future cross-app code.",
+  "scripts": {
+    "build": "node -e \"process.exit(0)\"",
+    "lint": "node -e \"process.exit(0)\""
+  }
+}

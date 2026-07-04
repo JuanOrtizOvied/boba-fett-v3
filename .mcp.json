@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "openpencil": {
+      "type": "stdio",
+      "command": "/bin/zsh",
+      "args": [
+        "-lc",
+        "cd /Users/juan/LEARNING/openpencil && bun run mcp:dev"
+      ],
+      "env": {}
+    }
+  }
+}

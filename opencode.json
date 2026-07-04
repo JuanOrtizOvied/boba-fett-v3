@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "openpencil": {
+      "type": "local",
+      "command": [
+        "/bin/zsh",
+        "-lc",
+        "cd /Users/juan/LEARNING/openpencil && bun run mcp:dev"
+      ],
+      "enabled": true
+    }
+  }
+}

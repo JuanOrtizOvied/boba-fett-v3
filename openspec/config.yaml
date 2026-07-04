@@ -1,0 +1,43 @@
+schema: spec-driven
+
+context: |
+  Project: boba-fett-v3
+  Detected stack: no application stack is present in the repository root yet.
+  Current repo contents: CLAUDE.md, opencode.json, .mcp.json, and .atl/.
+  Architecture: SDD/bootstrap-only workspace; no app source tree or package manifests were found.
+  Testing: no runnable test, lint, typecheck, or build tooling is detectable from the current files.
+  Style: technical artifacts default to English; use neutral/professional Spanish only when explicitly requested for artifact text.
+
+persistence:
+  mode: hybrid
+  notes: Engram persistence plus OpenSpec bootstrap initialized.
+
+testing:
+  strict_tdd: false
+  runner: null
+  test_command: ""
+  build_command: ""
+  lint_command: ""
+  typecheck_command: ""
+  formatter_command: ""
+  coverage_threshold: 0
+  layers: []
+
+rules:
+  proposal:
+    - Create an OpenSpec change before implementing product work.
+  specs:
+    - Use Given/When/Then for scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+  design:
+    - Record architecture decisions and rationale.
+  tasks:
+    - Keep tasks session-sized and ordered.
+  apply:
+    - Follow existing code patterns when code exists.
+    - Do not assume tooling that is not present.
+  verify:
+    - Prefer the project's detected test command when available.
+    - If no test command exists, document the gap instead of inventing one.
+  archive:
+    - Warn before merging destructive deltas.

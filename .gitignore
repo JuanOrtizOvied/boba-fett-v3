@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Environment files
+.env
+.env.*
+!.env.example
+!apps/**/.env.example
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Turborepo
+.turbo/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# LangGraph local state
+.langgraph_api/
+
+# Logs and local OS/editor files
+*.log
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,23 @@
+{
+  "name": "boba-fett-v3",
+  "private": true,
+  "packageManager": "yarn@4.9.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "install:all": "yarn install",
+    "dev": "turbo run dev --parallel",
+    "dev:web": "turbo run dev --filter=web",
+    "dev:backend": "turbo run dev --filter=backend",
+    "web": "yarn dev:web",
+    "backend": "yarn dev:backend",
+    "build": "turbo run build",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "turbo": "^2.0.0"
+  }
+}
