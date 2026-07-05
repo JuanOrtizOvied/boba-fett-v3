@@ -1,0 +1,76 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/deploy-backend.yml"
+
+jobs:
+  deploy:
+    name: Build & Deploy to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push backend image
+        env:
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPO_BACKEND }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -f apps/backend/Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            apps/backend
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST_BACKEND }}
+          username: ${{ secrets.EC2_SSH_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+              | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+            docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
+
+            docker stop boba-fett-backend || true
+            docker rm boba-fett-backend || true
+
+            # NOTE: langgraph_api.server:app (this image's entrypoint) is the
+            # full LangGraph Platform runtime and fails fast at startup
+            # unless DATABASE_URI (Postgres) and REDIS_URI (Redis) are set —
+            # verified via local docker run during this bootstrap. Provision
+            # those data stores before running this workflow for real; they
+            # are not created here (out of scope for this template).
+            docker run -d \
+              --name boba-fett-backend \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              -e LLM_PROVIDER=${{ secrets.LLM_PROVIDER }} \
+              -e LLM_MODEL=${{ secrets.LLM_MODEL }} \
+              -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+              -e ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }} \
+              -e LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }} \
+              -e LANGSMITH_TRACING=true \
+              -e LANGSMITH_PROJECT=boba-fett-v3 \
+              -e DATABASE_URI=${{ secrets.DATABASE_URI }} \
+              -e REDIS_URI=${{ secrets.REDIS_URI }} \
+              ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
