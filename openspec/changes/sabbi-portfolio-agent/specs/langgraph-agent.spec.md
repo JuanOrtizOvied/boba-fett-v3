@@ -29,10 +29,9 @@ Given el grafo de LangGraph está definido
 Then el estado del agente incluye:
   | campo               | tipo                              | descripción                       |
   | messages            | list[AnyMessage] (add_messages)   | Historial de conversación         |
-  | portfolio           | dict[str, Product]                | Productos por ID                  |
-  | processing_status   | str                               | idle, processing, awaiting_confirm|
-  | current_document    | Optional[DocumentInfo]            | Documento en procesamiento        |
-  | extracted_products  | list[ExtractedProduct]            | Productos pendientes de confirmar |
+And el portfolio NO vive en el state de LangGraph
+  And el portfolio se persiste en PostgreSQL (tabla products)
+  And las tools del agente leen/escriben directamente a PostgreSQL
 ```
 
 ---
@@ -47,7 +46,7 @@ Then tiene los siguientes nodos:
   | process_document    | Procesa PDFs, imágenes y factsheets con Claude vision  |
   | extract_products    | Extrae productos estructurados del contenido procesado |
   | agent               | Nodo conversacional principal con tools binding         |
-  | generate_summary    | Genera la vista de resumen del portafolio              |
+  | tools               | Ejecuta tool calls y aplica mutaciones al portfolio    |
 And tiene las siguientes edges:
   | from             | to                | condición                           |
   | START            | router            | siempre                             |
@@ -55,7 +54,8 @@ And tiene las siguientes edges:
   | router           | agent             | si es texto libre                   |
   | process_document | extract_products  | siempre                             |
   | extract_products | agent             | siempre                             |
-  | agent            | agent             | si hay tool calls pendientes        |
+  | agent            | tools             | si hay tool calls pendientes        |
+  | tools            | agent             | siempre (loop back after execution) |
   | agent            | END               | si no hay tool calls                |
 ```
 
@@ -73,9 +73,9 @@ Then invoca add_product con los parámetros:
   | amount      | float               | sí        | 150000                     |
   | category    | CategoryEnum        | sí        | "privados"                 |
   | composition | list[AssetAlloc]    | sí        | [{name, percentage}]       |
-  And la tool agrega el producto al estado portfolio
+  And la tool escribe el producto directamente a PostgreSQL
   And retorna confirmación con el ID asignado
-  And el frontend recibe la actualización vía streaming
+  And el frontend refetch el portfolio desde la REST API
 ```
 
 ---
@@ -89,9 +89,9 @@ When Claude invoca update_product con:
   | product_id   | "prod_1"       |
   | name         | "Depto. Lima"  |
   | amount       | 250000         |
-Then el producto se actualiza en el estado
+Then el producto se actualiza en PostgreSQL
   And retorna los datos actualizados
-  And el frontend actualiza la card correspondiente
+  And el frontend refetch el portfolio para actualizar la card
 ```
 
 ---
@@ -101,9 +101,9 @@ Then el producto se actualiza en el estado
 ```gherkin
 Given existe un producto con id "prod_1" en el portafolio
 When Claude invoca delete_product con product_id "prod_1"
-Then el producto se elimina del estado
+Then el producto se elimina de PostgreSQL
   And retorna confirmación de eliminación
-  And el frontend elimina la card correspondiente
+  And el frontend refetch el portfolio para remover la card
 ```
 
 ---
@@ -208,10 +208,25 @@ Then el agente responde con un mensaje amigable:
 ```gherkin
 Given el inversionista ha agregado 5 productos en la conversación
 When el inversionista recarga la página
-Then el estado del portafolio se recupera del checkpoint de LangGraph
+Then el estado del portafolio se recupera de PostgreSQL (no del checkpoint)
   And los 5 productos siguen visibles en las cards
-  And el historial de chat se mantiene
+  And el historial de chat se recupera del checkpoint de LangGraph
   And las métricas reflejan los datos correctos
+  And el portfolio sobrevive incluso si el usuario inicia un nuevo thread de chat
+```
+
+---
+
+#### Scenario: Identidad del portafolio (v1 — sin auth)
+
+```gherkin
+Given el inversionista abre la aplicación por primera vez
+When la página carga
+Then se genera un portfolio_id (UUID) y se guarda en localStorage
+  And el portfolio_id se pasa a la REST API y al agente via configurable
+  And el portfolio persiste entre recargas de página y nuevos threads de chat
+Given el inversionista limpia los datos del navegador
+Then pierde el acceso a su portfolio (aceptable en v1, resuelto con auth en v1.1)
 ```
 
 ---
@@ -220,8 +235,8 @@ Then el estado del portafolio se recupera del checkpoint de LangGraph
 
 ```gherkin
 Given dos inversionistas usan el sistema simultáneamente
-When cada uno crea un thread nuevo
-Then cada thread tiene su propio estado aislado
-  And los productos de un thread no afectan al otro
-  And cada thread tiene su propio checkpoint
+When cada uno tiene su propio portfolio_id en localStorage
+Then cada portfolio está aislado en PostgreSQL por portfolio_id
+  And los productos de un portfolio no afectan al otro
+  And cada inversionista puede tener múltiples threads de chat sobre el mismo portfolio
 ```

@@ -99,7 +99,13 @@ Then extrae la composición por asset class del fondo
 
 ---
 
-#### Scenario: Procesamiento de link de producto de inversión
+#### Scenario: Procesamiento de link de producto de inversión [DEFERRED v1.1]
+
+> **Note**: Web scraping requires a dedicated tool (e.g. `fetch_url` with
+> `httpx` + `BeautifulSoup`) and content sanitization. Deferred to v1.1
+> to keep v1 scope focused on PDF/image/text extraction. In v1, links
+> pasted in chat are treated as text — the agent will ask the user to
+> provide the product details manually.
 
 ```gherkin
 Given el inversionista pega un link a la página de un fondo

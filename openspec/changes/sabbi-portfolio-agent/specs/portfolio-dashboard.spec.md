@@ -147,16 +147,23 @@ Then la tabla tiene las columnas:
 ```gherkin
 Given el portafolio está completo con todos los productos clasificados
 When el inversionista hace clic en "Exportar Excel"
-Then se genera un archivo .xlsx con el formato del template SABBI
+Then el frontend solicita GET /api/portfolio/:id/export al backend
+  And el backend genera el .xlsx server-side con openpyxl (datos directos de Postgres)
   And el archivo contiene las hojas por categoría con los montos correctos
   And la hoja "Portafolio Final" consolida todas las categorías
   And los porcentajes suman 100%
-  And el archivo se descarga automáticamente
+  And el archivo se descarga automáticamente (sin SheetJS ni dependencias JS)
 ```
 
 ---
 
-#### Scenario: Enviar portafolio a SABBI
+#### Scenario: Enviar portafolio a SABBI [DEFERRED v1.1]
+
+> **Note**: The SABBI submission endpoint/integration is not yet defined.
+> In v1, the "Enviar a SABBI" button is rendered but disabled with a
+> tooltip "Próximamente". The Excel export covers the immediate need —
+> users can send the exported file manually. The integration API/webhook
+> design will be specified in v1.1 once the SABBI backend contract is available.
 
 ```gherkin
 Given el portafolio está completo

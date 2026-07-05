@@ -2,74 +2,83 @@
 
 ## Phase 0 — Project Setup
 
-- [ ] **T-000** | Scaffold monorepo from boilerplate template
-  - Clone boilerplate-template
-  - Run `yarn install` at root
-  - Run `openspec init` to generate openspec directory
-  - Copy these spec files into `openspec/changes/sabbi-portfolio-agent/`
-
-- [ ] **T-001** | Configure backend for Anthropic
-  - Replace `langchain-openai` with `langchain-anthropic` in `pyproject.toml`
-  - Update `.env` with `ANTHROPIC_API_KEY` (remove `OPENAI_API_KEY`)
-  - Update `requirements.txt` if present
+- [ ] **T-001** | Configure backend for Anthropic + Postgres
+  - The bootstrap already has a configurable provider system (`models.py` with `LLM_PROVIDER`). Replace it with hardcoded `ChatAnthropic` for SABBI — this is intentional: the agent's system prompt, tools, and extraction pipeline are Anthropic-specific.
+  - Update `pyproject.toml`: add `langchain-anthropic`, `asyncpg`, `fastapi`, `uvicorn[standard]`, `openpyxl`
+  - Update `.env` with `ANTHROPIC_API_KEY` and `DATABASE_URL`
   - Verify `pip install -e .` succeeds
 
 - [ ] **T-002** | Configure frontend dependencies
-  - `yarn workspace web add zustand` (portfolio state management)
   - Verify `@assistant-ui/react`, `@assistant-ui/react-langgraph`, `@langchain/langgraph-sdk` are installed
   - Add inline SVG icon system (no external icon CDN dependencies)
+
+- [ ] **T-003** | Set up PostgreSQL schema and DB layer
+  - Create `apps/backend/src/db/schema.sql` with `products` table (JSONB composition)
+  - Create `apps/backend/src/db/models.py` with Pydantic models (`Product`, `ProductCreate`, `ProductUpdate`, `AssetAllocation`)
+  - Create `apps/backend/src/db/connection.py` with asyncpg pool management
+  - Create `apps/backend/src/db/repository.py` with `ProductRepository` (CRUD + summary)
+  - Add schema auto-creation on startup (or migration script)
 
 ---
 
 ## Phase 1 — Backend: Agent Core
 
-- [ ] **T-100** | Create state schema (`apps/backend/src/agent/state.py`)
-  - Define `Product`, `AssetAllocation`, `ExtractedProduct`, `DocumentInfo` Pydantic models
-  - Define `AgentState` TypedDict with `messages`, `portfolio`, `processing_status`, `current_document`, `extracted_products`
-  - Implement `merge_portfolio` custom reducer
+- [ ] **T-100** | Create agent state (`apps/backend/src/agent/state.py`)
+  - Define `AgentState` TypedDict with `messages` only (portfolio lives in Postgres)
   - Define `CATEGORIES` taxonomy dict with all 6 categories and subcategories
   - **Spec**: `langgraph-agent.spec.md` → "Estado del agente"
 
 - [ ] **T-101** | Create tools (`apps/backend/src/agent/tools.py`)
-  - Implement `add_product` tool with all parameters
-  - Implement `update_product` tool with partial update support
-  - Implement `delete_product` tool
-  - Implement `get_portfolio_summary` tool
+  - Implement `add_product` tool — writes to Postgres via `ProductRepository`
+  - Implement `update_product` tool — partial update in Postgres
+  - Implement `delete_product` tool — deletes from Postgres
+  - Implement `get_portfolio_summary` tool — reads from Postgres
+  - All tools receive `portfolio_id` from `RunnableConfig["configurable"]`
   - Export `portfolio_tools` list
   - **Spec**: `langgraph-agent.spec.md` → "Tool — add/update/delete_product"
 
 - [ ] **T-102** | Create system prompt (`apps/backend/src/agent/prompts.py`)
   - Define `SYSTEM_PROMPT` with SABBI categories, classification rules, response format
-  - Define `EXTRACTION_PROMPT` for document processing
   - Language: español, tono profesional y amigable
   - **Spec**: `langgraph-agent.spec.md` → "System prompt del agente"
 
 - [ ] **T-103** | Create node functions (`apps/backend/src/agent/nodes.py`)
-  - `router_node`: detect file attachments in latest message, set `current_document`
-  - `process_document_node`: send document to Claude (vision for images, text for PDFs), extract raw JSON
-  - `extract_products_node`: parse JSON into `ExtractedProduct` list
-  - `agent_node`: main conversational node with `llm_with_tools`, inject extracted products as context
+  - `router_node` + `has_file_attachment`: detect file attachments and route
+  - `process_document_node`: inject extraction prompt for the agent to process with tools
+  - `agent_node`: main conversational node with `llm_with_tools`
   - All nodes use `ChatAnthropic("claude-sonnet-4-20250514")`
   - **Spec**: `langgraph-agent.spec.md` → "Estructura del grafo", "Procesamiento de PDF"
 
 - [ ] **T-104** | Create graph definition (`apps/backend/src/agent/graph.py`)
-  - Build `StateGraph(AgentState)` with nodes: router, process_document, extract_products, agent
+  - Build `StateGraph(AgentState)` with nodes: router, process_document, agent, tools (ToolNode)
+  - Use `ToolNode(portfolio_tools)` — standard LangGraph tool execution (tools write to DB directly)
   - Add conditional edges: router → process_document | agent
-  - Add edge: process_document → extract_products → agent
-  - Add conditional edge: agent → agent (if tool_calls) | END
+  - Add edge: process_document → agent
+  - Add conditional edge: agent → tools (if tool_calls) | END
+  - Add edge: tools → agent (loop back)
   - Compile with `MemorySaver` checkpointer
   - **Spec**: `langgraph-agent.spec.md` → "Estructura del grafo principal"
 
-- [ ] **T-105** | Update `langgraph.json`
+- [ ] **T-105** | Create FastAPI REST API (`apps/backend/src/api/routes.py`)
+  - `GET /portfolio/:id` — list products
+  - `POST /portfolio/:id/products` — create product
+  - `PATCH /products/:id` — update product
+  - `DELETE /products/:id` — delete product
+  - `GET /portfolio/:id/summary` — portfolio summary
+  - Shares Postgres pool with agent tools
+
+- [ ] **T-106** | Update `langgraph.json` and dev scripts
   - Point to `./src/agent/graph.py:graph`
   - Set env to `.env`
+  - Add script to run FastAPI alongside LangGraph dev server
 
-- [ ] **T-106** | Test backend locally
-  - Run `langgraph dev --port 2024 --no-browser`
-  - Verify graph loads without errors
-  - Test with curl: send a text message, verify streaming response
-  - Test tool calls: verify add_product is invoked correctly
-  - Test document handling: send a base64 image, verify extraction
+- [ ] **T-107** | Test backend locally
+  - Start Postgres (Docker or local), run schema migration
+  - Run `langgraph dev --port 2024 --no-browser` + FastAPI on `:8001`
+  - Test chat: send text message, verify streaming response
+  - Test tool calls: verify add_product writes to Postgres
+  - Test REST API: CRUD operations via curl
+  - Verify persistence: products survive across page reloads and new threads
 
 ---
 
@@ -120,11 +129,12 @@
 
 ## Phase 3 — Frontend: Portfolio Panel
 
-- [ ] **T-300** | Create portfolio state store (`lib/portfolioStore.ts`)
-  - Zustand store with `products`, `activeCategory`, `editingProduct`, `isModalOpen`
-  - Computed selectors: `totalAmount`, `productCount`, `categoryDistribution`, `largestPosition`
-  - Actions: `addProduct`, `updateProduct`, `deleteProduct`, `setActiveCategory`, `openEditModal`
-  - Sync with LangGraph tool results via useEffect hook
+- [ ] **T-300** | Create portfolio hook (`lib/usePortfolio.ts`)
+  - Custom React hook that fetches products from REST API (`GET /api/portfolio/:id`)
+  - `refetch()` function to re-fetch after mutations (chat completion or manual CRUD)
+  - Local UI state via `useState`: `activeCategory`, `editingProduct`, `isModalOpen`
+  - Computed values via `useMemo`: `totalAmount`, `productCount`, `categoryDistribution`, `largestPosition`
+  - No zustand — portfolio data comes from Postgres via REST API
 
 - [ ] **T-301** | Create MetricsRow component (`components/portfolio/MetricsRow.tsx`)
   - 4 metric cards: Total, Mayor posición, Categorías, Estado
@@ -195,11 +205,12 @@
   - Compute actual % from portfolio store products
   - **Spec**: `portfolio-dashboard.spec.md` → "Tabla consolidada del resumen"
 
-- [ ] **T-402** | Implement Excel export
-  - Use SheetJS (xlsx) library to generate .xlsx
-  - Create sheets per category matching SABBI template format
-  - Create "Portafolio Final" summary sheet
-  - Download file on click
+- [ ] **T-402** | Implement Excel export (server-side)
+  - Create `apps/backend/src/db/excel.py` using openpyxl
+  - Generate sheets per category matching SABBI template format
+  - Generate "Portafolio Final" summary sheet
+  - Add `GET /portfolio/:id/export` endpoint to FastAPI
+  - Frontend: download via `window.open(/api/portfolio/:id/export)` — zero JS bundle impact
   - **Spec**: `portfolio-dashboard.spec.md` → "Exportar portafolio a Excel"
 
 - [ ] **T-403** | Implement view switching (builder ↔ resumen)
@@ -213,18 +224,16 @@
 
 ## Phase 5 — Integration & Polish
 
-- [ ] **T-500** | Wire tool results to portfolio store
-  - useEffect in assistant.tsx watches for tool result messages
-  - Parse tool results and dispatch to zustand store
-  - Handle add_product → addProduct()
-  - Handle update_product → updateProduct()
-  - Handle delete_product → deleteProduct()
-  - Handle get_portfolio_summary → populate summary view
+- [ ] **T-500** | Wire portfolio panel to REST API
+  - Portfolio panel fetches products from `GET /api/portfolio/:id`
+  - After each chat interaction completes, call `refetch()` to pick up agent-created products
+  - After manual CRUD (modal save/delete), call the REST API directly then `refetch()`
 
-- [ ] **T-501** | Bidirectional sync: manual edits → chat context
-  - When user edits/deletes via UI (not chat), inject a system message into the LangGraph thread
-  - Example: "[SISTEMA] El usuario editó manualmente 'Depto Miraflores': monto cambiado a $250,000"
-  - This keeps the agent's context in sync with UI changes
+- [ ] **T-501** | Manual CRUD via REST API
+  - Edit modal "Save" → `PATCH /api/products/:id` then `refetch()`
+  - Delete confirm → `DELETE /api/products/:id` then `refetch()`
+  - Add product → `POST /api/portfolio/:id/products` then `refetch()`
+  - No LLM call for manual operations — direct DB writes
 
 - [ ] **T-502** | Error handling
   - Document processing failures → friendly message in chat
@@ -291,18 +300,19 @@
 ## Dependency Graph
 
 ```
-T-000 ─► T-001 ─► T-100 ─► T-101 ─► T-102 ─► T-103 ─► T-104 ─► T-105 ─► T-106
-         T-002 ─► T-200 ─► T-201
-                  T-202 ─► T-203 ─► T-204 ─► T-205
-                           T-300 ─► T-301
-                                    T-302
-                                    T-303 ─► T-304
-                                    T-305
-                                    T-306
-                                    T-307
-                  T-300 ─► T-400 ─► T-401 ─► T-402 ─► T-403
-         T-106 + T-205 ─► T-500 ─► T-501 ─► T-502 ─► T-503 ─► T-504
-                                    T-600 ─► T-601
-                                    T-602 ─► T-603
-                                             T-604 ─► T-605
+T-001 ─► T-003 ─► T-100 ─► T-101 ─► T-102 ─► T-103 ─► T-104 ─► T-106 ─► T-107
+                   T-003 ─► T-105 (FastAPI, parallel with agent)
+T-002 ─► T-200 ─► T-201
+         T-202 ─► T-203 ─► T-204 ─► T-205
+                  T-300 ─► T-301
+                           T-302
+                           T-303 ─► T-304
+                           T-305
+                           T-306
+                           T-307
+         T-300 ─► T-400 ─► T-401 ─► T-402 ─► T-403
+T-107 + T-205 ─► T-500 ─► T-501 ─► T-502 ─► T-503 ─► T-504
+                           T-600 ─► T-601
+                           T-602 ─► T-603
+                                    T-604 ─► T-605
 ```

@@ -230,3 +230,20 @@ Then cada sección de categoría muestra al final de su grid un botón "Agregar 
   And el botón tiene borde dashed, ícono + y texto "Agregar producto"
   And al hacer hover el botón cambia a fondo accent con texto accent
 ```
+
+---
+
+#### Scenario: CRUD manual via REST API (sin LLM)
+
+```gherkin
+Given el inversionista edita un producto desde el modal
+When hace clic en "Guardar producto"
+Then el frontend envía PATCH /api/products/:id directamente a la REST API
+  And la operación se ejecuta contra PostgreSQL sin invocar al LLM
+  And el frontend refetch el portfolio para actualizar la UI
+  And el costo de la operación es $0 (no hay llamada a Claude)
+Given el inversionista elimina un producto desde la card
+When confirma la eliminación
+Then el frontend envía DELETE /api/products/:id a la REST API
+  And el producto se elimina de PostgreSQL directamente
+```
