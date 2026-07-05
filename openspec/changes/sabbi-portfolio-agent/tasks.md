@@ -1,0 +1,308 @@
+# Tasks: sabbi-portfolio-agent
+
+## Phase 0 — Project Setup
+
+- [ ] **T-000** | Scaffold monorepo from boilerplate template
+  - Clone boilerplate-template
+  - Run `yarn install` at root
+  - Run `openspec init` to generate openspec directory
+  - Copy these spec files into `openspec/changes/sabbi-portfolio-agent/`
+
+- [ ] **T-001** | Configure backend for Anthropic
+  - Replace `langchain-openai` with `langchain-anthropic` in `pyproject.toml`
+  - Update `.env` with `ANTHROPIC_API_KEY` (remove `OPENAI_API_KEY`)
+  - Update `requirements.txt` if present
+  - Verify `pip install -e .` succeeds
+
+- [ ] **T-002** | Configure frontend dependencies
+  - `yarn workspace web add zustand` (portfolio state management)
+  - Verify `@assistant-ui/react`, `@assistant-ui/react-langgraph`, `@langchain/langgraph-sdk` are installed
+  - Add inline SVG icon system (no external icon CDN dependencies)
+
+---
+
+## Phase 1 — Backend: Agent Core
+
+- [ ] **T-100** | Create state schema (`apps/backend/src/agent/state.py`)
+  - Define `Product`, `AssetAllocation`, `ExtractedProduct`, `DocumentInfo` Pydantic models
+  - Define `AgentState` TypedDict with `messages`, `portfolio`, `processing_status`, `current_document`, `extracted_products`
+  - Implement `merge_portfolio` custom reducer
+  - Define `CATEGORIES` taxonomy dict with all 6 categories and subcategories
+  - **Spec**: `langgraph-agent.spec.md` → "Estado del agente"
+
+- [ ] **T-101** | Create tools (`apps/backend/src/agent/tools.py`)
+  - Implement `add_product` tool with all parameters
+  - Implement `update_product` tool with partial update support
+  - Implement `delete_product` tool
+  - Implement `get_portfolio_summary` tool
+  - Export `portfolio_tools` list
+  - **Spec**: `langgraph-agent.spec.md` → "Tool — add/update/delete_product"
+
+- [ ] **T-102** | Create system prompt (`apps/backend/src/agent/prompts.py`)
+  - Define `SYSTEM_PROMPT` with SABBI categories, classification rules, response format
+  - Define `EXTRACTION_PROMPT` for document processing
+  - Language: español, tono profesional y amigable
+  - **Spec**: `langgraph-agent.spec.md` → "System prompt del agente"
+
+- [ ] **T-103** | Create node functions (`apps/backend/src/agent/nodes.py`)
+  - `router_node`: detect file attachments in latest message, set `current_document`
+  - `process_document_node`: send document to Claude (vision for images, text for PDFs), extract raw JSON
+  - `extract_products_node`: parse JSON into `ExtractedProduct` list
+  - `agent_node`: main conversational node with `llm_with_tools`, inject extracted products as context
+  - All nodes use `ChatAnthropic("claude-sonnet-4-20250514")`
+  - **Spec**: `langgraph-agent.spec.md` → "Estructura del grafo", "Procesamiento de PDF"
+
+- [ ] **T-104** | Create graph definition (`apps/backend/src/agent/graph.py`)
+  - Build `StateGraph(AgentState)` with nodes: router, process_document, extract_products, agent
+  - Add conditional edges: router → process_document | agent
+  - Add edge: process_document → extract_products → agent
+  - Add conditional edge: agent → agent (if tool_calls) | END
+  - Compile with `MemorySaver` checkpointer
+  - **Spec**: `langgraph-agent.spec.md` → "Estructura del grafo principal"
+
+- [ ] **T-105** | Update `langgraph.json`
+  - Point to `./src/agent/graph.py:graph`
+  - Set env to `.env`
+
+- [ ] **T-106** | Test backend locally
+  - Run `langgraph dev --port 2024 --no-browser`
+  - Verify graph loads without errors
+  - Test with curl: send a text message, verify streaming response
+  - Test tool calls: verify add_product is invoked correctly
+  - Test document handling: send a base64 image, verify extraction
+
+---
+
+## Phase 2 — Frontend: Layout & Chat
+
+- [ ] **T-200** | Create split-screen layout (`app/page.tsx`)
+  - Grid layout: 340px chat | fluid portfolio
+  - Full viewport height minus topbar
+  - Chat panel: flex column with pinned input
+  - Portfolio panel: scrollable content
+  - **Spec**: `portfolio-dashboard.spec.md` → "Scroll vertical solo en el panel de portafolio"
+
+- [ ] **T-201** | Create topbar component (`components/layout/Topbar.tsx`)
+  - Logo + brand name
+  - Nav tabs: "Construir portafolio" (active) | "Resumen final"
+  - Action buttons: "Exportar" | "Enviar a SABBI"
+  - View switching state management
+
+- [ ] **T-202** | Create SVG icon system (`components/icons/Icons.tsx`)
+  - Define all icons as inline SVG React components
+  - Icons needed: robot, camera, pdf, file, link, clip, send, edit, trash, check, plus, download, pie, chat, x, info, minus
+  - No external CDN dependencies — must render offline
+  - **Spec**: `conversation-and-extraction.spec.md` → all icon references
+
+- [ ] **T-203** | Customize chat panel with assistant-ui (`components/chat/ChatPanel.tsx`)
+  - Use assistant-ui `Thread` component as base
+  - Customize message bubbles: user (accent bg), bot (neutral bg)
+  - File attachments render inside user message bubble (not separate messages)
+  - Display extracted products in bot messages as structured list with badges
+  - Input area pinned at bottom with file upload buttons
+  - **Spec**: `conversation-and-extraction.spec.md` → "Archivos adjuntos pertenecen al mensaje", "Chat input siempre visible"
+
+- [ ] **T-204** | Wire LangGraph runtime (`app/assistant.tsx`)
+  - Configure `useLangGraphRuntime` with create/load handlers
+  - Configure `unstable_createLangGraphStream` for SSE
+  - Set `ASSISTANT_ID` from env
+  - **Spec**: `langgraph-agent.spec.md` → "Streaming de respuestas al frontend"
+
+- [ ] **T-205** | Implement file upload in chat
+  - Support drag-and-drop on chat input
+  - Support click-to-upload via paperclip button
+  - Quick-action buttons: Captura, PDF, Link, Factsheet
+  - Convert files to base64 for LangGraph API
+  - Show file chip in user message with icon, name, size
+  - **Spec**: `conversation-and-extraction.spec.md` → all file upload scenarios
+
+---
+
+## Phase 3 — Frontend: Portfolio Panel
+
+- [ ] **T-300** | Create portfolio state store (`lib/portfolioStore.ts`)
+  - Zustand store with `products`, `activeCategory`, `editingProduct`, `isModalOpen`
+  - Computed selectors: `totalAmount`, `productCount`, `categoryDistribution`, `largestPosition`
+  - Actions: `addProduct`, `updateProduct`, `deleteProduct`, `setActiveCategory`, `openEditModal`
+  - Sync with LangGraph tool results via useEffect hook
+
+- [ ] **T-301** | Create MetricsRow component (`components/portfolio/MetricsRow.tsx`)
+  - 4 metric cards: Total, Mayor posición, Categorías, Estado
+  - Auto-update from zustand store
+  - Format amounts as abbreviated (K, M)
+  - **Spec**: `portfolio-dashboard.spec.md` → "Métricas del portafolio en tiempo real"
+
+- [ ] **T-302** | Create CategoryTabs component (`components/portfolio/CategoryTabs.tsx`)
+  - Tab for "Todos" + 6 category tabs
+  - Each tab shows count badge
+  - Active tab styled with category color
+  - onClick filters visible sections
+  - **Spec**: `portfolio-dashboard.spec.md` → "Filtrado por categoría con tabs"
+
+- [ ] **T-303** | Create ProductCard component (`components/portfolio/ProductCard.tsx`)
+  - View state: name, provider, amount, composition bar + legend, category badge
+  - Hover: show edit/delete action buttons
+  - Composition bar: proportional colored segments
+  - Composition legend: dot + name + percentage for each asset class
+  - Category color bar on left border
+  - **Spec**: `product-cards-crud.spec.md` → "Visualización de una card", "Card con composición multi-asset"
+
+- [ ] **T-304** | Implement inline delete confirmation in ProductCard
+  - Click trash → card transitions to delete-confirm view
+  - Shows warning icon, title, description, product summary, cancel/delete buttons
+  - Red border, red left bar
+  - Cancel → restore card view
+  - Confirm → animate out (opacity 0, scale 0.95), remove from store
+  - **Spec**: `product-cards-crud.spec.md` → "Eliminar producto — confirmación inline"
+
+- [ ] **T-305** | Create EditProductModal (`components/portfolio/EditProductModal.tsx`)
+  - Overlay with centered modal, close on Escape / overlay click
+  - Two-column layout:
+    - Left: nombre, proveedor, monto, categoría (dropdown)
+    - Right: composition rows (name + percentage + remove), total, add button
+  - Pre-populate fields when editing, empty when adding
+  - Real-time percentage total validation (green if 100%, red otherwise)
+  - Save: validate required fields, update/add product in store, close modal
+  - **Spec**: `product-cards-crud.spec.md` → "Editar producto abre modal", "Validación de porcentajes"
+
+- [ ] **T-306** | Create AddProduct button component
+  - Dashed border card at end of each category grid
+  - onClick opens EditProductModal with category pre-selected
+  - **Spec**: `product-cards-crud.spec.md` → "Agregar producto manualmente"
+
+- [ ] **T-307** | Create category section component (`components/portfolio/CategorySection.tsx`)
+  - Section header with badge number, title, total amount
+  - Cards grid with auto-fill columns (min 240px)
+  - Include AddProduct button at end
+  - **Spec**: `portfolio-dashboard.spec.md` → "Secciones por categoría"
+
+---
+
+## Phase 4 — Frontend: Summary View
+
+- [ ] **T-400** | Create PortfolioSummary component (`components/portfolio/PortfolioSummary.tsx`)
+  - Full-width layout (no chat panel)
+  - Header with title + export/send buttons
+  - Donut chart SVG (6 segments by category)
+  - Legend grid (2 columns: dot + label + percentage)
+  - **Spec**: `portfolio-dashboard.spec.md` → "Vista de resumen final", "Donut chart"
+
+- [ ] **T-401** | Create SummaryTable component (`components/portfolio/SummaryTable.tsx`)
+  - Columns: Categoría, Actual %, Retorno, Deseado %
+  - Category rows: highlighted bg, badge with number
+  - Subcategory rows: indented, secondary color, progress bar
+  - Total row: bold, top border, 100.0%
+  - Compute actual % from portfolio store products
+  - **Spec**: `portfolio-dashboard.spec.md` → "Tabla consolidada del resumen"
+
+- [ ] **T-402** | Implement Excel export
+  - Use SheetJS (xlsx) library to generate .xlsx
+  - Create sheets per category matching SABBI template format
+  - Create "Portafolio Final" summary sheet
+  - Download file on click
+  - **Spec**: `portfolio-dashboard.spec.md` → "Exportar portafolio a Excel"
+
+- [ ] **T-403** | Implement view switching (builder ↔ resumen)
+  - Topbar tabs control active view
+  - Builder view: grid with chat + portfolio
+  - Resumen view: full-width summary
+  - State preserved when switching
+  - **Spec**: `portfolio-dashboard.spec.md` → "Navegación entre vistas"
+
+---
+
+## Phase 5 — Integration & Polish
+
+- [ ] **T-500** | Wire tool results to portfolio store
+  - useEffect in assistant.tsx watches for tool result messages
+  - Parse tool results and dispatch to zustand store
+  - Handle add_product → addProduct()
+  - Handle update_product → updateProduct()
+  - Handle delete_product → deleteProduct()
+  - Handle get_portfolio_summary → populate summary view
+
+- [ ] **T-501** | Bidirectional sync: manual edits → chat context
+  - When user edits/deletes via UI (not chat), inject a system message into the LangGraph thread
+  - Example: "[SISTEMA] El usuario editó manualmente 'Depto Miraflores': monto cambiado a $250,000"
+  - This keeps the agent's context in sync with UI changes
+
+- [ ] **T-502** | Error handling
+  - Document processing failures → friendly message in chat
+  - Network errors → retry with exponential backoff
+  - Invalid tool results → graceful degradation
+  - **Spec**: `langgraph-agent.spec.md` → "Manejo de errores"
+
+- [ ] **T-503** | Loading states and animations
+  - Card entrance animation: fade in + slide up
+  - Delete animation: fade out + scale down
+  - Modal open/close: overlay fade + modal slide + scale
+  - Chat messages: progressive rendering during streaming
+  - Document processing: loading indicator in chat
+
+- [ ] **T-504** | Responsive adjustments
+  - Chat panel min-width: 300px
+  - Portfolio panel: responsive grid (auto-fill, min 240px)
+  - Modal: max-width 92vw for smaller screens
+  - Topbar: collapse actions to icons on narrow screens
+
+---
+
+## Phase 6 — Testing & Deployment
+
+- [ ] **T-600** | Backend unit tests
+  - Test tool functions return correct schemas
+  - Test state reducers (merge_portfolio)
+  - Test document extraction parsing (valid JSON, malformed JSON, empty)
+  - Test category validation
+
+- [ ] **T-601** | Backend integration tests
+  - Test full graph execution with mock Claude responses
+  - Test text input → tool call → state update flow
+  - Test document input → extraction → add_product flow
+  - Test concurrent threads isolation
+
+- [ ] **T-602** | Frontend component tests
+  - ProductCard: renders all states (view, delete-confirm)
+  - EditProductModal: form validation, save, cancel
+  - MetricsRow: recomputes on product changes
+  - CategoryTabs: filter sections correctly
+
+- [ ] **T-603** | E2E tests
+  - Full flow: send message → agent responds → products appear as cards
+  - Edit product via modal → card updates
+  - Delete product → card removed → metrics updated
+  - Switch to resumen → donut + table render correctly
+  - Export Excel → file downloads with correct data
+
+- [ ] **T-604** | Update CI/CD for Anthropic
+  - Replace `OPENAI_API_KEY` with `ANTHROPIC_API_KEY` in deploy-backend.yml
+  - Add `ANTHROPIC_API_KEY` to GitHub repository secrets
+  - Verify Docker build with `langchain-anthropic` dependency
+  - Test production deploy end-to-end
+
+- [ ] **T-605** | Update CLAUDE.md
+  - Document SABBI-specific setup instructions
+  - Update tech stack table (Anthropic instead of OpenAI)
+  - Add portfolio-specific troubleshooting entries
+  - Document OpenSpec specs location
+
+---
+
+## Dependency Graph
+
+```
+T-000 ─► T-001 ─► T-100 ─► T-101 ─► T-102 ─► T-103 ─► T-104 ─► T-105 ─► T-106
+         T-002 ─► T-200 ─► T-201
+                  T-202 ─► T-203 ─► T-204 ─► T-205
+                           T-300 ─► T-301
+                                    T-302
+                                    T-303 ─► T-304
+                                    T-305
+                                    T-306
+                                    T-307
+                  T-300 ─► T-400 ─► T-401 ─► T-402 ─► T-403
+         T-106 + T-205 ─► T-500 ─► T-501 ─► T-502 ─► T-503 ─► T-504
+                                    T-600 ─► T-601
+                                    T-602 ─► T-603
+                                             T-604 ─► T-605
+```

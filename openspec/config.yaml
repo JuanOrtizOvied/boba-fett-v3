@@ -1,12 +1,36 @@
 schema: spec-driven
 
 context: |
-  Project: boba-fett-v3
-  Detected stack: no application stack is present in the repository root yet.
-  Current repo contents: CLAUDE.md, opencode.json, .mcp.json, and .atl/.
-  Architecture: SDD/bootstrap-only workspace; no app source tree or package manifests were found.
+  Project: boba-fett-v3 / sabbi-portfolio-builder
+  Description: Agente conversacional para construir portafolios de inversión SABBI.
+    Reemplaza el proceso manual de clasificación en Excel con una experiencia
+    guiada por IA que extrae productos de inversión desde documentos,
+    screenshots, factsheets y links.
+  Detected stack: Next.js 15 + React 19 + Tailwind CSS + assistant-ui (frontend),
+    LangGraph Python + langchain-anthropic (backend), Yarn workspaces + Turborepo (monorepo).
+  Current repo contents: CLAUDE.md, opencode.json, .mcp.json, .atl/, and openspec/.
+  Architecture: SDD monorepo with apps/web (Next.js) and apps/backend (LangGraph Python).
+    Frontend uses @assistant-ui/react-langgraph runtime. Backend uses ChatAnthropic exclusively.
   Testing: no runnable test, lint, typecheck, or build tooling is detectable from the current files.
-  Style: technical artifacts default to English; use neutral/professional Spanish only when explicitly requested for artifact text.
+  Style: technical artifacts default to English; use neutral/professional Spanish only when
+    explicitly requested for artifact text. User-facing UI text is in Spanish.
+
+version: 0.1.0
+
+stack:
+  frontend: Next.js 15 + React 19 + Tailwind CSS + assistant-ui
+  backend: LangGraph (Python) + langchain-anthropic (Claude)
+  runtime: "@assistant-ui/react-langgraph"
+  monorepo: Yarn workspaces + Turborepo
+  ci_cd: GitHub Actions → Docker → ECR → EC2
+  llm_provider: Anthropic (claude-sonnet-4-20250514)
+  state_management: zustand (frontend portfolio state)
+  icons: Inline SVG (no external CDN dependencies)
+
+domains:
+  - portfolio-builder
+
+tool: claude-code
 
 persistence:
   mode: hybrid
@@ -21,7 +45,19 @@ testing:
   typecheck_command: ""
   formatter_command: ""
   coverage_threshold: 0
-  layers: []
+  layers:
+    - name: backend-unit
+      scope: apps/backend/tests/unit/
+      description: Tool functions, state reducers, category validation
+    - name: backend-integration
+      scope: apps/backend/tests/integration/
+      description: Full graph execution with mock Claude responses
+    - name: frontend-component
+      scope: apps/web/__tests__/components/
+      description: ProductCard, EditProductModal, MetricsRow, CategoryTabs
+    - name: e2e
+      scope: apps/web/e2e/
+      description: Full flow — message → extraction → cards → edit → summary → export
 
 rules:
   proposal:
@@ -29,15 +65,29 @@ rules:
   specs:
     - Use Given/When/Then for scenarios.
     - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - Each spec file MUST map to one domain feature (conversation, cards, dashboard, agent).
+    - Scenarios MUST cover both happy path and error/edge cases.
   design:
     - Record architecture decisions and rationale.
+    - Backend MUST use only Anthropic models (langchain-anthropic). No OpenAI.
+    - Frontend MUST use inline SVG icons. No external icon CDN dependencies.
+    - All tools MUST be defined with @tool decorator and typed parameters.
+    - State synchronization between LangGraph tool results and zustand store MUST be documented.
   tasks:
     - Keep tasks session-sized and ordered.
+    - Each task MUST reference the spec scenario(s) it satisfies.
+    - Tasks MUST follow the phase dependency graph in tasks.md.
   apply:
     - Follow existing code patterns when code exists.
     - Do not assume tooling that is not present.
+    - Frontend components follow the path convention components/<domain>/<Component>.tsx.
+    - Backend modules follow apps/backend/src/agent/<module>.py.
+    - LangGraph graph definition lives in apps/backend/src/agent/graph.py.
   verify:
     - Prefer the project's detected test command when available.
     - If no test command exists, document the gap instead of inventing one.
+    - Verify percentage totals sum to exactly 100% in portfolio summary.
+    - Verify all 6 SABBI categories are represented in taxonomy.
   archive:
     - Warn before merging destructive deltas.
+    - After archive, update the domain spec with new system behavior.
