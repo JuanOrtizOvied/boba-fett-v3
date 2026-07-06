@@ -60,17 +60,24 @@ jobs:
             # verified via local docker run during this bootstrap. Provision
             # those data stores before running this workflow for real; they
             # are not created here (out of scope for this template).
+            #
+            # SABBI-specific: the agent is Anthropic-only (no LLM_PROVIDER
+            # indirection) and the portfolio tools/REST API (`src/api/routes.py`)
+            # write directly to Postgres via DATABASE_URL — separate from the
+            # LangGraph Platform's own DATABASE_URI checkpoint store above.
+            # PORTFOLIO_API_URL is provisioned here so a future single-ASGI
+            # mount (LangGraph + FastAPI) or sidecar container can resolve the
+            # portfolio API without a redeploy.
             docker run -d \
               --name boba-fett-backend \
               --restart unless-stopped \
               -p 8000:8000 \
-              -e LLM_PROVIDER=${{ secrets.LLM_PROVIDER }} \
-              -e LLM_MODEL=${{ secrets.LLM_MODEL }} \
-              -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
               -e ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }} \
               -e LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }} \
               -e LANGSMITH_TRACING=true \
               -e LANGSMITH_PROJECT=boba-fett-v3 \
               -e DATABASE_URI=${{ secrets.DATABASE_URI }} \
               -e REDIS_URI=${{ secrets.REDIS_URI }} \
+              -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
+              -e PORTFOLIO_API_URL=${{ secrets.PORTFOLIO_API_URL }} \
               ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest

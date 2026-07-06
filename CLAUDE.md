@@ -1,8 +1,8 @@
-# CLAUDE.md — Boilerplate Template
+# CLAUDE.md — SABBI Portfolio Builder
 
 ## Project Overview
 
-This is a **boilerplate template** monorepo for building AI assistant applications. It provides a ready-to-use setup with a **Next.js + assistant-ui** frontend and a **LangGraph** (Python) backend, orchestrated with Yarn workspaces and Turborepo.
+This is **SABBI**, an AI-assisted investment portfolio builder. It provides a split-screen **Next.js + assistant-ui** frontend (chat on one side, live portfolio dashboard on the other) backed by a **LangGraph** (Python, Anthropic Claude) conversational agent plus a **FastAPI** REST API — both sharing a **PostgreSQL** database as the single source of truth for portfolio data. The project started from a general-purpose boilerplate template (Yarn workspaces + Turborepo) and was specialized for SABBI via spec-driven development.
 
 The project follows **spec-driven development (SDD)** using [OpenSpec](https://github.com/Fission-AI/OpenSpec/) to align AI and human on requirements before code is written.
 
@@ -45,6 +45,17 @@ Use OpenSpec slash commands to drive feature development:
 ```
 
 **Before implementing any feature**, always create an OpenSpec change first. Read existing specs in `openspec/specs/` to understand current system behavior. Update specs as you learn during implementation — artifacts are fluid, not rigid.
+
+### Portfolio Agent Specs
+
+The SABBI portfolio builder's delta specs live under `openspec/changes/sabbi-portfolio-agent/specs/`:
+
+- `langgraph-agent.spec.md` — agent state, tools, graph structure, system prompt, streaming, error handling
+- `conversation-and-extraction.spec.md` — chat UI, file uploads, document extraction
+- `portfolio-dashboard.spec.md` — metrics, category tabs/sections, summary view, Excel export
+- `product-cards-crud.spec.md` — product card states, edit modal, delete confirmation
+
+Read these before touching agent, portfolio, or dashboard code — they are the acceptance criteria for this change.
 
 ---
 
@@ -113,8 +124,10 @@ boilerplate-template/
 - **Yarn** >= 4 (Berry) — or Yarn Classic 1.x (`npm install -g yarn`)
 - **Python** >= 3.11
 - **uv** (recommended) or **pip** for Python dependency management
+- **PostgreSQL** >= 14 (local or Docker) — stores portfolio products; see `apps/backend/src/db/schema.sql`
+- **Anthropic API key** (Claude) — get one at https://console.anthropic.com
 - **OpenSpec** (`npm install -g @fission-ai/openspec@latest`)
-- **LangSmith API key** (for LangGraph dev server — get one at https://smith.langchain.com)
+- **LangSmith API key** (optional, for LangGraph dev server tracing — get one at https://smith.langchain.com)
 
 ---
 
@@ -393,16 +406,19 @@ cd apps/backend
 
 ```toml
 [project]
-name = "openspec-backend"
+name = "sabbi-backend"
 version = "0.1.0"
-description = "Boilerplate template LangGraph agent backend"
+description = "SABBI portfolio agent backend (LangGraph + FastAPI)"
 requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.4",
     "langchain-core>=0.3",
-    "langchain-openai>=0.3",
     "langchain-anthropic>=0.3",
     "langgraph-cli[inmem]>=0.1.55",
+    "asyncpg>=0.29",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "openpyxl>=3.1",
 ]
 
 [build-system]
@@ -440,11 +456,11 @@ class AgentState(TypedDict):
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from agent.state import AgentState
 
 
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm = ChatAnthropic(model="claude-sonnet-4-20250514", temperature=0)
 
 
 async def chatbot(state: AgentState) -> AgentState:
@@ -460,15 +476,21 @@ builder.add_edge("chatbot", END)
 graph = builder.compile()
 ```
 
+The real SABBI graph (`apps/backend/src/agent/graph.py`) extends this minimal
+shape with `router` → (`process_document` | `agent`) → (`tools` | `END`)
+routing and a `ToolNode(portfolio_tools)` that writes portfolio changes
+straight to Postgres — see `agent/tools.py` and `db/repository.py`.
+
 ### 6. Backend environment (`apps/backend/.env`)
 
 ```env
-OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sabbi
 LANGSMITH_API_KEY=your_langsmith_api_key
 
 # Optional — enable LangSmith tracing
 LANGSMITH_TRACING=true
-LANGSMITH_PROJECT=boilerplate-template
+LANGSMITH_PROJECT=sabbi-portfolio-agent
 ```
 
 ### 7. Install Python dependencies
@@ -618,6 +640,15 @@ The project uses `useLangGraphRuntime` from `@assistant-ui/react-langgraph`, whi
 
 The `langgraph dev` command runs a lightweight, in-memory API server with hot-reloading. State is persisted to a local directory but is **not production-grade** — production uses Gunicorn + Uvicorn workers behind an ALB on EC2, with a PostgreSQL-backed checkpoint store.
 
+### Dual Backend: LangGraph + FastAPI
+
+The Python backend runs **two services** that share the same PostgreSQL `products` table via `db.repository.ProductRepository`:
+
+- **LangGraph** (`:2024` dev / `:8000` prod) — the conversational agent. Portfolio-mutating tools (`add_product`, `update_product`, `delete_product`, `get_portfolio_summary` in `agent/tools.py`) write directly to Postgres; the LangGraph checkpoint itself only stores `messages` (see `agent/state.py`).
+- **FastAPI** (`:8001` dev / `PORTFOLIO_API_URL` in prod, `src/api/routes.py`) — direct CRUD for the portfolio panel (manual add/edit/delete, summary, Excel export). No LLM call is involved on this path.
+
+The Next.js API proxy (`apps/web/app/api/[...path]/route.ts`) splits incoming requests by path prefix: `/api/threads/*`, `/api/runs/*` → LangGraph; `/api/portfolio/*`, `/api/products/*` → FastAPI (`PORTFOLIO_API_URL`). Both paths write to the same database, so the frontend refetches the portfolio after either a chat turn completes or a manual CRUD operation succeeds (`apps/web/lib/usePortfolio.ts`).
+
 ---
 
 ## Development Conventions
@@ -693,9 +724,11 @@ Create an IAM user (or OIDC role) with permissions for ECR push/pull. The EC2 in
 | `EC2_HOST_BACKEND` | Backend deploy | Public IP or hostname of the backend EC2 instance |
 | `EC2_SSH_USER` | All deploy workflows | SSH user on EC2 (e.g. `ec2-user` or `ubuntu`) |
 | `EC2_SSH_KEY` | All deploy workflows | Private SSH key (PEM format) for EC2 access |
-| `LANGGRAPH_API_URL` | Frontend deploy | Backend URL for the proxy route (e.g. `http://<backend-ec2>:8000`) |
+| `LANGGRAPH_API_URL` | Frontend deploy | LangGraph backend URL for the proxy route (e.g. `http://<backend-ec2>:8000`) |
 | `LANGCHAIN_API_KEY` | Frontend deploy | LangSmith API key injected at runtime |
-| `OPENAI_API_KEY` | Backend deploy | OpenAI key injected at runtime |
+| `PORTFOLIO_API_URL` | Both deploy workflows | FastAPI portfolio API URL used by the Next.js proxy (`/api/portfolio/*`, `/api/products/*`) |
+| `ANTHROPIC_API_KEY` | Backend deploy | Claude API key injected at runtime (agent is Anthropic-only) |
+| `DATABASE_URL` | Backend deploy | Postgres connection string for the portfolio `products` table (`db.connection.get_pool`) |
 | `LANGSMITH_API_KEY` | Backend deploy | LangSmith key injected at runtime |
 
 ### Frontend Dockerfile (`apps/web/Dockerfile`)
@@ -944,15 +977,16 @@ jobs:
 
             docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_FRONTEND }}:latest
 
-            docker stop boilerplate-web || true
-            docker rm boilerplate-web || true
+            docker stop boba-fett-web || true
+            docker rm boba-fett-web || true
 
             docker run -d \
-              --name boilerplate-web \
+              --name boba-fett-web \
               --restart unless-stopped \
               -p 3000:3000 \
               -e LANGGRAPH_API_URL=${{ secrets.LANGGRAPH_API_URL }} \
               -e LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }} \
+              -e PORTFOLIO_API_URL=${{ secrets.PORTFOLIO_API_URL }} \
               -e NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent \
               ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_FRONTEND }}:latest
 ```
@@ -1013,19 +1047,25 @@ jobs:
 
             docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
 
-            docker stop boilerplate-backend || true
-            docker rm boilerplate-backend || true
+            docker stop boba-fett-backend || true
+            docker rm boba-fett-backend || true
 
             docker run -d \
-              --name boilerplate-backend \
+              --name boba-fett-backend \
               --restart unless-stopped \
               -p 8000:8000 \
-              -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+              -e ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }} \
               -e LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }} \
               -e LANGSMITH_TRACING=true \
-              -e LANGSMITH_PROJECT=boilerplate-template \
+              -e LANGSMITH_PROJECT=boba-fett-v3 \
+              -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
+              -e PORTFOLIO_API_URL=${{ secrets.PORTFOLIO_API_URL }} \
               ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
 ```
+
+See `.github/workflows/deploy-backend.yml` for the full, up-to-date command
+(it also sets `DATABASE_URI`/`REDIS_URI` for the LangGraph Platform runtime's
+own checkpoint store, separate from the portfolio `DATABASE_URL` above).
 
 ### EC2 Instance Setup (one-time)
 
@@ -1085,10 +1125,15 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 | OpenSpec commands not recognized | Run `openspec update` to refresh agent instruction files |
 | ECR login fails in GitHub Actions | Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` secrets are set and the IAM user has `ecr:GetAuthorizationToken` permission |
 | SSH deploy step fails | Ensure `EC2_SSH_KEY` secret contains the full PEM key, `EC2_HOST_*` is reachable, and port 22 is open in the security group |
-| Container starts but app is unreachable | Check `docker logs boilerplate-web` (or `boilerplate-backend`); verify ports 3000/8000 are open in the EC2 security group |
+| Container starts but app is unreachable | Check `docker logs boba-fett-web` (or `boba-fett-backend`); verify ports 3000/8000 are open in the EC2 security group |
 | PM2 shows 0 instances online | Ensure `output: "standalone"` is set in `next.config.ts` so `server.js` is generated in `.next/standalone` |
 | Gunicorn workers keep dying | Increase `--timeout` if LLM responses are slow; check EC2 instance memory (each Uvicorn worker uses ~200-400 MB) |
 | Docker pull fails on EC2 | The instance profile needs `ecr:BatchGetImage` and `ecr:GetDownloadUrlForLayer`; re-run `aws ecr get-login-password` |
+| `asyncpg.exceptions.InvalidCatalogNameError` / connection refused | Postgres isn't running or `DATABASE_URL` is wrong; start Postgres (`docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`) and verify `DATABASE_URL` in `apps/backend/.env` |
+| Products don't appear after Postgres restart | Schema is auto-applied on first `get_pool()` call (`db/connection.py` runs `schema.sql`), but the `products` table itself is unaffected by restarts — check `docker ps`/`psql` if data looks missing, not the schema step |
+| Portfolio panel stuck loading / `fetch` to `/api/portfolio/:id` fails | The FastAPI service isn't running — start it with `yarn dev:api` (`:8001`) alongside `yarn dev:backend` (LangGraph `:2024`), or `yarn dev:all` for both |
+| Proxy returns 502/404 for `/api/portfolio/*` | Check `PORTFOLIO_API_URL` in `apps/web/.env.local` (dev) or the deploy env var (prod) — the proxy (`app/api/[...path]/route.ts`) routes `/api/portfolio/*` and `/api/products/*` to this URL, everything else to `LANGGRAPH_API_URL` |
+| Agent doesn't call `add_product` after a document upload | Verify the uploaded file's content block `type` is one of `image_url`, `image`, `document`, `file` (`agent/nodes.py` → `_ATTACHMENT_CONTENT_TYPES`) so `has_file_attachment` routes to `process_document` |
 
 ---
 
@@ -1098,8 +1143,11 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 |----------------|--------------------------------------------------|
 | Frontend       | Next.js 15, React 19, Tailwind CSS, assistant-ui |
 | Runtime        | `@assistant-ui/react-langgraph`                  |
-| Backend        | LangGraph (Python), LangChain                    |
-| Dev Server     | `langgraph dev` (in-memory, hot-reload)          |
+| Agent Backend  | LangGraph (Python), LangChain, Anthropic Claude (`claude-sonnet-4-20250514`) |
+| REST API       | FastAPI (`src/api/routes.py`) — direct portfolio CRUD, no LLM call |
+| Database       | PostgreSQL (`asyncpg`) — portfolio `products` table, shared by agent tools and REST API |
+| Excel Export   | openpyxl (`src/db/excel.py`) — server-side `.xlsx` generation |
+| Dev Server     | `langgraph dev` (in-memory, hot-reload) + `uvicorn --reload` (FastAPI) |
 | Monorepo       | Yarn workspaces + Turborepo                      |
 | Orchestration  | concurrently / Makefile                          |
 | CI/CD          | GitHub Actions (ci, deploy-frontend, deploy-backend) |
