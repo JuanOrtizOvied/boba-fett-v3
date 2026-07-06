@@ -28,7 +28,8 @@ class ProductRepository:
     async def create(self, portfolio_id: str, data: ProductCreate) -> Product:
         product_id = f"prod_{uuid.uuid4().hex[:8]}"
         await self.pool.execute(
-            """INSERT INTO products (id, portfolio_id, name, provider, amount, category, composition)
+            """INSERT INTO products
+               (id, portfolio_id, name, provider, amount, category, composition)
                VALUES ($1, $2, $3, $4, $5, $6, $7)""",
             product_id,
             portfolio_id,
