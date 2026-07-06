@@ -17,8 +17,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 
 from db.connection import close_pool, get_pool
+from db.excel import build_portfolio_workbook, export_filename
 from db.models import ProductCreate, ProductUpdate
 from db.repository import ProductRepository
 
@@ -64,3 +66,23 @@ async def delete_product(product_id: str) -> None:
 @app.get("/portfolio/{portfolio_id}/summary")
 async def portfolio_summary(portfolio_id: str) -> dict:
     return await app.state.repo.get_summary(portfolio_id)
+
+
+@app.get("/portfolio/{portfolio_id}/export")
+async def export_portfolio(portfolio_id: str) -> StreamingResponse:
+    """Stream a server-generated .xlsx for the portfolio ("Portafolio Final"
+    summary sheet + one sheet per category), built straight from Postgres —
+    no client-side spreadsheet dependency (`portfolio-dashboard.spec.md` →
+    "Exportar portafolio a Excel").
+    """
+    products = await app.state.repo.list_by_portfolio(portfolio_id)
+    buffer = build_portfolio_workbook(products)
+    filename = export_filename()
+    return StreamingResponse(
+        buffer,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

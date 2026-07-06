@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MyAssistant } from "./assistant";
 import { Topbar, type PortfolioView } from "@/components/layout/Topbar";
 import { PortfolioPanel } from "@/components/portfolio/PortfolioPanel";
+import { PortfolioSummary } from "@/components/portfolio/PortfolioSummary";
+import { getPortfolioId } from "@/lib/portfolioId";
 
 /**
  * Root page: fixed topbar + view-dependent body.
@@ -14,19 +16,23 @@ import { PortfolioPanel } from "@/components/portfolio/PortfolioPanel";
  * pinned (`portfolio-dashboard.spec.md` → "Scroll vertical solo en el panel
  * de portafolio").
  *
- * "Resumen final" renders full-width, without the chat panel. The real
- * summary (donut chart + consolidated table) is built in Phase 4 (T-400+);
- * a placeholder keeps the view-switching state machinery testable now.
+ * "Resumen final" renders `PortfolioSummary` full-width, without the chat
+ * panel (`portfolio-dashboard.spec.md` → "Vista de resumen final",
+ * "Navegación entre vistas").
  *
- * `PortfolioPanel` (Phase 3) owns its own data fetching (`usePortfolio`) and
- * independent scroll — the topbar and chat header/input stay pinned.
+ * Both `PortfolioPanel` and `PortfolioSummary` own their own data fetching
+ * via independent `usePortfolio()` calls rather than lifted state — the
+ * hook's 5s poll keeps them in sync with the same Postgres-backed portfolio,
+ * so switching views never loses state (products live server-side, not in
+ * this component tree).
  */
 export default function Home() {
   const [view, setView] = useState<PortfolioView>("builder");
+  const portfolioId = useMemo(() => getPortfolioId(), []);
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      <Topbar activeView={view} onChangeView={setView} />
+      <Topbar activeView={view} onChangeView={setView} portfolioId={portfolioId} />
 
       {view === "builder" ? (
         <div className="grid min-h-0 flex-1 grid-cols-[340px_1fr]">
@@ -34,10 +40,8 @@ export default function Home() {
           <PortfolioPanel />
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-8">
-          <p className="text-sm text-sabbi-neutral-600">
-            Resumen final — próximamente.
-          </p>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <PortfolioSummary />
         </div>
       )}
     </div>

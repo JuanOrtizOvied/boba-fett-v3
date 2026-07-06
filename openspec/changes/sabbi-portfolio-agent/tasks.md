@@ -190,14 +190,14 @@
 
 ## Phase 4 — Frontend: Summary View
 
-- [ ] **T-400** | Create PortfolioSummary component (`components/portfolio/PortfolioSummary.tsx`)
+- [x] **T-400** | Create PortfolioSummary component (`components/portfolio/PortfolioSummary.tsx`)
   - Full-width layout (no chat panel)
   - Header with title + export/send buttons
   - Donut chart SVG (6 segments by category)
   - Legend grid (2 columns: dot + label + percentage)
   - **Spec**: `portfolio-dashboard.spec.md` → "Vista de resumen final", "Donut chart"
 
-- [ ] **T-401** | Create SummaryTable component (`components/portfolio/SummaryTable.tsx`)
+- [x] **T-401** | Create SummaryTable component (`components/portfolio/SummaryTable.tsx`)
   - Columns: Categoría, Actual %, Retorno, Deseado %
   - Category rows: highlighted bg, badge with number
   - Subcategory rows: indented, secondary color, progress bar
@@ -205,7 +205,7 @@
   - Compute actual % from portfolio store products
   - **Spec**: `portfolio-dashboard.spec.md` → "Tabla consolidada del resumen"
 
-- [ ] **T-402** | Implement Excel export (server-side)
+- [x] **T-402** | Implement Excel export (server-side)
   - Create `apps/backend/src/db/excel.py` using openpyxl
   - Generate sheets per category matching SABBI template format
   - Generate "Portafolio Final" summary sheet
@@ -213,7 +213,7 @@
   - Frontend: download via `window.open(/api/portfolio/:id/export)` — zero JS bundle impact
   - **Spec**: `portfolio-dashboard.spec.md` → "Exportar portafolio a Excel"
 
-- [ ] **T-403** | Implement view switching (builder ↔ resumen)
+- [x] **T-403** | Implement view switching (builder ↔ resumen)
   - Topbar tabs control active view
   - Builder view: grid with chat + portfolio
   - Resumen view: full-width summary

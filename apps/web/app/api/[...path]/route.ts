@@ -3,19 +3,28 @@ import { NextRequest, NextResponse } from "next/server";
 const LANGGRAPH_API_URL =
   process.env["LANGGRAPH_API_URL"] || "http://localhost:2024";
 const LANGCHAIN_API_KEY = process.env["LANGCHAIN_API_KEY"];
+const PORTFOLIO_API_URL =
+  process.env["PORTFOLIO_API_URL"] || "http://localhost:8001";
+
+const isPortfolioApiPath = (path: string) =>
+  path.startsWith("/portfolio/") || path.startsWith("/products/");
 
 /**
- * Proxies requests from the browser to the LangGraph backend, injecting the
- * `LANGCHAIN_API_KEY` server-side so it is never exposed to the client. Used
- * in production where the frontend cannot reach the backend directly.
+ * Proxies browser requests to the right backend: LangGraph for assistant
+ * traffic and the FastAPI portfolio service for direct portfolio CRUD/export.
+ * LangGraph API keys are injected server-side so they are never exposed to the
+ * client.
  */
 async function handleRequest(req: NextRequest) {
   const path = req.nextUrl.pathname.replace(/^\/api/, "");
-  const url = new URL(path, LANGGRAPH_API_URL);
+  const upstreamBaseUrl = isPortfolioApiPath(path)
+    ? PORTFOLIO_API_URL
+    : LANGGRAPH_API_URL;
+  const url = new URL(path, upstreamBaseUrl);
   url.search = req.nextUrl.search;
 
   const headers = new Headers(req.headers);
-  if (LANGCHAIN_API_KEY) {
+  if (!isPortfolioApiPath(path) && LANGCHAIN_API_KEY) {
     headers.set("x-api-key", LANGCHAIN_API_KEY);
   }
   headers.delete("host");
@@ -34,14 +43,17 @@ async function handleRequest(req: NextRequest) {
       headers: response.headers,
     });
   } catch (error) {
-    // The LangGraph backend is unreachable. Surface a recoverable error to
+    // The upstream backend is unreachable. Surface a recoverable error to
     // the client instead of letting the request hang or fail silently.
-    console.error("[api proxy] failed to reach LangGraph backend", error);
+    console.error("[api proxy] failed to reach upstream backend", {
+      upstreamBaseUrl,
+      error,
+    });
     return NextResponse.json(
       {
         error: "backend_unavailable",
         message:
-          "The assistant backend is unreachable. Check that the LangGraph server is running and LANGGRAPH_API_URL is configured correctly.",
+          "The backend is unreachable. Check that the API servers are running and proxy environment variables are configured correctly.",
       },
       { status: 502 },
     );
