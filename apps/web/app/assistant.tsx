@@ -10,26 +10,10 @@ import {
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { createClient } from "@/lib/chatApi";
+import { getPortfolioId } from "@/lib/portfolioId";
 
 const ASSISTANT_ID =
   process.env["NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID"] || "agent";
-
-const PORTFOLIO_ID_KEY = "portfolio_id";
-
-/**
- * Resolves this browser's portfolio identity (v1 — no auth). Generated once
- * and cached in `localStorage`; passed to the LangGraph agent as
- * `configurable.portfolio_id` so its tools know which portfolio to read/write.
- */
-function getPortfolioId(): string {
-  if (typeof window === "undefined") return "";
-  let id = window.localStorage.getItem(PORTFOLIO_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.localStorage.setItem(PORTFOLIO_ID_KEY, id);
-  }
-  return id;
-}
 
 export function MyAssistant() {
   const client = useMemo(() => createClient(), []);

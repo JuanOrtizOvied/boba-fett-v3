@@ -129,27 +129,27 @@
 
 ## Phase 3 — Frontend: Portfolio Panel
 
-- [ ] **T-300** | Create portfolio hook (`lib/usePortfolio.ts`)
+- [x] **T-300** | Create portfolio hook (`lib/usePortfolio.ts`)
   - Custom React hook that fetches products from REST API (`GET /api/portfolio/:id`)
   - `refetch()` function to re-fetch after mutations (chat completion or manual CRUD)
   - Local UI state via `useState`: `activeCategory`, `editingProduct`, `isModalOpen`
   - Computed values via `useMemo`: `totalAmount`, `productCount`, `categoryDistribution`, `largestPosition`
   - No zustand — portfolio data comes from Postgres via REST API
 
-- [ ] **T-301** | Create MetricsRow component (`components/portfolio/MetricsRow.tsx`)
+- [x] **T-301** | Create MetricsRow component (`components/portfolio/MetricsRow.tsx`)
   - 4 metric cards: Total, Mayor posición, Categorías, Estado
   - Auto-update from zustand store
   - Format amounts as abbreviated (K, M)
   - **Spec**: `portfolio-dashboard.spec.md` → "Métricas del portafolio en tiempo real"
 
-- [ ] **T-302** | Create CategoryTabs component (`components/portfolio/CategoryTabs.tsx`)
+- [x] **T-302** | Create CategoryTabs component (`components/portfolio/CategoryTabs.tsx`)
   - Tab for "Todos" + 6 category tabs
   - Each tab shows count badge
   - Active tab styled with category color
   - onClick filters visible sections
   - **Spec**: `portfolio-dashboard.spec.md` → "Filtrado por categoría con tabs"
 
-- [ ] **T-303** | Create ProductCard component (`components/portfolio/ProductCard.tsx`)
+- [x] **T-303** | Create ProductCard component (`components/portfolio/ProductCard.tsx`)
   - View state: name, provider, amount, composition bar + legend, category badge
   - Hover: show edit/delete action buttons
   - Composition bar: proportional colored segments
@@ -157,7 +157,7 @@
   - Category color bar on left border
   - **Spec**: `product-cards-crud.spec.md` → "Visualización de una card", "Card con composición multi-asset"
 
-- [ ] **T-304** | Implement inline delete confirmation in ProductCard
+- [x] **T-304** | Implement inline delete confirmation in ProductCard
   - Click trash → card transitions to delete-confirm view
   - Shows warning icon, title, description, product summary, cancel/delete buttons
   - Red border, red left bar
@@ -165,7 +165,7 @@
   - Confirm → animate out (opacity 0, scale 0.95), remove from store
   - **Spec**: `product-cards-crud.spec.md` → "Eliminar producto — confirmación inline"
 
-- [ ] **T-305** | Create EditProductModal (`components/portfolio/EditProductModal.tsx`)
+- [x] **T-305** | Create EditProductModal (`components/portfolio/EditProductModal.tsx`)
   - Overlay with centered modal, close on Escape / overlay click
   - Two-column layout:
     - Left: nombre, proveedor, monto, categoría (dropdown)
@@ -175,12 +175,12 @@
   - Save: validate required fields, update/add product in store, close modal
   - **Spec**: `product-cards-crud.spec.md` → "Editar producto abre modal", "Validación de porcentajes"
 
-- [ ] **T-306** | Create AddProduct button component
+- [x] **T-306** | Create AddProduct button component
   - Dashed border card at end of each category grid
   - onClick opens EditProductModal with category pre-selected
   - **Spec**: `product-cards-crud.spec.md` → "Agregar producto manualmente"
 
-- [ ] **T-307** | Create category section component (`components/portfolio/CategorySection.tsx`)
+- [x] **T-307** | Create category section component (`components/portfolio/CategorySection.tsx`)
   - Section header with badge number, title, total amount
   - Cards grid with auto-fill columns (min 240px)
   - Include AddProduct button at end
