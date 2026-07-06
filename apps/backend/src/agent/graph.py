@@ -10,7 +10,6 @@ itself only carries `messages`.
 
 from __future__ import annotations
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -45,4 +44,4 @@ builder.add_edge("process_document", "agent")
 builder.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
 builder.add_edge("tools", "agent")  # after tool execution, loop back to agent
 
-graph = builder.compile(checkpointer=MemorySaver())
+graph = builder.compile()
