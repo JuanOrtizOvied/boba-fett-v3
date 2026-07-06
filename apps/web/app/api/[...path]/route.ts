@@ -4,7 +4,7 @@ const LANGGRAPH_API_URL =
   process.env["LANGGRAPH_API_URL"] || "http://localhost:2024";
 const LANGCHAIN_API_KEY = process.env["LANGCHAIN_API_KEY"];
 const PORTFOLIO_API_URL =
-  process.env["PORTFOLIO_API_URL"] || "http://localhost:8001";
+  process.env["PORTFOLIO_API_URL"] || "http://localhost:3003";
 
 const isPortfolioApiPath = (path: string) =>
   path.startsWith("/portfolio/") || path.startsWith("/products/");

@@ -191,17 +191,18 @@ Select your AI tool (Claude Code) when prompted. This generates the `openspec/` 
 
 ```json
 {
-  "name": "boilerplate-template",
+  "name": "boba-fett-v3",
   "private": true,
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --parallel",
     "dev:web": "turbo run dev --filter=web",
-    "dev:backend": "cd apps/backend && langgraph dev --port 2024 --no-browser",
-    "dev:all": "concurrently \"yarn dev:backend\" \"yarn dev:web\"",
+    "dev:backend": "turbo run dev --filter=backend",
+    "dev:graph": "cd apps/backend && yarn dev:graph",
+    "dev:api": "cd apps/backend && yarn dev:api",
     "build": "turbo run build",
     "lint": "turbo run lint"
   },
@@ -211,6 +212,8 @@ Select your AI tool (Claude Code) when prompted. This generates the `openspec/` 
   }
 }
 ```
+
+The backend workspace's `dev` script uses `concurrently` to start both the LangGraph agent server (`:2024`) and the FastAPI portfolio API (`:3003`) in parallel. `yarn dev` at the root starts all three services (Next.js + LangGraph + FastAPI) via Turborepo.
 
 ---
 
@@ -502,16 +505,20 @@ pip install -e . "langgraph-cli[inmem]"
 uv pip install -e . "langgraph-cli[inmem]"
 ```
 
-### 8. Add a `dev` script for Turborepo compatibility
+### 8. Backend `package.json` scripts
 
-Create `apps/backend/package.json` so Turborepo can orchestrate it:
+Create `apps/backend/package.json` so Turborepo can orchestrate it. The `dev` script runs both the LangGraph agent server and the FastAPI portfolio API in parallel:
 
 ```json
 {
   "name": "backend",
   "private": true,
   "scripts": {
-    "dev": "langgraph dev --host 0.0.0.0 --port 2024 --no-browser"
+    "dev": "concurrently -n graph,api -c blue,green \"yarn dev:graph\" \"yarn dev:api\"",
+    "dev:graph": "langgraph dev --host 0.0.0.0 --port 2024 --no-browser",
+    "dev:api": "uvicorn api.routes:app --app-dir src --reload --port 3003",
+    "lint": "ruff check src/",
+    "test": "pytest -q"
   }
 }
 ```
@@ -523,61 +530,44 @@ Create `apps/backend/package.json` so Turborepo can orchestrate it:
 ### Option A: Turborepo (recommended)
 
 ```bash
-# From the repo root
+# From the repo root — starts all 3 services
 yarn dev
 ```
 
-This runs `turbo run dev`, which starts both `apps/web` (Next.js on `:3000`) and `apps/backend` (LangGraph on `:2024`) in parallel with persistent mode.
+This runs `turbo run dev --parallel`, which starts:
+- `apps/web` → Next.js on `:3000`
+- `apps/backend` → LangGraph on `:2024` + FastAPI on `:3003` (via `concurrently`)
 
-### Option B: Concurrently (explicit)
+### Option B: Individual services
 
 ```bash
-yarn dev:all
+yarn dev:web      # Next.js only (:3000)
+yarn dev:backend  # LangGraph + FastAPI (:2024 + :3003)
+yarn dev:graph    # LangGraph only (:2024)
+yarn dev:api      # FastAPI only (:3003)
 ```
-
-Uses the `concurrently` package to run the backend and frontend in a single terminal with color-coded output.
 
 ### Option C: Makefile
 
-Add a `Makefile` at the repo root:
-
-```makefile
-.PHONY: dev dev-web dev-backend install
-
-install:
-	yarn install
-	cd apps/backend && pip install -e . "langgraph-cli[inmem]"
-
-dev:
-	yarn dev
-
-dev-web:
-	yarn dev:web
-
-dev-backend:
-	yarn dev:backend
-
-dev-all:
-	yarn dev:all
-```
-
-Then:
-
 ```bash
-make install   # first-time setup
+make install   # first-time setup (yarn + pip)
 make dev       # run everything
+make dev-web   # Next.js only
+make dev-graph # LangGraph only
+make dev-api   # FastAPI only
 ```
 
 ---
 
 ## Key URLs (Development)
 
-| Service            | URL                        |
-|--------------------|----------------------------|
-| Frontend (Next.js) | http://localhost:3000       |
-| LangGraph API      | http://localhost:2024       |
-| LangGraph Studio   | Opens in browser on `langgraph dev` |
-| OpenSpec Dashboard | `openspec view` (interactive CLI) |
+| Service              | URL                        |
+|----------------------|----------------------------|
+| Frontend (Next.js)   | http://localhost:3000       |
+| LangGraph API        | http://localhost:2024       |
+| FastAPI Portfolio API | http://localhost:3003      |
+| LangGraph Studio     | Opens in browser on `langgraph dev` |
+| OpenSpec Dashboard   | `openspec view` (interactive CLI) |
 
 ---
 
@@ -587,14 +577,18 @@ make dev       # run everything
 # Install all dependencies
 yarn install
 
-# Run full stack
+# Run full stack (Next.js + LangGraph + FastAPI)
 yarn dev
 
 # Run only frontend
 yarn dev:web
 
-# Run only backend
+# Run both backend services (LangGraph + FastAPI)
 yarn dev:backend
+
+# Run individual backend services
+yarn dev:graph    # LangGraph agent only (:2024)
+yarn dev:api      # FastAPI portfolio API only (:3003)
 
 # Build everything
 yarn build
@@ -604,9 +598,6 @@ yarn lint
 
 # Add a dependency to the web workspace
 yarn workspace web add <package>
-
-# Run LangGraph with a custom config
-cd apps/backend && langgraph dev -c langgraph.json --port 2024
 
 # OpenSpec commands
 openspec list                    # List active changes
@@ -645,7 +636,7 @@ The `langgraph dev` command runs a lightweight, in-memory API server with hot-re
 The Python backend runs **two services** that share the same PostgreSQL `products` table via `db.repository.ProductRepository`:
 
 - **LangGraph** (`:2024` dev / `:8000` prod) — the conversational agent. Portfolio-mutating tools (`add_product`, `update_product`, `delete_product`, `get_portfolio_summary` in `agent/tools.py`) write directly to Postgres; the LangGraph checkpoint itself only stores `messages` (see `agent/state.py`).
-- **FastAPI** (`:8001` dev / `PORTFOLIO_API_URL` in prod, `src/api/routes.py`) — direct CRUD for the portfolio panel (manual add/edit/delete, summary, Excel export). No LLM call is involved on this path.
+- **FastAPI** (`:3003` dev / `PORTFOLIO_API_URL` in prod, `src/api/routes.py`) — direct CRUD for the portfolio panel (manual add/edit/delete, summary, Excel export). No LLM call is involved on this path.
 
 The Next.js API proxy (`apps/web/app/api/[...path]/route.ts`) splits incoming requests by path prefix: `/api/threads/*`, `/api/runs/*` → LangGraph; `/api/portfolio/*`, `/api/products/*` → FastAPI (`PORTFOLIO_API_URL`). Both paths write to the same database, so the frontend refetches the portfolio after either a chat turn completes or a manual CRUD operation succeeds (`apps/web/lib/usePortfolio.ts`).
 
@@ -1131,7 +1122,7 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 | Docker pull fails on EC2 | The instance profile needs `ecr:BatchGetImage` and `ecr:GetDownloadUrlForLayer`; re-run `aws ecr get-login-password` |
 | `asyncpg.exceptions.InvalidCatalogNameError` / connection refused | Postgres isn't running or `DATABASE_URL` is wrong; start Postgres (`docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`) and verify `DATABASE_URL` in `apps/backend/.env` |
 | Products don't appear after Postgres restart | Schema is auto-applied on first `get_pool()` call (`db/connection.py` runs `schema.sql`), but the `products` table itself is unaffected by restarts — check `docker ps`/`psql` if data looks missing, not the schema step |
-| Portfolio panel stuck loading / `fetch` to `/api/portfolio/:id` fails | The FastAPI service isn't running — start it with `yarn dev:api` (`:8001`) alongside `yarn dev:backend` (LangGraph `:2024`), or `yarn dev:all` for both |
+| Portfolio panel stuck loading / `fetch` to `/api/portfolio/:id` fails | The FastAPI service isn't running — start it with `yarn dev:api` (`:3003`) alongside `yarn dev:backend` (LangGraph `:2024`), or `yarn dev:all` for both |
 | Proxy returns 502/404 for `/api/portfolio/*` | Check `PORTFOLIO_API_URL` in `apps/web/.env.local` (dev) or the deploy env var (prod) — the proxy (`app/api/[...path]/route.ts`) routes `/api/portfolio/*` and `/api/products/*` to this URL, everything else to `LANGGRAPH_API_URL` |
 | Agent doesn't call `add_product` after a document upload | Verify the uploaded file's content block `type` is one of `image_url`, `image`, `document`, `file` (`agent/nodes.py` → `_ATTACHMENT_CONTENT_TYPES`) so `has_file_attachment` routes to `process_document` |
 

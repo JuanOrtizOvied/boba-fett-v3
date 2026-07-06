@@ -74,7 +74,7 @@
 
 - [ ] **T-107** | Test backend locally
   - Start Postgres (Docker or local), run schema migration
-  - Run `langgraph dev --port 2024 --no-browser` + FastAPI on `:8001`
+  - Run `langgraph dev --port 2024 --no-browser` + FastAPI on `:3003`
   - Test chat: send text message, verify streaming response
   - Test tool calls: verify add_product writes to Postgres
   - Test REST API: CRUD operations via curl

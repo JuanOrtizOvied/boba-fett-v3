@@ -759,11 +759,11 @@ def generate_portfolio_excel(products: list[Product]) -> BytesIO:
 
 In development, the backend runs two servers:
 - LangGraph dev server on `:2024` (conversation + agent)
-- FastAPI on `:8001` (portfolio CRUD)
+- FastAPI on `:3003` (portfolio CRUD)
 
 The Next.js API proxy routes requests by path prefix:
 - `/api/threads/*`, `/api/runs/*` → LangGraph (`:2024`)
-- `/api/portfolio/*`, `/api/products/*` → FastAPI (`:8001`)
+- `/api/portfolio/*`, `/api/products/*` → FastAPI (`:3003`)
 
 In production, both can be mounted as a single ASGI app or run as
 separate containers behind the ALB.
@@ -786,7 +786,7 @@ LANGSMITH_PROJECT=sabbi-portfolio-agent
 
 ```env
 NEXT_PUBLIC_LANGGRAPH_API_URL=http://localhost:2024
-NEXT_PUBLIC_PORTFOLIO_API_URL=http://localhost:8001
+NEXT_PUBLIC_PORTFOLIO_API_URL=http://localhost:3003
 NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
 # Production only:
 # LANGGRAPH_API_URL=http://<backend-ec2>:8000

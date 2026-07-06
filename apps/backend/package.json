@@ -2,9 +2,9 @@
   "name": "backend",
   "private": true,
   "scripts": {
-    "dev": "langgraph dev --host 0.0.0.0 --port 2024 --no-browser",
-    "dev:api": "test -x .venv/bin/uvicorn && .venv/bin/uvicorn api.routes:app --app-dir src --reload --port 8001 || uvicorn api.routes:app --app-dir src --reload --port 8001",
-    "dev:all": "concurrently \"yarn dev\" \"yarn dev:api\"",
+    "dev": "concurrently -n graph,api -c blue,green \"yarn dev:graph\" \"yarn dev:api\"",
+    "dev:graph": "langgraph dev --host 0.0.0.0 --port 2024 --no-browser",
+    "dev:api": "test -x .venv/bin/uvicorn && .venv/bin/uvicorn api.routes:app --app-dir src --reload --port 3003 --log-level debug || uvicorn api.routes:app --app-dir src --reload --port 3003 --log-level debug",
     "build": "echo 'backend has no build step'",
     "lint": "test -x .venv/bin/ruff && .venv/bin/ruff check src/ || ruff check src/",
     "test": "test -x .venv/bin/pytest && .venv/bin/pytest -q || pytest -q"

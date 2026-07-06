@@ -11,8 +11,8 @@
     "dev": "turbo run dev --parallel",
     "dev:web": "turbo run dev --filter=web",
     "dev:backend": "turbo run dev --filter=backend",
-    "web": "yarn dev:web",
-    "backend": "yarn dev:backend",
+    "dev:graph": "cd apps/backend && yarn dev:graph",
+    "dev:api": "cd apps/backend && yarn dev:api",
     "build": "turbo run build",
     "lint": "turbo run lint"
   },
