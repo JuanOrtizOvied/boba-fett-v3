@@ -11,6 +11,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { createClient } from "@/lib/chatApi";
 import { getPortfolioId } from "@/lib/portfolioId";
+import { dispatchPortfolioRefetch } from "@/lib/portfolioEvents";
 
 const ASSISTANT_ID =
   process.env["NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID"] || "agent";
@@ -31,7 +32,7 @@ export function MyAssistant() {
       // Message editing/regeneration (`getCheckpointId`) is not wired in this
       // runtime, so `config.checkpointId` is always undefined here — no
       // `checkpoint` field to forward.
-      return client.runs.stream(externalId, ASSISTANT_ID, {
+      const rawStream = client.runs.stream(externalId, ASSISTANT_ID, {
         input: messages.length ? { messages } : null,
         streamMode: ["messages", "updates", "custom"],
         signal: config.abortSignal,
@@ -39,6 +40,21 @@ export function MyAssistant() {
         config: { configurable: { portfolio_id: portfolioId } },
         ...(config.command != null && { command: config.command }),
       });
+
+      // Wrap the raw stream so the portfolio panel (a sibling component,
+      // not reachable via props/context from here) refetches the instant
+      // the run settles — whether it finishes normally, errors, or is
+      // cancelled — instead of waiting for `usePortfolio`'s poll interval
+      // (T-500 — Phase 5 Integration & Polish).
+      return (async function* () {
+        try {
+          for await (const event of rawStream) {
+            yield event;
+          }
+        } finally {
+          dispatchPortfolioRefetch();
+        }
+      })();
     },
     [client, portfolioId],
   );

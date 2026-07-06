@@ -63,3 +63,48 @@ body {
   color: var(--foreground);
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* Portfolio panel polish (T-503 — Phase 5 Integration & Polish) */
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-card-enter {
+  animation: card-enter 240ms ease-out;
+}
+
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-modal-overlay {
+  animation: modal-overlay-in 180ms ease-out;
+}
+
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-panel {
+  animation: modal-panel-in 200ms ease-out;
+}

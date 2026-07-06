@@ -29,19 +29,32 @@ const DELETE_ANIMATION_MS = 300;
 export const ProductCard: FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
   const [mode, setMode] = useState<"view" | "confirm-delete">("view");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const meta = CATEGORY_META[product.category];
   const color = categoryColorVar(product.category);
   const isConfirming = mode === "confirm-delete";
 
   const handleConfirmDelete = async () => {
+    setDeleteError(null);
     setIsDeleting(true);
     await new Promise((resolve) => setTimeout(resolve, DELETE_ANIMATION_MS));
-    await onDelete(product.id);
+    try {
+      await onDelete(product.id);
+      // On success the parent removes this product from `products` and the
+      // card unmounts naturally — no need to reset `isDeleting` here.
+    } catch (err) {
+      // Delete failed (network/backend error) — restore the card instead of
+      // leaving it stuck invisible (`opacity-0` from `isDeleting`).
+      setIsDeleting(false);
+      setDeleteError(
+        err instanceof Error ? err.message : "No se pudo eliminar el producto",
+      );
+    }
   };
 
   return (
     <div
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-background transition-all duration-300 ${
+      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-background transition-all duration-300 animate-card-enter ${
         isConfirming ? "border-2 border-red-500" : "border-sabbi-neutral-200"
       } ${isDeleting ? "scale-95 opacity-0" : "scale-100 opacity-100"}`}
     >
@@ -67,21 +80,26 @@ export const ProductCard: FC<ProductCardProps> = ({ product, onEdit, onDelete })
             <p className="font-medium text-sabbi-neutral-900">{product.name}</p>
             <p className="text-sabbi-neutral-600">{formatUsd(product.amount)}</p>
           </div>
+          {deleteError && (
+            <p className="text-xs font-medium text-red-600">{deleteError}</p>
+          )}
           <div className="flex justify-end gap-2">
             <button
               type="button"
+              disabled={isDeleting}
               onClick={() => setMode("view")}
-              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 hover:bg-sabbi-neutral-50"
+              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancelar
             </button>
             <button
               type="button"
+              disabled={isDeleting}
               onClick={() => void handleConfirmDelete()}
-              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <TrashIcon size={14} />
-              Eliminar
+              {isDeleting ? "Eliminando…" : "Eliminar"}
             </button>
           </div>
         </div>

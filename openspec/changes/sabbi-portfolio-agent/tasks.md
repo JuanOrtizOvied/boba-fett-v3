@@ -224,31 +224,31 @@
 
 ## Phase 5 — Integration & Polish
 
-- [ ] **T-500** | Wire portfolio panel to REST API
+- [x] **T-500** | Wire portfolio panel to REST API
   - Portfolio panel fetches products from `GET /api/portfolio/:id`
   - After each chat interaction completes, call `refetch()` to pick up agent-created products
   - After manual CRUD (modal save/delete), call the REST API directly then `refetch()`
 
-- [ ] **T-501** | Manual CRUD via REST API
+- [x] **T-501** | Manual CRUD via REST API
   - Edit modal "Save" → `PATCH /api/products/:id` then `refetch()`
   - Delete confirm → `DELETE /api/products/:id` then `refetch()`
   - Add product → `POST /api/portfolio/:id/products` then `refetch()`
   - No LLM call for manual operations — direct DB writes
 
-- [ ] **T-502** | Error handling
+- [x] **T-502** | Error handling
   - Document processing failures → friendly message in chat
   - Network errors → retry with exponential backoff
   - Invalid tool results → graceful degradation
   - **Spec**: `langgraph-agent.spec.md` → "Manejo de errores"
 
-- [ ] **T-503** | Loading states and animations
+- [x] **T-503** | Loading states and animations
   - Card entrance animation: fade in + slide up
   - Delete animation: fade out + scale down
   - Modal open/close: overlay fade + modal slide + scale
   - Chat messages: progressive rendering during streaming
   - Document processing: loading indicator in chat
 
-- [ ] **T-504** | Responsive adjustments
+- [x] **T-504** | Responsive adjustments
   - Chat panel min-width: 300px
   - Portfolio panel: responsive grid (auto-fill, min 240px)
   - Modal: max-width 92vw for smaller screens

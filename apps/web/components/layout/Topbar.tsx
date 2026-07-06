@@ -55,20 +55,22 @@ export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView, portfolioId 
           type="button"
           onClick={handleExport}
           disabled={!portfolioId}
+          aria-label="Exportar"
           className="flex items-center gap-1.5 rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <DownloadIcon size={16} />
-          Exportar
+          <span className="hidden sm:inline">Exportar</span>
         </button>
         <span className="group relative">
           <button
             type="button"
             disabled
+            aria-label="Enviar a SABBI"
             aria-describedby="sabbi-submit-tooltip"
             className="flex items-center gap-1.5 rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white opacity-50 disabled:cursor-not-allowed"
           >
             <SendIcon size={16} />
-            Enviar a SABBI
+            <span className="hidden sm:inline">Enviar a SABBI</span>
           </button>
           <span
             id="sabbi-submit-tooltip"

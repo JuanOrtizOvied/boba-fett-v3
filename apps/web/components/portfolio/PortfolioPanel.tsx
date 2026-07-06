@@ -61,15 +61,28 @@ export const PortfolioPanel: FC = () => {
     activeCategory === "todos" ? CATEGORY_ORDER : [activeCategory];
 
   const handleDeleteProduct = async (productId: string) => {
-    await fetch(`/api/products/${productId}`, { method: "DELETE" });
+    const res = await fetch(`/api/products/${productId}`, { method: "DELETE" });
+    if (!res.ok) {
+      throw new Error(`No se pudo eliminar el producto (status ${res.status})`);
+    }
     await refetch();
   };
 
+  const isInitialLoading = isLoading && products.length === 0;
   const isEmpty = !isLoading && products.length === 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-sabbi-neutral-50 px-6 py-6">
-      {isEmpty ? (
+      {isInitialLoading ? (
+        <div
+          className="m-auto flex flex-col items-center gap-3"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="size-8 animate-spin rounded-full border-2 border-sabbi-neutral-200 border-t-sabbi-primary" />
+          <p className="text-sm text-sabbi-neutral-600">Cargando portafolio…</p>
+        </div>
+      ) : isEmpty ? (
         <div className="m-auto flex max-w-sm flex-col items-center gap-3 text-center">
           <div className="flex size-14 items-center justify-center rounded-full bg-sabbi-primary-soft text-sabbi-primary">
             <PieIcon size={26} />

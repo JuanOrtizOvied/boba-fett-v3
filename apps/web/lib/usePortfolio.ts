@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPortfolioId } from "@/lib/portfolioId";
+import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
 import type { Category, Product } from "@/lib/portfolio-types";
 
 export type CategoryFilter = Category | "todos";
@@ -11,9 +12,11 @@ export interface LargestPosition {
   percentage: number;
 }
 
-/** Poll interval for picking up agent-created products (T-500 wires the
- * proper post-chat-turn refetch; this covers the gap until then). */
-const REFETCH_POLL_MS = 5000;
+/** Background safety-net poll — the primary refetch trigger is the
+ * `PORTFOLIO_REFETCH_EVENT` dispatched by `assistant.tsx` when a chat turn
+ * settles (T-500). This slower interval just covers edge cases (another
+ * tab/session mutating the same portfolio). */
+const REFETCH_POLL_MS = 15000;
 
 export interface UsePortfolioResult {
   portfolioId: string;
@@ -80,6 +83,15 @@ export function usePortfolio(): UsePortfolioResult {
       void refetch();
     }, REFETCH_POLL_MS);
     return () => clearInterval(interval);
+  }, [refetch]);
+
+  useEffect(() => {
+    const handleRefetchEvent = () => {
+      void refetch();
+    };
+    window.addEventListener(PORTFOLIO_REFETCH_EVENT, handleRefetchEvent);
+    return () =>
+      window.removeEventListener(PORTFOLIO_REFETCH_EVENT, handleRefetchEvent);
   }, [refetch]);
 
   const openCreateModal = useCallback((category?: Category) => {
