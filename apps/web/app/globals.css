@@ -3,11 +3,52 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* SABBI brand */
+  --sabbi-primary: #4f46e5;
+  --sabbi-primary-hover: #4338ca;
+  --sabbi-primary-soft: #eef2ff;
+
+  /* Portfolio category taxonomy (6 categories) */
+  --sabbi-cat-directas: #3b82f6; /* Inversiones directas */
+  --sabbi-cat-privados: #8b5cf6; /* Mercados privados */
+  --sabbi-cat-club: #f59e0b; /* Club deals */
+  --sabbi-cat-publicos: #10b981; /* Mercados públicos */
+  --sabbi-cat-otros: #ec4899; /* Otros */
+  --sabbi-cat-cash: #14b8a6; /* Cash y equivalentes */
+
+  /* Neutral grays */
+  --sabbi-neutral-50: #f9fafb;
+  --sabbi-neutral-100: #f3f4f6;
+  --sabbi-neutral-200: #e5e7eb;
+  --sabbi-neutral-300: #d1d5db;
+  --sabbi-neutral-600: #4b5563;
+  --sabbi-neutral-700: #374151;
+  --sabbi-neutral-900: #111827;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --color-sabbi-primary: var(--sabbi-primary);
+  --color-sabbi-primary-hover: var(--sabbi-primary-hover);
+  --color-sabbi-primary-soft: var(--sabbi-primary-soft);
+
+  --color-sabbi-cat-directas: var(--sabbi-cat-directas);
+  --color-sabbi-cat-privados: var(--sabbi-cat-privados);
+  --color-sabbi-cat-club: var(--sabbi-cat-club);
+  --color-sabbi-cat-publicos: var(--sabbi-cat-publicos);
+  --color-sabbi-cat-otros: var(--sabbi-cat-otros);
+  --color-sabbi-cat-cash: var(--sabbi-cat-cash);
+
+  --color-sabbi-neutral-50: var(--sabbi-neutral-50);
+  --color-sabbi-neutral-100: var(--sabbi-neutral-100);
+  --color-sabbi-neutral-200: var(--sabbi-neutral-200);
+  --color-sabbi-neutral-300: var(--sabbi-neutral-300);
+  --color-sabbi-neutral-600: var(--sabbi-neutral-600);
+  --color-sabbi-neutral-700: var(--sabbi-neutral-700);
+  --color-sabbi-neutral-900: var(--sabbi-neutral-900);
 }
 
 @media (prefers-color-scheme: dark) {

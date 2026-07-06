@@ -84,26 +84,26 @@
 
 ## Phase 2 — Frontend: Layout & Chat
 
-- [ ] **T-200** | Create split-screen layout (`app/page.tsx`)
+- [x] **T-200** | Create split-screen layout (`app/page.tsx`)
   - Grid layout: 340px chat | fluid portfolio
   - Full viewport height minus topbar
   - Chat panel: flex column with pinned input
   - Portfolio panel: scrollable content
   - **Spec**: `portfolio-dashboard.spec.md` → "Scroll vertical solo en el panel de portafolio"
 
-- [ ] **T-201** | Create topbar component (`components/layout/Topbar.tsx`)
+- [x] **T-201** | Create topbar component (`components/layout/Topbar.tsx`)
   - Logo + brand name
   - Nav tabs: "Construir portafolio" (active) | "Resumen final"
   - Action buttons: "Exportar" | "Enviar a SABBI"
   - View switching state management
 
-- [ ] **T-202** | Create SVG icon system (`components/icons/Icons.tsx`)
+- [x] **T-202** | Create SVG icon system (`components/icons/Icons.tsx`)
   - Define all icons as inline SVG React components
   - Icons needed: robot, camera, pdf, file, link, clip, send, edit, trash, check, plus, download, pie, chat, x, info, minus
   - No external CDN dependencies — must render offline
   - **Spec**: `conversation-and-extraction.spec.md` → all icon references
 
-- [ ] **T-203** | Customize chat panel with assistant-ui (`components/chat/ChatPanel.tsx`)
+- [x] **T-203** | Customize chat panel with assistant-ui (`components/chat/ChatPanel.tsx`)
   - Use assistant-ui `Thread` component as base
   - Customize message bubbles: user (accent bg), bot (neutral bg)
   - File attachments render inside user message bubble (not separate messages)
@@ -111,13 +111,13 @@
   - Input area pinned at bottom with file upload buttons
   - **Spec**: `conversation-and-extraction.spec.md` → "Archivos adjuntos pertenecen al mensaje", "Chat input siempre visible"
 
-- [ ] **T-204** | Wire LangGraph runtime (`app/assistant.tsx`)
+- [x] **T-204** | Wire LangGraph runtime (`app/assistant.tsx`)
   - Configure `useLangGraphRuntime` with create/load handlers
   - Configure `unstable_createLangGraphStream` for SSE
   - Set `ASSISTANT_ID` from env
   - **Spec**: `langgraph-agent.spec.md` → "Streaming de respuestas al frontend"
 
-- [ ] **T-205** | Implement file upload in chat
+- [x] **T-205** | Implement file upload in chat
   - Support drag-and-drop on chat input
   - Support click-to-upload via paperclip button
   - Quick-action buttons: Captura, PDF, Link, Factsheet

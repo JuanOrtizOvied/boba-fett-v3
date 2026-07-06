@@ -24,7 +24,7 @@ MODEL_NAME = "claude-sonnet-4-20250514"
 llm = ChatAnthropic(model=MODEL_NAME, temperature=0, max_tokens=4096)
 llm_with_tools = llm.bind_tools(portfolio_tools)
 
-_ATTACHMENT_CONTENT_TYPES = ("image_url", "image", "document")
+_ATTACHMENT_CONTENT_TYPES = ("image_url", "image", "document", "file")
 
 EXTRACTION_PROMPT = """Analiza el documento adjunto en el mensaje anterior.
 

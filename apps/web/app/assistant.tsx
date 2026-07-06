@@ -4,36 +4,74 @@ import { useMemo } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   useLangGraphRuntime,
-  unstable_createLangGraphStream,
+  type LangChainMessage,
+  type LangGraphStreamCallback,
 } from "@assistant-ui/react-langgraph";
-import { Thread } from "@/components/assistant-ui/thread";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { createClient } from "@/lib/chatApi";
 
 const ASSISTANT_ID =
   process.env["NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID"] || "agent";
 
+const PORTFOLIO_ID_KEY = "portfolio_id";
+
+/**
+ * Resolves this browser's portfolio identity (v1 — no auth). Generated once
+ * and cached in `localStorage`; passed to the LangGraph agent as
+ * `configurable.portfolio_id` so its tools know which portfolio to read/write.
+ */
+function getPortfolioId(): string {
+  if (typeof window === "undefined") return "";
+  let id = window.localStorage.getItem(PORTFOLIO_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    window.localStorage.setItem(PORTFOLIO_ID_KEY, id);
+  }
+  return id;
+}
+
 export function MyAssistant() {
   const client = useMemo(() => createClient(), []);
+  const portfolioId = useMemo(() => getPortfolioId(), []);
 
-  const stream = useMemo(
-    () =>
-      unstable_createLangGraphStream({
-        client,
-        assistantId: ASSISTANT_ID,
-      }),
-    [client],
+  // Custom stream callback (based on `unstable_createLangGraphStream`) that
+  // always injects `configurable.portfolio_id` into the run config, so every
+  // portfolio tool call (add/update/delete_product) writes to the right
+  // portfolio regardless of per-message `runConfig`.
+  const stream = useMemo<LangGraphStreamCallback<LangChainMessage>>(
+    () => async (messages, config) => {
+      const { externalId } = await config.initialize();
+      if (!externalId) throw new Error("Thread has not been initialized.");
+
+      // Message editing/regeneration (`getCheckpointId`) is not wired in this
+      // runtime, so `config.checkpointId` is always undefined here — no
+      // `checkpoint` field to forward.
+      return client.runs.stream(externalId, ASSISTANT_ID, {
+        input: messages.length ? { messages } : null,
+        streamMode: ["messages", "updates", "custom"],
+        signal: config.abortSignal,
+        onDisconnect: "cancel",
+        config: { configurable: { portfolio_id: portfolioId } },
+        ...(config.command != null && { command: config.command }),
+      });
+    },
+    [client, portfolioId],
   );
 
   const runtime = useLangGraphRuntime({
     unstable_allowCancellation: true,
     stream,
+    adapters: {
+      attachments: attachmentAdapter,
+    },
     create: async () => {
       const { thread_id } = await client.threads.create();
       return { externalId: thread_id };
     },
     load: async (externalId) => {
       const state = await client.threads.getState<{
-        messages: import("@assistant-ui/react-langgraph").LangChainMessage[];
+        messages: LangChainMessage[];
       }>(externalId);
       return {
         messages: state.values.messages ?? [],
@@ -52,7 +90,7 @@ export function MyAssistant() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <Thread />
+      <ChatPanel />
     </AssistantRuntimeProvider>
   );
 }

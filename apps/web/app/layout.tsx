@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Boba Fett Assistant",
-  description: "LangGraph-powered assistant chat, bootstrapped from the boilerplate template.",
+  title: "SABBI Portfolio Builder",
+  description:
+    "Conversational portfolio builder — chat with the SABBI assistant to classify your investments and build your portfolio.",
 };
 
 export default function RootLayout({
