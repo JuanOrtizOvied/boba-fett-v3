@@ -1,7 +1,7 @@
 """System prompt for the SABBI portfolio-building assistant.
 
 Language and tone are a product requirement (see
-`openspec/changes/sabbi-portfolio-agent/specs/langgraph-agent.spec.md` →
+`openspec/changes/2026-07-06-sabbi-portfolio-agent/specs/langgraph-agent.spec.md` →
 "System prompt del agente"): SABBI serves Spanish-speaking investors, so the
 assistant's persona is written and must respond in Spanish, professional and
 friendly tone.
