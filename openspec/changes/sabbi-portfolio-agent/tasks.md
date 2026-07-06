@@ -2,17 +2,17 @@
 
 ## Phase 0 — Project Setup
 
-- [ ] **T-001** | Configure backend for Anthropic + Postgres
+- [x] **T-001** | Configure backend for Anthropic + Postgres
   - The bootstrap already has a configurable provider system (`models.py` with `LLM_PROVIDER`). Replace it with hardcoded `ChatAnthropic` for SABBI — this is intentional: the agent's system prompt, tools, and extraction pipeline are Anthropic-specific.
   - Update `pyproject.toml`: add `langchain-anthropic`, `asyncpg`, `fastapi`, `uvicorn[standard]`, `openpyxl`
   - Update `.env` with `ANTHROPIC_API_KEY` and `DATABASE_URL`
   - Verify `pip install -e .` succeeds
 
-- [ ] **T-002** | Configure frontend dependencies
+- [x] **T-002** | Configure frontend dependencies
   - Verify `@assistant-ui/react`, `@assistant-ui/react-langgraph`, `@langchain/langgraph-sdk` are installed
   - Add inline SVG icon system (no external icon CDN dependencies)
 
-- [ ] **T-003** | Set up PostgreSQL schema and DB layer
+- [x] **T-003** | Set up PostgreSQL schema and DB layer
   - Create `apps/backend/src/db/schema.sql` with `products` table (JSONB composition)
   - Create `apps/backend/src/db/models.py` with Pydantic models (`Product`, `ProductCreate`, `ProductUpdate`, `AssetAllocation`)
   - Create `apps/backend/src/db/connection.py` with asyncpg pool management
@@ -23,12 +23,12 @@
 
 ## Phase 1 — Backend: Agent Core
 
-- [ ] **T-100** | Create agent state (`apps/backend/src/agent/state.py`)
+- [x] **T-100** | Create agent state (`apps/backend/src/agent/state.py`)
   - Define `AgentState` TypedDict with `messages` only (portfolio lives in Postgres)
   - Define `CATEGORIES` taxonomy dict with all 6 categories and subcategories
   - **Spec**: `langgraph-agent.spec.md` → "Estado del agente"
 
-- [ ] **T-101** | Create tools (`apps/backend/src/agent/tools.py`)
+- [x] **T-101** | Create tools (`apps/backend/src/agent/tools.py`)
   - Implement `add_product` tool — writes to Postgres via `ProductRepository`
   - Implement `update_product` tool — partial update in Postgres
   - Implement `delete_product` tool — deletes from Postgres
@@ -37,19 +37,19 @@
   - Export `portfolio_tools` list
   - **Spec**: `langgraph-agent.spec.md` → "Tool — add/update/delete_product"
 
-- [ ] **T-102** | Create system prompt (`apps/backend/src/agent/prompts.py`)
+- [x] **T-102** | Create system prompt (`apps/backend/src/agent/prompts.py`)
   - Define `SYSTEM_PROMPT` with SABBI categories, classification rules, response format
   - Language: español, tono profesional y amigable
   - **Spec**: `langgraph-agent.spec.md` → "System prompt del agente"
 
-- [ ] **T-103** | Create node functions (`apps/backend/src/agent/nodes.py`)
+- [x] **T-103** | Create node functions (`apps/backend/src/agent/nodes.py`)
   - `router_node` + `has_file_attachment`: detect file attachments and route
   - `process_document_node`: inject extraction prompt for the agent to process with tools
   - `agent_node`: main conversational node with `llm_with_tools`
   - All nodes use `ChatAnthropic("claude-sonnet-4-20250514")`
   - **Spec**: `langgraph-agent.spec.md` → "Estructura del grafo", "Procesamiento de PDF"
 
-- [ ] **T-104** | Create graph definition (`apps/backend/src/agent/graph.py`)
+- [x] **T-104** | Create graph definition (`apps/backend/src/agent/graph.py`)
   - Build `StateGraph(AgentState)` with nodes: router, process_document, agent, tools (ToolNode)
   - Use `ToolNode(portfolio_tools)` — standard LangGraph tool execution (tools write to DB directly)
   - Add conditional edges: router → process_document | agent
@@ -59,7 +59,7 @@
   - Compile with `MemorySaver` checkpointer
   - **Spec**: `langgraph-agent.spec.md` → "Estructura del grafo principal"
 
-- [ ] **T-105** | Create FastAPI REST API (`apps/backend/src/api/routes.py`)
+- [x] **T-105** | Create FastAPI REST API (`apps/backend/src/api/routes.py`)
   - `GET /portfolio/:id` — list products
   - `POST /portfolio/:id/products` — create product
   - `PATCH /products/:id` — update product
@@ -67,7 +67,7 @@
   - `GET /portfolio/:id/summary` — portfolio summary
   - Shares Postgres pool with agent tools
 
-- [ ] **T-106** | Update `langgraph.json` and dev scripts
+- [x] **T-106** | Update `langgraph.json` and dev scripts
   - Point to `./src/agent/graph.py:graph`
   - Set env to `.env`
   - Add script to run FastAPI alongside LangGraph dev server

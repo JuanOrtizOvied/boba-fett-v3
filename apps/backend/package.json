@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "langgraph dev --host 0.0.0.0 --port 2024 --no-browser",
+    "dev:api": "test -x .venv/bin/uvicorn && .venv/bin/uvicorn api.routes:app --app-dir src --reload --port 8001 || uvicorn api.routes:app --app-dir src --reload --port 8001",
+    "dev:all": "concurrently \"yarn dev\" \"yarn dev:api\"",
     "build": "echo 'backend has no build step'",
     "lint": "test -x .venv/bin/ruff && .venv/bin/ruff check src/ || ruff check src/",
     "test": "test -x .venv/bin/pytest && .venv/bin/pytest -q || pytest -q"
