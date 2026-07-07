@@ -229,6 +229,42 @@ body {
   animation: card-enter 240ms ease-out;
 }
 
+@keyframes product-added {
+  0% {
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.6);
+    border-color: rgba(5, 150, 105, 0.7);
+  }
+  20% {
+    box-shadow: 0 0 0 8px rgba(5, 150, 105, 0.2);
+    border-color: rgba(5, 150, 105, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(5, 150, 105, 0.05);
+    border-color: rgba(5, 150, 105, 0.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0);
+    border-color: var(--sabbi-neutral-200);
+  }
+}
+
+.animate-product-added {
+  animation: card-enter 280ms ease-out, product-added 2s ease-out 200ms;
+}
+
+@keyframes metric-flash {
+  0% {
+    background-color: rgba(5, 150, 105, 0.12);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-metric-flash {
+  animation: metric-flash 1.8s ease-out;
+}
+
 @keyframes modal-overlay-in {
   from {
     opacity: 0;

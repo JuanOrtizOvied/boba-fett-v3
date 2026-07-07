@@ -35,6 +35,7 @@ export const PortfolioPanel: FC = () => {
     totalAmount,
     productCount,
     largestPosition,
+    newProductIds,
   } = usePortfolio();
 
   const productsByCategory = CATEGORY_ORDER.reduce(
@@ -136,6 +137,7 @@ export const PortfolioPanel: FC = () => {
                   category={category}
                   index={CATEGORY_ORDER.indexOf(category)}
                   products={categoryProducts}
+                  newProductIds={newProductIds}
                   onEditProduct={openEditModal}
                   onDeleteProduct={handleDeleteProduct}
                   onAddProduct={openCreateModal}

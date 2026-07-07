@@ -1,4 +1,6 @@
-import type { FC } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type FC } from "react";
 import { CATEGORY_ORDER } from "@/lib/categories";
 import { formatAbbreviatedUsd } from "@/lib/format";
 import type { LargestPosition } from "@/lib/usePortfolio";
@@ -10,12 +12,6 @@ export interface MetricsRowProps {
   categoriesUsedCount: number;
 }
 
-/**
- * Four at-a-glance metric cards: total invested, largest single position,
- * category coverage, and readiness status. Recomputed on every render from
- * `usePortfolio`'s derived values.
- * `portfolio-dashboard.spec.md` → "Métricas del portafolio en tiempo real".
- */
 export const MetricsRow: FC<MetricsRowProps> = ({
   totalAmount,
   productCount,
@@ -58,16 +54,41 @@ const MetricCard: FC<{
   value: string;
   subtext: string;
   tone?: "success" | "neutral";
-}> = ({ label, value, subtext, tone = "neutral" }) => (
-  <div className="rounded-xl border border-sabbi-neutral-200 bg-background p-4">
-    <p className="text-xs font-medium text-sabbi-neutral-600">{label}</p>
-    <p
-      className={`font-display mt-1 text-xl font-semibold ${
-        tone === "success" ? "text-emerald-600" : "text-sabbi-neutral-900"
+}> = ({ label, value, subtext, tone = "neutral" }) => {
+  const prevValueRef = useRef(value);
+  const isFirstRenderRef = useRef(true);
+  const [isFlashing, setIsFlashing] = useState(false);
+
+  useEffect(() => {
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      prevValueRef.current = value;
+      return;
+    }
+
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setIsFlashing(true);
+      const timer = setTimeout(() => setIsFlashing(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [value]);
+
+  return (
+    <div
+      className={`rounded-xl border border-sabbi-neutral-200 bg-background p-4 ${
+        isFlashing ? "animate-metric-flash" : ""
       }`}
     >
-      {value}
-    </p>
-    <p className="mt-0.5 truncate text-xs text-sabbi-neutral-600">{subtext}</p>
-  </div>
-);
+      <p className="text-xs font-medium text-sabbi-neutral-600">{label}</p>
+      <p
+        className={`font-display mt-1 text-xl font-semibold ${
+          tone === "success" ? "text-emerald-600" : "text-sabbi-neutral-900"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-0.5 truncate text-xs text-sabbi-neutral-600">{subtext}</p>
+    </div>
+  );
+};

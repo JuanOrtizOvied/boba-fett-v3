@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPortfolioId } from "@/lib/portfolioId";
 import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
 import type { Category, Product } from "@/lib/portfolio-types";
@@ -17,6 +17,8 @@ export interface LargestPosition {
  * settles (T-500). This slower interval just covers edge cases (another
  * tab/session mutating the same portfolio). */
 const REFETCH_POLL_MS = 15000;
+
+const NEW_PRODUCT_HIGHLIGHT_MS = 3000;
 
 export interface UsePortfolioResult {
   portfolioId: string;
@@ -39,6 +41,8 @@ export interface UsePortfolioResult {
   productCount: number;
   categoryDistribution: Record<Category, number>;
   largestPosition: LargestPosition | null;
+
+  newProductIds: Set<string>;
 }
 
 /**
@@ -58,6 +62,35 @@ export function usePortfolio(): UsePortfolioResult {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [createCategory, setCreateCategory] = useState<Category | null>(null);
+
+  const isFirstFetchRef = useRef(true);
+  const prevIdsRef = useRef<Set<string>>(new Set());
+  const [newProductIds, setNewProductIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const currentIds = new Set(products.map((p) => p.id));
+
+    if (isFirstFetchRef.current) {
+      isFirstFetchRef.current = false;
+      prevIdsRef.current = currentIds;
+      return;
+    }
+
+    const added = new Set<string>();
+    for (const id of currentIds) {
+      if (!prevIdsRef.current.has(id)) added.add(id);
+    }
+    prevIdsRef.current = currentIds;
+
+    if (added.size > 0) {
+      setNewProductIds(added);
+      const timer = setTimeout(
+        () => setNewProductIds(new Set()),
+        NEW_PRODUCT_HIGHLIGHT_MS,
+      );
+      return () => clearTimeout(timer);
+    }
+  }, [products]);
 
   const refetch = useCallback(async () => {
     if (!portfolioId) return;
@@ -154,5 +187,6 @@ export function usePortfolio(): UsePortfolioResult {
     productCount,
     categoryDistribution,
     largestPosition,
+    newProductIds,
   };
 }

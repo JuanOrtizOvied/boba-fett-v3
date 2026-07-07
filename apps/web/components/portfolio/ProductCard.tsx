@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { EditIcon, TrashIcon, WarningIcon } from "@/components/icons/Icons";
 import { CATEGORY_META, categoryColorVar } from "@/lib/categories";
 import { compositionColor } from "@/lib/compositionPalette";
@@ -9,6 +9,7 @@ import type { Product } from "@/lib/portfolio-types";
 
 export interface ProductCardProps {
   product: Product;
+  isNew?: boolean;
   onEdit: (product: Product) => void;
   /** Performs the DELETE request + refetch. Awaited before unmount. */
   onDelete: (productId: string) => Promise<void>;
@@ -26,10 +27,20 @@ const DELETE_ANIMATION_MS = 300;
  * "Card con composición multi-asset class",
  * "Eliminar producto — confirmación inline", "Confirmar eliminación de producto".
  */
-export const ProductCard: FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
+export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDelete }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<"view" | "confirm-delete">("view");
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isNew && cardRef.current) {
+      const timer = setTimeout(() => {
+        cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [isNew]);
   const meta = CATEGORY_META[product.category];
   const color = categoryColorVar(product.category);
   const isConfirming = mode === "confirm-delete";
@@ -54,7 +65,10 @@ export const ProductCard: FC<ProductCardProps> = ({ product, onEdit, onDelete })
 
   return (
     <div
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-background transition-all duration-300 animate-card-enter ${
+      ref={cardRef}
+      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-background transition-all duration-300 ${
+        isNew ? "animate-product-added" : "animate-card-enter"
+      } ${
         isConfirming ? "border-2 border-red-500" : "border-sabbi-neutral-200"
       } ${isDeleting ? "scale-95 opacity-0" : "scale-100 opacity-100"}`}
     >

@@ -9,6 +9,7 @@ export interface CategorySectionProps {
   category: Category;
   index: number;
   products: Product[];
+  newProductIds: Set<string>;
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => Promise<void>;
   onAddProduct: (category: Category) => void;
@@ -23,6 +24,7 @@ export const CategorySection: FC<CategorySectionProps> = ({
   category,
   index,
   products,
+  newProductIds,
   onEditProduct,
   onDeleteProduct,
   onAddProduct,
@@ -53,6 +55,7 @@ export const CategorySection: FC<CategorySectionProps> = ({
           <ProductCard
             key={product.id}
             product={product}
+            isNew={newProductIds.has(product.id)}
             onEdit={onEditProduct}
             onDelete={onDeleteProduct}
           />
