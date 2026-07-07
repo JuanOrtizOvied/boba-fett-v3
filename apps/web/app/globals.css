@@ -65,6 +65,8 @@
   --sabbi-neutral-100: #f3f4f6;
   --sabbi-neutral-200: #e5e7eb;
   --sabbi-neutral-300: #d1d5db;
+  --sabbi-neutral-400: #9ca3af;
+  --sabbi-neutral-500: #6b7280;
   --sabbi-neutral-600: #4b5563;
   --sabbi-neutral-700: #374151;
   --sabbi-neutral-900: #111827;
@@ -101,6 +103,8 @@
   --color-sabbi-neutral-100: var(--sabbi-neutral-100);
   --color-sabbi-neutral-200: var(--sabbi-neutral-200);
   --color-sabbi-neutral-300: var(--sabbi-neutral-300);
+  --color-sabbi-neutral-400: var(--sabbi-neutral-400);
+  --color-sabbi-neutral-500: var(--sabbi-neutral-500);
   --color-sabbi-neutral-600: var(--sabbi-neutral-600);
   --color-sabbi-neutral-700: var(--sabbi-neutral-700);
   --color-sabbi-neutral-900: var(--sabbi-neutral-900);

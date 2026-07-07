@@ -116,7 +116,7 @@ export const PortfolioSummary: FC = () => {
                 })}
               </svg>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-lg font-semibold text-sabbi-neutral-900">
+                <span className="font-display text-lg font-semibold text-sabbi-neutral-900">
                   {formatAbbreviatedUsd(totalAmount)}
                 </span>
                 <span className="text-xs text-sabbi-neutral-600">

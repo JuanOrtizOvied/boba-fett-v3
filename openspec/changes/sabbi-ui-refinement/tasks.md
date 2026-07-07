@@ -41,9 +41,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 3: Dashboard polish — spec: dashboard-refinement.spec.md
 
-- [ ] T-009 `Topbar.tsx`: 28x28 gradient logo mark (`linear-gradient(135deg,#7c3aed,#4338ca)`) + brand text exactly "SABBI Portfolio Builder".
-- [ ] T-010 `SummaryTable.tsx`: verify placeholder "—" Retorno/Deseado + progress bars render correctly against new palette (logic already present; adjust only styling/contrast if needed).
-- [ ] T-011 `font-display` class on `ProductCard.tsx` amount, `MetricsRow.tsx` values, `PortfolioSummary.tsx` donut center text.
+- [x] T-009 `Topbar.tsx`: 28x28 gradient logo mark (`linear-gradient(135deg,#7c3aed,#4338ca)`) + brand text exactly "SABBI Portfolio Builder".
+- [x] T-010 `SummaryTable.tsx`: verify placeholder "—" Retorno/Deseado + progress bars render correctly against new palette (logic already present; adjust only styling/contrast if needed).
+- [x] T-011 `font-display` class on `ProductCard.tsx` amount, `MetricsRow.tsx` values, `PortfolioSummary.tsx` donut center text.
 
 ## Phase 4: Integration & QA
 

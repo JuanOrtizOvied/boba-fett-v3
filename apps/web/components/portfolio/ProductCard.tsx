@@ -136,7 +136,7 @@ export const ProductCard: FC<ProductCardProps> = ({ product, onEdit, onDelete })
             </div>
           </div>
 
-          <p className="text-lg font-semibold text-sabbi-neutral-900">
+          <p className="font-display text-lg font-semibold text-sabbi-neutral-900">
             {formatUsd(product.amount)}
           </p>
 

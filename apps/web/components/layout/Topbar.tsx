@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { DownloadIcon, RobotIcon, SendIcon } from "@/components/icons/Icons";
+import { DownloadIcon, SendIcon } from "@/components/icons/Icons";
 
 export type PortfolioView = "builder" | "resumen";
 
@@ -29,9 +29,15 @@ export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView, portfolioId 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-sabbi-neutral-200 bg-background px-4">
       <div className="flex items-center gap-2">
-        <RobotIcon size={22} className="text-sabbi-primary" />
+        <div
+          aria-hidden="true"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white"
+          style={{ background: "linear-gradient(135deg, #7c3aed, #4338ca)" }}
+        >
+          S
+        </div>
         <span className="text-sm font-semibold tracking-wide text-sabbi-neutral-900">
-          SABBI
+          SABBI Portfolio Builder
         </span>
       </div>
 

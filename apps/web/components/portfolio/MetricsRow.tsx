@@ -62,7 +62,7 @@ const MetricCard: FC<{
   <div className="rounded-xl border border-sabbi-neutral-200 bg-background p-4">
     <p className="text-xs font-medium text-sabbi-neutral-600">{label}</p>
     <p
-      className={`mt-1 text-xl font-semibold ${
+      className={`font-display mt-1 text-xl font-semibold ${
         tone === "success" ? "text-emerald-600" : "text-sabbi-neutral-900"
       }`}
     >
