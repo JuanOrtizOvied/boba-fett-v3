@@ -20,7 +20,7 @@ export default function Home() {
       <Topbar activeView={view} onChangeView={setView} portfolioId={portfolioId} />
 
       {view === "builder" ? (
-        <div className="grid min-h-0 flex-1 grid-cols-[35%_1fr]">
+        <div className="grid min-h-0 flex-1 grid-cols-[40%_1fr]">
           <MyAssistant />
           <PortfolioPanel />
         </div>

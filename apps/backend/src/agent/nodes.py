@@ -9,7 +9,7 @@ here, unlike the original bootstrap's `agent.models` factory.
 from __future__ import annotations
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import AgentState
@@ -21,7 +21,11 @@ MODEL_NAME = "claude-sonnet-5"
 # present — credentials are only validated when a request is actually made.
 # This keeps graph import/compile safe in environments without the key set
 # (e.g. `langgraph dev` schema checks, unit tests).
-llm = ChatAnthropic(model=MODEL_NAME, max_tokens=4096)
+llm = ChatAnthropic(
+    model=MODEL_NAME,
+    max_tokens=16000,
+    thinking={"type": "adaptive"},
+)
 llm_with_tools = llm.bind_tools(portfolio_tools)
 
 _ATTACHMENT_CONTENT_TYPES = ("image_url", "image", "document", "file")
@@ -78,6 +82,18 @@ async def process_document_node(state: AgentState) -> dict:
     return {"messages": [SystemMessage(content=EXTRACTION_PROMPT)]}
 
 
+def _strip_thinking(msg: AIMessage) -> AIMessage:
+    """Remove thinking blocks from a previous assistant message so they don't
+    get re-sent to the API (the checkpoint often drops the inner `thinking`
+    text field, which causes a 400 on the next turn)."""
+    if not isinstance(msg.content, list):
+        return msg
+    cleaned = [b for b in msg.content if not (isinstance(b, dict) and b.get("type") == "thinking")]
+    if len(cleaned) == len(msg.content):
+        return msg
+    return msg.model_copy(update={"content": cleaned})
+
+
 async def agent_node(state: AgentState) -> dict:
     """Main conversational node — invokes Claude with portfolio tools bound."""
     system_parts = [SYSTEM_PROMPT]
@@ -85,6 +101,8 @@ async def agent_node(state: AgentState) -> dict:
     for msg in state["messages"]:
         if isinstance(msg, SystemMessage):
             system_parts.append(msg.content)
+        elif isinstance(msg, AIMessage):
+            conversation.append(_strip_thinking(msg))
         else:
             conversation.append(msg)
     messages = [SystemMessage(content="\n\n".join(system_parts)), *conversation]

@@ -1,22 +1,23 @@
 "use client";
 
-import type { FC } from "react";
+import { useState, type FC } from "react";
 import type {
   Attachment,
   AttachmentAdapter,
   CompleteAttachment,
   PendingAttachment,
   ToolCallMessagePartProps,
+  EmptyMessagePartProps,
+  ReasoningMessagePartProps,
 } from "@assistant-ui/react";
 import {
   ActionBarPrimitive,
   AttachmentPrimitive,
   ComposerPrimitive,
-  CompositeAttachmentAdapter,
   ErrorPrimitive,
   MessagePrimitive,
-  SimpleImageAttachmentAdapter,
   ThreadPrimitive,
+  useThreadRuntime,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
@@ -53,7 +54,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
  * (`{ type: "file", data, mime_type, metadata: { filename } }`).
  */
 class Base64DocumentAttachmentAdapter implements AttachmentAdapter {
-  public accept = "*/*";
+  public accept = "*";
 
   async add(state: { file: File }): Promise<PendingAttachment> {
     return {
@@ -94,10 +95,7 @@ class Base64DocumentAttachmentAdapter implements AttachmentAdapter {
  * adapter, PDFs/documents through `Base64DocumentAttachmentAdapter`. Exported
  * so `assistant.tsx` can wire it into `useLangGraphRuntime`'s `adapters`.
  */
-export const attachmentAdapter = new CompositeAttachmentAdapter([
-  new SimpleImageAttachmentAdapter(),
-  new Base64DocumentAttachmentAdapter(),
-]);
+export const attachmentAdapter = new Base64DocumentAttachmentAdapter();
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -136,7 +134,7 @@ export const Thread: FC = () => {
           </div>
         </div>
 
-        <ThreadPrimitive.Viewport className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-6">
+        <ThreadPrimitive.Viewport autoScroll className="flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-4 py-6">
           <ThreadPrimitive.If empty>
             <WelcomeMessage />
           </ThreadPrimitive.If>
@@ -195,11 +193,30 @@ const WelcomeMessage: FC = () => {
   );
 };
 
+import type { FileMessagePartProps } from "@assistant-ui/react";
+
+const UserFileChip: FC<FileMessagePartProps> = ({ filename, mimeType }) => {
+  const fakeAttachment = {
+    type: mimeType?.startsWith("image/") ? ("image" as const) : ("document" as const),
+    contentType: mimeType ?? "application/octet-stream",
+  };
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/[.12] px-2.5 py-1.5 text-xs">
+      <AttachmentIcon attachment={fakeAttachment as Attachment} />
+      <span className="max-w-[160px] truncate">{filename ?? "Archivo"}</span>
+    </div>
+  );
+};
+
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="ml-auto flex max-w-[85%] flex-col items-end gap-1">
       <div className="flex flex-col gap-2 rounded-[18px_18px_4px_18px] bg-sabbi-primary px-4 py-2.5 text-white">
-        <MessagePrimitive.Content />
+        <MessagePrimitive.Content
+          components={{
+            File: UserFileChip,
+          }}
+        />
         <MessagePrimitive.Attachments>
           {({ attachment }) => (
             <div
@@ -244,10 +261,19 @@ type PortfolioToolResult =
  * wrapping component needed since assistant-ui renders each tool-call part
  * as an independent sibling.
  */
+function parseToolResult<T>(raw: unknown): T | null {
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return raw as T;
+}
+
 function ToolResultItem({
   args,
-  result,
+  result: rawResult,
 }: ToolCallMessagePartProps<Record<string, unknown>, PortfolioToolResult>) {
+  const result = parseToolResult<PortfolioToolResult>(rawResult);
   if (!result || result.status === "error") return null;
 
   if (result.status === "deleted") {
@@ -270,6 +296,7 @@ function ToolResultItem({
 
   const { product } = result;
   const meta = CATEGORY_META[product.category];
+  if (!meta) return null;
 
   return (
     <div className="tool-result-item">
@@ -288,19 +315,153 @@ function ToolResultItem({
   );
 }
 
+interface ProposedProduct {
+  name: string;
+  amount: number;
+  category: Category;
+  provider?: string;
+}
+
+type ProposeToolResult =
+  | { status: "proposed"; product: ProposedProduct }
+  | { status: "error"; message: string };
+
+function ProposeProductCard({
+  result,
+}: ToolCallMessagePartProps<Record<string, unknown>, ProposeToolResult>) {
+  const runtime = useThreadRuntime();
+  const [responded, setResponded] = useState<"yes" | "no" | null>(null);
+
+  const parsed = parseToolResult<ProposeToolResult>(result);
+  if (!parsed || parsed.status !== "proposed" || !parsed.product) return null;
+
+  const { product } = parsed;
+  const meta = CATEGORY_META[product.category];
+  if (!meta) return null;
+
+  const handleConfirm = () => {
+    setResponded("yes");
+    runtime.append({
+      role: "user",
+      content: [{ type: "text", text: `Sí, agregar "${product.name}" al portafolio.` }],
+    });
+  };
+
+  const handleReject = () => {
+    setResponded("no");
+    runtime.append({
+      role: "user",
+      content: [{ type: "text", text: `No, no agregar "${product.name}".` }],
+    });
+  };
+
+  return (
+    <div className="my-2 overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2 border-b border-sabbi-neutral-200 bg-[var(--bg-panel)] px-4 py-2.5 text-xs font-semibold text-sabbi-neutral-700">
+        <span
+          className="tool-badge"
+          style={{
+            background: categoryBgVar(product.category),
+            color: categoryTextVar(product.category),
+          }}
+        >
+          {meta.shortLabel}
+        </span>
+        Producto encontrado
+      </div>
+      <div className="px-4 py-3">
+        <div className="text-sm font-semibold text-sabbi-neutral-900">{product.name}</div>
+        {product.provider ? (
+          <div className="mt-0.5 text-xs text-sabbi-neutral-500">{product.provider}</div>
+        ) : null}
+        <div className="mt-1.5 font-display text-lg font-semibold text-[var(--accent-text)]">
+          {formatUsd(product.amount)}
+        </div>
+      </div>
+      {responded === null ? (
+        <div className="flex gap-2 border-t border-sabbi-neutral-200 px-4 py-2.5">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="flex-1 rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-sabbi-primary-hover"
+          >
+            Sí, agregar
+          </button>
+          <button
+            type="button"
+            onClick={handleReject}
+            className="flex-1 rounded-lg border border-sabbi-neutral-300 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50"
+          >
+            No
+          </button>
+        </div>
+      ) : (
+        <div className="border-t border-sabbi-neutral-200 px-4 py-2 text-xs text-sabbi-neutral-500">
+          {responded === "yes" ? "✓ Confirmado" : "✗ Descartado"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const MarkdownText: FC = () => (
   <MarkdownTextPrimitive className="assistant-markdown" remarkPlugins={[remarkGfm]} />
 );
 
+const ThinkingIndicator: FC<EmptyMessagePartProps> = ({ status }) => {
+  if (status.type !== "running") return null;
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <span className="thinking-dot" />
+      <span className="text-sm text-sabbi-neutral-500">Pensando...</span>
+    </div>
+  );
+};
+
+const ReasoningPart: FC<ReasoningMessagePartProps> = ({ text, status }) => {
+  const [open, setOpen] = useState(false);
+  const isStreaming = status?.type === "running";
+
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-xs font-medium text-sabbi-neutral-600 hover:text-sabbi-neutral-900"
+      >
+        <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>
+          ▶
+        </span>
+        {isStreaming ? (
+          <span className="flex items-center gap-1.5">
+            <span className="thinking-dot" />
+            Pensando...
+          </span>
+        ) : (
+          "Ver razonamiento"
+        )}
+      </button>
+      {(open || isStreaming) && text ? (
+        <div className="mt-1.5 max-h-48 overflow-y-auto rounded-lg border border-sabbi-neutral-200 bg-[var(--bg-panel)] px-3 py-2 text-xs leading-relaxed text-sabbi-neutral-600">
+          {text}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const AssistantMessage: FC = () => {
   return (
-    <MessagePrimitive.Root className="mr-auto flex max-w-[85%] flex-col items-start gap-1">
-      <div className="px-0 py-2 text-sabbi-neutral-900">
+    <MessagePrimitive.Root className="mr-auto flex w-full min-w-0 flex-col items-start gap-1">
+      <div className="min-w-0 max-w-full px-0 py-2 text-sabbi-neutral-900">
         <MessagePrimitive.Content
           components={{
             Text: MarkdownText,
+            Empty: ThinkingIndicator,
+            Reasoning: ReasoningPart,
             tools: {
               by_name: {
+                propose_product: ProposeProductCard,
                 add_product: ToolResultItem,
                 update_product: ToolResultItem,
                 delete_product: ToolResultItem,
@@ -334,7 +495,7 @@ const Composer: FC = () => {
               key={attachment.id}
               className="animate-card-enter group/att relative flex w-28 flex-col items-center gap-1 rounded-xl border border-sabbi-neutral-200 bg-white p-3 shadow-sm"
             >
-              <AttachmentPrimitive.Remove className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-sabbi-neutral-700 text-[10px] leading-none text-white opacity-0 transition-opacity hover:bg-sabbi-neutral-900 group-hover/att:opacity-100">
+              <AttachmentPrimitive.Remove className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-sabbi-neutral-700 text-[10px] leading-none text-white transition-opacity hover:bg-sabbi-neutral-900">
                 ✕
               </AttachmentPrimitive.Remove>
               <div className="flex size-10 items-center justify-center rounded-lg bg-sabbi-neutral-100 text-sabbi-neutral-600">

@@ -120,6 +120,9 @@ body {
 .assistant-markdown {
   font-size: 14px;
   line-height: 1.6;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .assistant-markdown p {
@@ -180,6 +183,7 @@ body {
   border-radius: var(--radius);
   padding: 12px;
   overflow-x: auto;
+  max-width: 100%;
   margin: 0.75em 0;
 }
 
@@ -187,6 +191,25 @@ body {
   background: none;
   border: none;
   padding: 0;
+}
+
+/* Thinking/reasoning indicator */
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* Portfolio panel polish (T-503 — Phase 5 Integration & Polish) */

@@ -28,8 +28,12 @@ productos de inversión en las 6 categorías del portafolio SABBI:
 {_format_categories()}
 
 REGLAS DE CLASIFICACIÓN Y USO DE TOOLS:
-- Cuando identifiques un producto de inversión nuevo, usa la tool `add_product`
-  para agregarlo al portafolio.
+- Cuando identifiques un producto de inversión nuevo, usa PRIMERO
+  `propose_product` para presentárselo al usuario. La UI mostrará una
+  tarjeta con botones "Sí" y "No". Solo después de que el usuario confirme,
+  usa `add_product` con los mismos datos.
+- NUNCA uses `add_product` directamente sin una confirmación previa del
+  usuario. El flujo es: propose_product → usuario confirma → add_product.
 - Si el usuario pide modificar o corregir un producto existente, usa
   `update_product` con el `product_id` correspondiente.
 - Si el usuario pide eliminar un producto, usa `delete_product` con el
@@ -40,7 +44,6 @@ REGLAS DE CLASIFICACIÓN Y USO DE TOOLS:
   composición (lista de objetos con `name` y `percentage`) en el parámetro
   `composition`. Si no se especifica composición, se asume 100% en el
   producto mismo.
-- Siempre confirma con el usuario los datos extraídos antes de continuar.
 - Si no puedes identificar el nombre, el monto o la categoría de un
   producto, pregunta específicamente por el dato faltante — no asumas
   valores.

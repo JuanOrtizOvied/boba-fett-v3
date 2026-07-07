@@ -46,6 +46,42 @@ def _to_composition(items: list[dict[str, Any]]) -> list[AssetAllocation]:
 
 
 @tool
+async def propose_product(
+    name: str,
+    amount: float,
+    category: str,
+    provider: str = "",
+    composition: list[dict[str, Any]] | None = None,
+    *,
+    config: RunnableConfig,
+) -> dict:
+    """Propose adding an investment product and ask the user to confirm.
+
+    Call this INSTEAD of add_product when you first identify a product.
+    The UI will render a confirmation card with Yes/No buttons. Only after
+    the user confirms should you call add_product with the same data.
+
+    Args:
+        name: Product name (e.g. 'BlackRock Private Credit Fund').
+        amount: Investment amount in USD.
+        category: One of: directas, privados, club, publicos, otros, cash.
+        provider: Provider or fund manager name.
+        composition: List of {name, percentage} asset class allocations.
+    """
+    del config
+    return {
+        "status": "proposed",
+        "product": {
+            "name": name,
+            "amount": amount,
+            "category": category,
+            "provider": provider,
+            "composition": composition or [{"name": name, "percentage": 100}],
+        },
+    }
+
+
+@tool
 async def add_product(
     name: str,
     amount: float,
@@ -147,4 +183,10 @@ async def get_portfolio_summary(*, config: RunnableConfig) -> dict:
     return await repo.get_summary(portfolio_id)
 
 
-portfolio_tools = [add_product, update_product, delete_product, get_portfolio_summary]
+portfolio_tools = [
+    propose_product,
+    add_product,
+    update_product,
+    delete_product,
+    get_portfolio_summary,
+]
