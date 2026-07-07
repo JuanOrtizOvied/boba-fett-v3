@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   useLangGraphRuntime,
@@ -18,7 +18,11 @@ const ASSISTANT_ID =
 
 export function MyAssistant() {
   const client = useMemo(() => createClient(), []);
-  const portfolioId = useMemo(() => getPortfolioId(), []);
+  const [portfolioId, setPortfolioId] = useState("");
+
+  useEffect(() => {
+    setPortfolioId(getPortfolioId());
+  }, []);
 
   // Custom stream callback (based on `unstable_createLangGraphStream`) that
   // always injects `configurable.portfolio_id` into the run config, so every

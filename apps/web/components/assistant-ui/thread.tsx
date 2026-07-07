@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type FC } from "react";
+import type { FC } from "react";
 import type {
   Attachment,
   AttachmentAdapter,
@@ -10,6 +10,7 @@ import type {
 } from "@assistant-ui/react";
 import {
   ActionBarPrimitive,
+  AttachmentPrimitive,
   ComposerPrimitive,
   CompositeAttachmentAdapter,
   ErrorPrimitive,
@@ -17,6 +18,8 @@ import {
   SimpleImageAttachmentAdapter,
   ThreadPrimitive,
 } from "@assistant-ui/react";
+import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   CameraIcon,
   ClipIcon,
@@ -50,14 +53,14 @@ function readFileAsDataUrl(file: File): Promise<string> {
  * (`{ type: "file", data, mime_type, metadata: { filename } }`).
  */
 class Base64DocumentAttachmentAdapter implements AttachmentAdapter {
-  public accept = "application/pdf,.pdf";
+  public accept = "*/*";
 
   async add(state: { file: File }): Promise<PendingAttachment> {
     return {
       id: `${state.file.name}-${state.file.size}-${Date.now()}`,
       type: "document",
       name: state.file.name,
-      contentType: state.file.type || "application/pdf",
+      contentType: state.file.type || "application/octet-stream",
       file: state.file,
       status: { type: "requires-action", reason: "composer-send" },
     };
@@ -74,7 +77,7 @@ class Base64DocumentAttachmentAdapter implements AttachmentAdapter {
           type: "file",
           filename: attachment.name,
           data: base64,
-          mimeType: attachment.contentType ?? "application/pdf",
+          mimeType: attachment.contentType ?? "application/octet-stream",
         },
       ],
     };
@@ -102,10 +105,15 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function AttachmentIcon({ attachment }: { attachment: Attachment }) {
-  if (attachment.type === "image") return <CameraIcon size={16} />;
-  if (attachment.contentType === "application/pdf") return <PdfIcon size={16} />;
-  return <FileIcon size={16} />;
+function AttachmentIcon({ attachment, size = 16 }: { attachment: Attachment; size?: number }) {
+  if (attachment.type === "image") return <CameraIcon size={size} />;
+  if (attachment.contentType === "application/pdf") return <PdfIcon size={size} />;
+  return <FileIcon size={size} />;
+}
+
+function fileExtension(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toUpperCase() : "FILE";
 }
 
 /**
@@ -120,23 +128,32 @@ function AttachmentIcon({ attachment }: { attachment: Attachment }) {
 export const Thread: FC = () => {
   return (
     <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col bg-background">
-      <ThreadPrimitive.Viewport className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-6">
-        <ThreadPrimitive.If empty>
-          <WelcomeMessage />
-        </ThreadPrimitive.If>
+      <ComposerPrimitive.AttachmentDropzone className="group/drop relative flex min-h-0 flex-1 flex-col">
+        <div className="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center rounded-xl border-2 border-dashed border-sabbi-primary bg-sabbi-primary-soft/40 backdrop-blur-[2px] group-data-[dragging=true]/drop:flex">
+          <div className="flex flex-col items-center gap-2 text-sabbi-primary">
+            <ClipIcon size={32} />
+            <span className="text-sm font-medium">Soltar archivo aquí</span>
+          </div>
+        </div>
 
-        <ThreadPrimitive.Messages>
-          {({ message }) => {
-            if (message.role === "user") return <UserMessage />;
-            if (message.role === "assistant") return <AssistantMessage />;
-            return null;
-          }}
-        </ThreadPrimitive.Messages>
-      </ThreadPrimitive.Viewport>
+        <ThreadPrimitive.Viewport className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-6">
+          <ThreadPrimitive.If empty>
+            <WelcomeMessage />
+          </ThreadPrimitive.If>
 
-      <div className="shrink-0 border-t border-sabbi-neutral-200 px-4 py-4">
-        <Composer />
-      </div>
+          <ThreadPrimitive.Messages>
+            {({ message }) => {
+              if (message.role === "user") return <UserMessage />;
+              if (message.role === "assistant") return <AssistantMessage />;
+              return null;
+            }}
+          </ThreadPrimitive.Messages>
+        </ThreadPrimitive.Viewport>
+
+        <div className="shrink-0 border-t border-sabbi-neutral-200 px-4 py-4">
+          <Composer />
+        </div>
+      </ComposerPrimitive.AttachmentDropzone>
     </ThreadPrimitive.Root>
   );
 };
@@ -271,12 +288,17 @@ function ToolResultItem({
   );
 }
 
+const MarkdownText: FC = () => (
+  <MarkdownTextPrimitive className="assistant-markdown" remarkPlugins={[remarkGfm]} />
+);
+
 const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="mr-auto flex max-w-[85%] flex-col items-start gap-1">
       <div className="px-0 py-2 text-sabbi-neutral-900">
         <MessagePrimitive.Content
           components={{
+            Text: MarkdownText,
             tools: {
               by_name: {
                 add_product: ToolResultItem,
@@ -302,28 +324,30 @@ const AssistantMessage: FC = () => {
   );
 };
 
-const QUICK_ACTIONS = [
-  { icon: CameraIcon, label: "Captura" },
-  { icon: PdfIcon, label: "PDF" },
-  { icon: FileIcon, label: "Factsheet" },
-] as const;
-
 const Composer: FC = () => {
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
   return (
     <ComposerPrimitive.Root className="flex flex-col gap-2">
-      {/* `data-dragging="true"` is set by the primitive itself while a file
-          is dragged over the dropzone — no need to track drag state manually. */}
-      <ComposerPrimitive.AttachmentDropzone className="flex flex-col gap-2 rounded-[20px] border border-sabbi-neutral-200 bg-[var(--bg-panel)] px-3 py-2 transition-colors focus-within:border-sabbi-primary focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(67,56,202,0.08)] data-[dragging=true]:border-sabbi-primary data-[dragging=true]:bg-sabbi-primary-soft">
+      <div className="flex flex-col gap-2 rounded-[20px] border border-sabbi-neutral-200 bg-[var(--bg-panel)] px-3 py-2 transition-colors focus-within:border-sabbi-primary focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(67,56,202,0.08)]">
         <ComposerPrimitive.Attachments>
           {({ attachment }) => (
             <div
               key={attachment.id}
-              className="flex items-center gap-2 rounded-lg bg-sabbi-neutral-100 px-2.5 py-1.5 text-xs text-sabbi-neutral-700"
+              className="animate-card-enter group/att relative flex w-28 flex-col items-center gap-1 rounded-xl border border-sabbi-neutral-200 bg-white p-3 shadow-sm"
             >
-              <AttachmentIcon attachment={attachment} />
-              <span className="max-w-[160px] truncate">{attachment.name}</span>
+              <AttachmentPrimitive.Remove className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-sabbi-neutral-700 text-[10px] leading-none text-white opacity-0 transition-opacity hover:bg-sabbi-neutral-900 group-hover/att:opacity-100">
+                ✕
+              </AttachmentPrimitive.Remove>
+              <div className="flex size-10 items-center justify-center rounded-lg bg-sabbi-neutral-100 text-sabbi-neutral-600">
+                <AttachmentIcon attachment={attachment} size={22} />
+              </div>
+              <span className="w-full truncate text-center text-[11px] font-medium text-sabbi-neutral-900">
+                {attachment.name}
+              </span>
+              <span className="text-[10px] text-sabbi-neutral-600">
+                {attachment.file
+                  ? formatFileSize(attachment.file.size)
+                  : fileExtension(attachment.name)}
+              </span>
             </div>
           )}
         </ComposerPrimitive.Attachments>
@@ -337,7 +361,6 @@ const Composer: FC = () => {
           </ComposerPrimitive.AddAttachment>
 
           <ComposerPrimitive.Input
-            ref={inputRef}
             placeholder="Contame sobre tus inversiones..."
             rows={1}
             className="max-h-40 flex-1 resize-none bg-transparent text-sm outline-none"
@@ -354,26 +377,6 @@ const Composer: FC = () => {
             </ComposerPrimitive.Cancel>
           </ThreadPrimitive.If>
         </div>
-      </ComposerPrimitive.AttachmentDropzone>
-
-      <div className="flex items-center gap-1.5">
-        {QUICK_ACTIONS.map(({ icon: Icon, label }) => (
-          <ComposerPrimitive.AddAttachment
-            key={label}
-            className="flex items-center gap-1.5 rounded-full border border-sabbi-neutral-200 px-2.5 py-1 text-xs font-medium text-sabbi-neutral-600 transition-colors hover:bg-sabbi-neutral-50"
-          >
-            <Icon size={14} />
-            {label}
-          </ComposerPrimitive.AddAttachment>
-        ))}
-        <button
-          type="button"
-          onClick={() => inputRef.current?.focus()}
-          className="flex items-center gap-1.5 rounded-full border border-sabbi-neutral-200 px-2.5 py-1 text-xs font-medium text-sabbi-neutral-600 transition-colors hover:bg-sabbi-neutral-50"
-        >
-          <LinkIcon size={14} />
-          Link
-        </button>
       </div>
     </ComposerPrimitive.Root>
   );

@@ -15,13 +15,13 @@ from agent.prompts import SYSTEM_PROMPT
 from agent.state import AgentState
 from agent.tools import portfolio_tools
 
-MODEL_NAME = "claude-sonnet-4-20250514"
+MODEL_NAME = "claude-sonnet-5"
 
 # Instantiating `ChatAnthropic` does not require `ANTHROPIC_API_KEY` to be
 # present — credentials are only validated when a request is actually made.
 # This keeps graph import/compile safe in environments without the key set
 # (e.g. `langgraph dev` schema checks, unit tests).
-llm = ChatAnthropic(model=MODEL_NAME, temperature=0, max_tokens=4096)
+llm = ChatAnthropic(model=MODEL_NAME, max_tokens=4096)
 llm_with_tools = llm.bind_tools(portfolio_tools)
 
 _ATTACHMENT_CONTENT_TYPES = ("image_url", "image", "document", "file")
@@ -70,13 +70,23 @@ def has_file_attachment(state: AgentState) -> str:
 async def process_document_node(state: AgentState) -> dict:
     """Inject an extraction prompt so `agent_node` processes the attached
     document (PDF/image, already present as content blocks on the last human
-    message) with Claude vision and persists products via `add_product`."""
+    message) with Claude vision and persists products via `add_product`.
+
+    Uses SystemMessage so the instruction doesn't render as a user bubble
+    in the chat UI — the user already sees their own attachment message."""
     del state  # unused — the attachment stays on the last message already in history
-    return {"messages": [HumanMessage(content=EXTRACTION_PROMPT)]}
+    return {"messages": [SystemMessage(content=EXTRACTION_PROMPT)]}
 
 
 async def agent_node(state: AgentState) -> dict:
     """Main conversational node — invokes Claude with portfolio tools bound."""
-    messages = [SystemMessage(content=SYSTEM_PROMPT), *state["messages"]]
+    system_parts = [SYSTEM_PROMPT]
+    conversation = []
+    for msg in state["messages"]:
+        if isinstance(msg, SystemMessage):
+            system_parts.append(msg.content)
+        else:
+            conversation.append(msg)
+    messages = [SystemMessage(content="\n\n".join(system_parts)), *conversation]
     response = await llm_with_tools.ainvoke(messages)
     return {"messages": [response]}

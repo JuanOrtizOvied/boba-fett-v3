@@ -116,6 +116,79 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Assistant markdown prose */
+.assistant-markdown {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.assistant-markdown p {
+  margin: 0.5em 0;
+}
+
+.assistant-markdown p:first-child {
+  margin-top: 0;
+}
+
+.assistant-markdown strong {
+  font-weight: 600;
+}
+
+.assistant-markdown ul,
+.assistant-markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.assistant-markdown li {
+  margin: 0.25em 0;
+}
+
+.assistant-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 13px;
+  overflow-x: auto;
+  display: block;
+}
+
+.assistant-markdown th,
+.assistant-markdown td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.assistant-markdown th {
+  background: var(--bg-panel);
+  font-weight: 600;
+}
+
+.assistant-markdown code {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.9em;
+}
+
+.assistant-markdown pre {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+
+.assistant-markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
 /* Portfolio panel polish (T-503 — Phase 5 Integration & Polish) */
 
 @keyframes card-enter {
