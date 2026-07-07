@@ -1,7 +1,13 @@
 "use client";
 
 import { useRef, type FC } from "react";
-import type { Attachment, AttachmentAdapter, CompleteAttachment, PendingAttachment } from "@assistant-ui/react";
+import type {
+  Attachment,
+  AttachmentAdapter,
+  CompleteAttachment,
+  PendingAttachment,
+  ToolCallMessagePartProps,
+} from "@assistant-ui/react";
 import {
   ActionBarPrimitive,
   ComposerPrimitive,
@@ -20,6 +26,9 @@ import {
   RobotIcon,
   SendIcon,
 } from "@/components/icons/Icons";
+import { CATEGORY_META, categoryBgVar, categoryTextVar } from "@/lib/categories";
+import { formatUsd } from "@/lib/format";
+import type { Category } from "@/lib/portfolio-types";
 
 /**
  * Converts a `File` to a base64 data URL, matching the pattern used by
@@ -172,13 +181,13 @@ const WelcomeMessage: FC = () => {
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="ml-auto flex max-w-[85%] flex-col items-end gap-1">
-      <div className="flex flex-col gap-2 rounded-2xl bg-sabbi-primary px-4 py-2 text-white">
+      <div className="flex flex-col gap-2 rounded-[18px_18px_4px_18px] bg-sabbi-primary px-4 py-2.5 text-white">
         <MessagePrimitive.Content />
         <MessagePrimitive.Attachments>
           {({ attachment }) => (
             <div
               key={attachment.id}
-              className="flex items-center gap-2 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs"
+              className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/[.12] px-2.5 py-1.5 text-xs"
             >
               <AttachmentIcon attachment={attachment} />
               <span className="max-w-[160px] truncate">{attachment.name}</span>
@@ -195,11 +204,89 @@ const UserMessage: FC = () => {
   );
 };
 
+/**
+ * A product mutated by `add_product`/`update_product`, as returned by the
+ * LangGraph agent's portfolio tools (`apps/backend/src/agent/tools.py`).
+ */
+interface ToolResultProduct {
+  name: string;
+  amount: number;
+  category: Category;
+}
+
+type PortfolioToolResult =
+  | { status: "added" | "updated"; product: ToolResultProduct }
+  | { status: "deleted"; product_id: string }
+  | { status: "error"; message: string };
+
+/**
+ * Renders a single row for `add_product`/`update_product`/`delete_product`
+ * tool calls inside an assistant message (`chat-refinement.spec.md` →
+ * "Grouped inline tool result cards"). Consecutive rows visually merge into
+ * one card via the `.tool-result-item` adjacency CSS in `globals.css` — no
+ * wrapping component needed since assistant-ui renders each tool-call part
+ * as an independent sibling.
+ */
+function ToolResultItem({
+  args,
+  result,
+}: ToolCallMessagePartProps<Record<string, unknown>, PortfolioToolResult>) {
+  if (!result || result.status === "error") return null;
+
+  if (result.status === "deleted") {
+    const productId =
+      result.product_id ?? (args?.["product_id"] as string | undefined);
+    return (
+      <div className="tool-result-item">
+        <span
+          className="tool-badge"
+          style={{ background: "var(--danger-light)", color: "var(--danger-text)" }}
+        >
+          Eliminado
+        </span>
+        <span className="tool-item-name truncate">
+          {productId ?? "Producto"}
+        </span>
+      </div>
+    );
+  }
+
+  const { product } = result;
+  const meta = CATEGORY_META[product.category];
+
+  return (
+    <div className="tool-result-item">
+      <span
+        className="tool-badge"
+        style={{
+          background: categoryBgVar(product.category),
+          color: categoryTextVar(product.category),
+        }}
+      >
+        {meta.shortLabel}
+      </span>
+      <span className="tool-item-name truncate">{product.name}</span>
+      <span className="tool-item-amount">{formatUsd(product.amount)}</span>
+    </div>
+  );
+}
+
 const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="mr-auto flex max-w-[85%] flex-col items-start gap-1">
-      <div className="rounded-2xl bg-sabbi-neutral-100 px-4 py-2 text-sabbi-neutral-900">
-        <MessagePrimitive.Content />
+      <div className="px-0 py-2 text-sabbi-neutral-900">
+        <MessagePrimitive.Content
+          components={{
+            tools: {
+              by_name: {
+                add_product: ToolResultItem,
+                update_product: ToolResultItem,
+                delete_product: ToolResultItem,
+              },
+              Fallback: () => null,
+            },
+          }}
+        />
         <MessagePrimitive.Error>
           <ErrorPrimitive.Root className="mt-2 flex flex-col gap-2 rounded-md border border-red-400 bg-red-50 px-3 py-2 text-sm text-red-700">
             <ErrorPrimitive.Message />
@@ -228,7 +315,7 @@ const Composer: FC = () => {
     <ComposerPrimitive.Root className="flex flex-col gap-2">
       {/* `data-dragging="true"` is set by the primitive itself while a file
           is dragged over the dropzone — no need to track drag state manually. */}
-      <ComposerPrimitive.AttachmentDropzone className="flex flex-col gap-2 rounded-xl border border-sabbi-neutral-200 px-3 py-2 transition-colors data-[dragging=true]:border-sabbi-primary data-[dragging=true]:bg-sabbi-primary-soft">
+      <ComposerPrimitive.AttachmentDropzone className="flex flex-col gap-2 rounded-[20px] border border-sabbi-neutral-200 bg-[var(--bg-panel)] px-3 py-2 transition-colors focus-within:border-sabbi-primary focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(67,56,202,0.08)] data-[dragging=true]:border-sabbi-primary data-[dragging=true]:bg-sabbi-primary-soft">
         <ComposerPrimitive.Attachments>
           {({ attachment }) => (
             <div

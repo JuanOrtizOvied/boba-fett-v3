@@ -1,23 +1,66 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm neutral surface tokens */
+  --bg-page: #f6f5f2;
+  --bg-card: #ffffff;
+  --bg-panel: #fafaf8;
+  --bg-chat: #f0efec;
 
-  /* SABBI brand */
-  --sabbi-primary: #4f46e5;
-  --sabbi-primary-hover: #4338ca;
-  --sabbi-primary-soft: #eef2ff;
+  --text-1: #1a1a18;
+  --text-2: #6b6a65;
+  --text-3: #9c9b96;
 
-  /* Portfolio category taxonomy (6 categories) */
-  --sabbi-cat-directas: #3b82f6; /* Inversiones directas */
-  --sabbi-cat-privados: #8b5cf6; /* Mercados privados */
-  --sabbi-cat-club: #f59e0b; /* Club deals */
-  --sabbi-cat-publicos: #10b981; /* Mercados públicos */
-  --sabbi-cat-otros: #ec4899; /* Otros */
-  --sabbi-cat-cash: #14b8a6; /* Cash y equivalentes */
+  --border: #e2e1dc;
+  --border-strong: #cccbc5;
 
-  /* Neutral grays */
+  /* Accent (indigo) */
+  --accent: #4338ca;
+  --accent-hover: #3730a3;
+  --accent-light: #eef2ff;
+  --accent-text: #3730a3;
+
+  /* Status colors */
+  --danger: #dc2626;
+  --danger-light: #fef2f2;
+  --danger-text: #991b1b;
+  --success: #059669;
+
+  /* Legacy Next.js template vars — kept for existing Tailwind consumers */
+  --background: var(--bg-page);
+  --foreground: var(--text-1);
+
+  /* SABBI brand aliases — kept so existing component references keep working */
+  --sabbi-primary: var(--accent);
+  --sabbi-primary-hover: var(--accent-hover);
+  --sabbi-primary-soft: var(--accent-light);
+
+  /* Portfolio category taxonomy (6 categories) — accent / badge bg / badge text */
+  --sabbi-cat-directas: #c2410c; /* Inversiones directas */
+  --sabbi-cat-directas-bg: #fff7ed;
+  --sabbi-cat-directas-text: #9a3412;
+
+  --sabbi-cat-privados: #7c3aed; /* Mercados privados */
+  --sabbi-cat-privados-bg: #f5f3ff;
+  --sabbi-cat-privados-text: #5b21b6;
+
+  --sabbi-cat-club: #0d9488; /* Club deals */
+  --sabbi-cat-club-bg: #f0fdfa;
+  --sabbi-cat-club-text: #115e59;
+
+  --sabbi-cat-publicos: #2563eb; /* Mercados públicos */
+  --sabbi-cat-publicos-bg: #eff6ff;
+  --sabbi-cat-publicos-text: #1e40af;
+
+  --sabbi-cat-otros: #d97706; /* Otros */
+  --sabbi-cat-otros-bg: #fffbeb;
+  --sabbi-cat-otros-text: #92400e;
+
+  --sabbi-cat-cash: #16a34a; /* Cash y equivalentes */
+  --sabbi-cat-cash-bg: #f0fdf4;
+  --sabbi-cat-cash-text: #166534;
+
+  /* Neutral grays — legacy, kept for any remaining consumers */
   --sabbi-neutral-50: #f9fafb;
   --sabbi-neutral-100: #f3f4f6;
   --sabbi-neutral-200: #e5e7eb;
@@ -25,11 +68,23 @@
   --sabbi-neutral-600: #4b5563;
   --sabbi-neutral-700: #374151;
   --sabbi-neutral-900: #111827;
+
+  /* Design tokens: radius, shadow, transition */
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.07),
+    0 0 0 0.5px rgba(0, 0, 0, 0.08);
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-dm-sans), var(--font-inter), system-ui,
+    sans-serif;
 
   --color-sabbi-primary: var(--sabbi-primary);
   --color-sabbi-primary-hover: var(--sabbi-primary-hover);
@@ -51,17 +106,10 @@
   --color-sabbi-neutral-900: var(--sabbi-neutral-900);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Portfolio panel polish (T-503 — Phase 5 Integration & Polish) */
@@ -107,4 +155,62 @@ body {
 
 .animate-modal-panel {
   animation: modal-panel-in 200ms ease-out;
+}
+
+/* Chat inline tool-result cards (T-008 — chat-refinement.spec.md ->
+   "Grouped inline tool result cards"). assistant-ui renders each
+   `add_product`/`update_product`/`delete_product` tool call as an
+   independent sibling part, so there is no single wrapping element to
+   style per turn. These adjacency selectors make consecutive
+   `.tool-result-item` rows collapse into what visually reads as ONE card:
+   every row keeps a full border+radius by default (so a lone tool call
+   still renders as a complete card), and a row immediately followed by
+   another `.tool-result-item` sibling drops its bottom radius while the
+   following row drops its top border+radius, producing a single
+   continuous box with 1px dividers between rows. */
+
+.tool-result-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.tool-result-item + .tool-result-item {
+  margin-top: -1px;
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.tool-result-item:has(+ .tool-result-item) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.tool-badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.tool-item-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-item-amount {
+  margin-left: auto;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--accent-text);
+  font-family: var(--font-display);
 }

@@ -11,11 +11,25 @@ import { RobotIcon } from "@/components/icons/Icons";
 export const ChatPanel: FC = () => {
   return (
     <div className="flex h-full min-h-0 min-w-[300px] flex-col border-r border-sabbi-neutral-200 bg-background">
-      <div className="flex shrink-0 items-center gap-2 border-b border-sabbi-neutral-200 px-4 py-3">
-        <RobotIcon size={20} className="text-sabbi-primary" />
-        <span className="text-sm font-semibold text-sabbi-neutral-900">
-          Asistente SABBI
-        </span>
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-sabbi-neutral-200 px-4 py-3">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#7c3aed,#4338ca)] text-white">
+          <RobotIcon size={16} />
+        </div>
+        <div className="flex flex-col">
+          <h3 className="text-[13.5px] font-medium text-sabbi-neutral-900">
+            Asistente SABBI
+          </h3>
+          <span
+            className="flex items-center gap-1 text-[11.5px]"
+            style={{ color: "var(--success)" }}
+          >
+            <span
+              className="size-1.5 rounded-full"
+              style={{ background: "var(--success)" }}
+            />
+            En línea
+          </span>
+        </div>
       </div>
       <Thread />
     </div>
