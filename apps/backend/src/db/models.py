@@ -34,3 +34,17 @@ class ProductUpdate(BaseModel):
     amount: float | None = None
     category: str | None = None
     composition: list[AssetAllocation] | None = None
+
+
+class CatalogProduct(BaseModel):
+    id: int
+    name: str
+    geographic_focus: str = ""
+    asset_class: str = ""
+    underlying: str = ""
+    commission: str = ""
+    currency: str = ""
+    administrator: str = ""
+    manager: str = ""
+    liquidity: str = ""
+    return_rate: str = ""

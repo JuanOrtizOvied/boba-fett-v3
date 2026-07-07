@@ -28,12 +28,20 @@ productos de inversión en las 6 categorías del portafolio SABBI:
 {_format_categories()}
 
 REGLAS DE CLASIFICACIÓN Y USO DE TOOLS:
-- Cuando identifiques un producto de inversión nuevo, usa PRIMERO
+- Cuando el usuario mencione un producto de inversión, usa PRIMERO
+  `search_catalog` para buscarlo en el catálogo de SABBI. Si hay
+  coincidencias, usa los datos del catálogo (comisión, clase de activo,
+  administrador, moneda, etc.) para enriquecer la propuesta. Si no hay
+  coincidencias, intenta buscar con términos alternativos (traducciones,
+  tickers, nombres comunes — por ejemplo, si "GLD" no tiene resultados,
+  busca "oro" o "gold").
+- Después de identificar el producto (con o sin catálogo), usa
   `propose_product` para presentárselo al usuario. La UI mostrará una
   tarjeta con botones "Sí" y "No". Solo después de que el usuario confirme,
   usa `add_product` con los mismos datos.
 - NUNCA uses `add_product` directamente sin una confirmación previa del
-  usuario. El flujo es: propose_product → usuario confirma → add_product.
+  usuario. El flujo es: search_catalog → propose_product → usuario confirma
+  → add_product.
 - Si el usuario pide modificar o corregir un producto existente, usa
   `update_product` con el `product_id` correspondiente.
 - Si el usuario pide eliminar un producto, usa `delete_product` con el

@@ -21,7 +21,8 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from db.connection import get_pool, get_repository
+from db.catalog_repository import CatalogRepository
+from db.connection import get_catalog_repository, get_pool, get_repository
 from db.models import AssetAllocation, ProductCreate, ProductUpdate
 from db.repository import ProductRepository
 
@@ -30,6 +31,12 @@ async def _repository() -> ProductRepository:
     """Resolve the `ProductRepository` bound to the process-wide connection pool."""
     pool = await get_pool()
     return get_repository(pool)
+
+
+async def _catalog_repository() -> CatalogRepository:
+    """Resolve the `CatalogRepository` bound to the process-wide connection pool."""
+    pool = await get_pool()
+    return get_catalog_repository(pool)
 
 
 def _portfolio_id(config: RunnableConfig) -> str:
@@ -183,7 +190,38 @@ async def get_portfolio_summary(*, config: RunnableConfig) -> dict:
     return await repo.get_summary(portfolio_id)
 
 
+@tool
+async def search_catalog(query: str, *, config: RunnableConfig) -> dict:
+    """Search the SABBI product catalog for products matching a name, ticker, or description.
+
+    Use this tool FIRST when a user mentions a product to check if it exists
+    in the catalog. The catalog contains 200+ pre-loaded investment products
+    with detailed info (asset class, commission, currency, geographic focus,
+    underlying, administrator, manager, liquidity, return rate).
+
+    If no matches are found, try alternative terms — translations, tickers,
+    or common names (e.g. search 'oro' if 'GLD' returns nothing).
+
+    Args:
+        query: Product name, ticker symbol, or description to search for
+               (e.g. 'QQQ', 'Credicorp', 'oro', 'bitcoin').
+    """
+    del config
+    repo = await _catalog_repository()
+    results = await repo.search(query)
+
+    if not results:
+        return {"status": "no_matches", "query": query, "products": []}
+
+    return {
+        "status": "found",
+        "query": query,
+        "products": [p.model_dump() for p in results],
+    }
+
+
 portfolio_tools = [
+    search_catalog,
     propose_product,
     add_product,
     update_product,

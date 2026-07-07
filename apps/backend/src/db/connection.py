@@ -42,3 +42,11 @@ def get_repository(pool: asyncpg.Pool | None = None):
     if pool is None:
         raise RuntimeError("Pool not initialized — call get_pool() first")
     return ProductRepository(pool)
+
+
+def get_catalog_repository(pool: asyncpg.Pool | None = None):
+    from db.catalog_repository import CatalogRepository
+
+    if pool is None:
+        raise RuntimeError("Pool not initialized — call get_pool() first")
+    return CatalogRepository(pool)
