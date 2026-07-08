@@ -12,7 +12,7 @@ class AssetAllocation(BaseModel):
 
 class Product(BaseModel):
     id: str = Field(default_factory=lambda: f"prod_{uuid.uuid4().hex[:8]}")
-    portfolio_id: str
+    user_id: str
     name: str
     provider: str = ""
     amount: float = Field(gt=0)

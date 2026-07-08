@@ -1,6 +1,28 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens (user_id);
+
 CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
-    portfolio_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id),
     name TEXT NOT NULL,
     provider TEXT DEFAULT '',
     amount NUMERIC NOT NULL CHECK (amount > 0),
@@ -10,7 +32,7 @@ CREATE TABLE IF NOT EXISTS products (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_products_portfolio ON products (portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 

@@ -34,14 +34,14 @@ def test_product_valid_generates_default_id():
     from db.models import Product
 
     product = Product(
-        portfolio_id="pf_123",
+        user_id="usr_123",
         name="BlackRock Private Credit Fund",
         amount=50000,
         category="privados",
     )
 
     assert product.id.startswith("prod_")
-    assert product.portfolio_id == "pf_123"
+    assert product.user_id == "usr_123"
     assert product.name == "BlackRock Private Credit Fund"
     assert product.provider == ""
     assert product.composition == []
@@ -51,7 +51,7 @@ def test_product_accepts_explicit_composition():
     from db.models import AssetAllocation, Product
 
     product = Product(
-        portfolio_id="pf_123",
+        user_id="usr_123",
         name="Multi-asset fund",
         amount=10000,
         category="publicos",
@@ -70,14 +70,14 @@ def test_product_rejects_non_positive_amount(amount):
     from db.models import Product
 
     with pytest.raises(ValidationError):
-        Product(portfolio_id="pf_123", name="Fund", amount=amount, category="cash")
+        Product(user_id="usr_123", name="Fund", amount=amount, category="cash")
 
 
 def test_product_requires_name_and_category():
     from db.models import Product
 
     with pytest.raises(ValidationError):
-        Product(portfolio_id="pf_123", amount=100)
+        Product(user_id="usr_123", amount=100)
 
 
 def test_product_create_valid():

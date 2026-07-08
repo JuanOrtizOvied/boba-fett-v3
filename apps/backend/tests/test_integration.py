@@ -141,7 +141,7 @@ def test_has_file_attachment_ignores_list_content_without_attachment_blocks():
 def _fake_row(**overrides) -> dict:
     row = {
         "id": "prod_abc12345",
-        "portfolio_id": "pf_test",
+        "user_id": "usr_test",
         "name": "Fund A",
         "provider": "Provider A",
         "amount": 10000.0,
@@ -152,14 +152,14 @@ def _fake_row(**overrides) -> dict:
     return row
 
 
-def test_repository_list_by_portfolio_maps_rows_to_products():
+def test_repository_list_by_user_maps_rows_to_products():
     from db.repository import ProductRepository
 
     pool = AsyncMock()
     pool.fetch.return_value = [_fake_row(), _fake_row(id="prod_xyz98765")]
 
     repo = ProductRepository(pool)
-    products = asyncio.run(repo.list_by_portfolio("pf_test"))
+    products = asyncio.run(repo.list_by_user("usr_test"))
 
     assert len(products) == 2
     assert products[0].id == "prod_abc12345"
@@ -177,10 +177,10 @@ def test_repository_create_inserts_and_returns_product():
 
     repo = ProductRepository(pool)
     data = ProductCreate(name="New Fund", amount=5000, category="cash")
-    product = asyncio.run(repo.create("pf_test", data))
+    product = asyncio.run(repo.create("usr_test", data))
 
     assert product.name == "New Fund"
-    assert product.portfolio_id == "pf_test"
+    assert product.user_id == "usr_test"
     assert product.id.startswith("prod_")
     pool.execute.assert_awaited_once()
 
@@ -263,7 +263,7 @@ def test_repository_get_summary_computes_totals_and_largest_position():
     ]
 
     repo = ProductRepository(pool)
-    summary = asyncio.run(repo.get_summary("pf_test"))
+    summary = asyncio.run(repo.get_summary("usr_test"))
 
     assert summary["total_amount"] == 10000.0
     assert summary["product_count"] == 2
@@ -279,7 +279,7 @@ def test_repository_get_summary_handles_empty_portfolio():
     pool.fetch.return_value = []
 
     repo = ProductRepository(pool)
-    summary = asyncio.run(repo.get_summary("pf_empty"))
+    summary = asyncio.run(repo.get_summary("usr_empty"))
 
     assert summary["total_amount"] == 0
     assert summary["product_count"] == 0

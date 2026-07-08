@@ -10,7 +10,7 @@ from db.models import AssetAllocation, Product
 
 def _product(**overrides) -> Product:
     defaults = dict(
-        portfolio_id="pf_test",
+        user_id="usr_test",
         name="Fund A",
         provider="Provider A",
         amount=10_000,

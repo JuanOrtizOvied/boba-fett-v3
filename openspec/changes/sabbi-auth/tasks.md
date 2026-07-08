@@ -9,11 +9,11 @@
 | Chained PRs recommended | Yes |
 | Suggested split | PR 1 → PR 2 → PR 3 → PR 4 (sequential) |
 | Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Chain strategy | stacked-to-main |
 
-Decision needed before apply: Yes
+Decision needed before apply: No (resolved — stacked-to-main)
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: stacked-to-main
 400-line budget risk: High
 
 ### Suggested Work Units
@@ -27,17 +27,17 @@ Chain strategy: pending
 
 ## Phase 1 (PR 1): DB + Auth Module
 
-- [ ] 1.1 `db/schema.sql`: add `users`, `refresh_tokens`; `products.portfolio_id`→`user_id`. (Password Hashing)
-- [ ] 1.2 `auth/__init__.py`: module init.
-- [ ] 1.3 `auth/passwords.py`: `hash_password`/`verify_password` (bcrypt). (Password stored as hash)
-- [ ] 1.4 `auth/tokens.py`: create/decode access+refresh tokens. (Login, Refresh Token Lifecycle)
-- [ ] 1.5 `auth/models.py`: `LoginRequest`, `UserResponse`, `UserCreate`.
-- [ ] 1.6 `auth/seed.py`: `seed_admin()` from `ADMIN_EMAIL`/`ADMIN_PASSWORD`, idempotent. (Initial Admin Seeding)
-- [ ] 1.7 `db/models.py`: `Product.portfolio_id`→`user_id`.
-- [ ] 1.8 `db/repository.py`: all methods use `user_id`.
-- [ ] 1.9 `db/connection.py`: call `seed_admin()` after schema init.
-- [ ] 1.10 `pyproject.toml`: add `bcrypt`, `PyJWT`.
-- [ ] 1.11 pytest: hash/verify, token encode/decode/expiry, seed idempotency (needs 1.3–1.6).
+- [x] 1.1 `db/schema.sql`: add `users`, `refresh_tokens`; `products.portfolio_id`→`user_id`. (Password Hashing)
+- [x] 1.2 `auth/__init__.py`: module init.
+- [x] 1.3 `auth/passwords.py`: `hash_password`/`verify_password` (bcrypt). (Password stored as hash)
+- [x] 1.4 `auth/tokens.py`: create/decode access+refresh tokens. (Login, Refresh Token Lifecycle)
+- [x] 1.5 `auth/models.py`: `LoginRequest`, `UserResponse`, `UserCreate`.
+- [x] 1.6 `auth/seed.py`: `seed_admin()` from `ADMIN_EMAIL`/`ADMIN_PASSWORD`, idempotent. (Initial Admin Seeding)
+- [x] 1.7 `db/models.py`: `Product.portfolio_id`→`user_id`.
+- [x] 1.8 `db/repository.py`: all methods use `user_id`.
+- [x] 1.9 `db/connection.py`: call `seed_admin()` after schema init.
+- [x] 1.10 `pyproject.toml`: add `bcrypt`, `PyJWT`.
+- [x] 1.11 pytest: hash/verify, token encode/decode/expiry, seed idempotency (needs 1.3–1.6).
 
 ## Phase 2 (PR 2): API Auth + Endpoints
 

@@ -19,6 +19,7 @@ async def get_pool() -> asyncpg.Pool:
         )
         _pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
         await _run_schema(_pool)
+        await _seed_admin(_pool)
     return _pool
 
 
@@ -34,6 +35,12 @@ async def _run_schema(pool: asyncpg.Pool) -> None:
     sql = schema_path.read_text()
     async with pool.acquire() as conn:
         await conn.execute(sql)
+
+
+async def _seed_admin(pool: asyncpg.Pool) -> None:
+    from auth.seed import seed_admin
+
+    await seed_admin(pool)
 
 
 def get_repository(pool: asyncpg.Pool | None = None):
