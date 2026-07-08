@@ -67,24 +67,26 @@ def test_get_portfolio_summary_schema():
     assert "config" not in args
 
 
-def test_portfolio_id_helper_requires_configurable_portfolio_id():
+def test_user_id_helper_requires_configurable_user_id():
+    """agent/agent.spec.md delta — 'Portfolio Identity Resolution': tools
+    resolve identity from `configurable.user_id` (JWT subject), not a
+    client-supplied `portfolio_id`."""
     import pytest
 
-    from agent.tools import _portfolio_id
+    from agent.tools import _user_id
 
     with pytest.raises(ValueError):
-        _portfolio_id({"configurable": {}})
+        _user_id({"configurable": {}})
 
     with pytest.raises(ValueError):
-        _portfolio_id({})
+        _user_id({})
 
-    assert _portfolio_id({"configurable": {"portfolio_id": "pf_abc"}}) == "pf_abc"
+    assert _user_id({"configurable": {"user_id": "usr_abc"}}) == "usr_abc"
 
 
 def test_to_composition_helper_builds_asset_allocations():
-    from db.models import AssetAllocation
-
     from agent.tools import _to_composition
+    from db.models import AssetAllocation
 
     result = _to_composition([{"name": "Cripto", "percentage": 100}])
 

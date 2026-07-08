@@ -2,10 +2,11 @@
 
 Tools do NOT go through LangGraph state. They persist to Postgres via
 `ProductRepository` so the portfolio survives across chat threads and page
-reloads (see `agent.state` module docstring). `portfolio_id` is supplied
-per-run via `RunnableConfig["configurable"]["portfolio_id"]` — the frontend
-generates a UUID per investor and passes it as `configurable.portfolio_id`
-on every run (see design.md — "Portfolio Identity").
+reloads (see `agent.state` module docstring). `user_id` is supplied per-run
+via `RunnableConfig["configurable"]["user_id"]` — the Next.js proxy injects
+it from the authenticated user's validated JWT subject claim, replacing the
+previously client-supplied `portfolio_id` (`agent.spec.md` delta —
+"Portfolio Identity Resolution").
 
 The Postgres pool itself is NOT passed through `RunnableConfig`: an
 `asyncpg.Pool` cannot be serialized across the LangGraph API boundary, and
@@ -39,13 +40,13 @@ async def _catalog_repository() -> CatalogRepository:
     return get_catalog_repository(pool)
 
 
-def _portfolio_id(config: RunnableConfig) -> str:
-    portfolio_id = (config.get("configurable") or {}).get("portfolio_id")
-    if not portfolio_id:
+def _user_id(config: RunnableConfig) -> str:
+    user_id = (config.get("configurable") or {}).get("user_id")
+    if not user_id:
         raise ValueError(
-            "portfolio_id is required in RunnableConfig['configurable'] to run portfolio tools"
+            "user_id is required in RunnableConfig['configurable'] to run portfolio tools"
         )
-    return portfolio_id
+    return user_id
 
 
 def _to_composition(items: list[dict[str, Any]]) -> list[AssetAllocation]:
@@ -109,10 +110,10 @@ async def add_product(
             omitted, the product is treated as 100% allocated to itself.
     """
     repo = await _repository()
-    portfolio_id = _portfolio_id(config)
+    user_id = _user_id(config)
     comp = _to_composition(composition or [{"name": name, "percentage": 100}])
     product = await repo.create(
-        portfolio_id,
+        user_id,
         ProductCreate(
             name=name,
             provider=provider,
@@ -186,8 +187,8 @@ async def get_portfolio_summary(*, config: RunnableConfig) -> dict:
     or before generating the final portfolio view.
     """
     repo = await _repository()
-    portfolio_id = _portfolio_id(config)
-    return await repo.get_summary(portfolio_id)
+    user_id = _user_id(config)
+    return await repo.get_summary(user_id)
 
 
 @tool

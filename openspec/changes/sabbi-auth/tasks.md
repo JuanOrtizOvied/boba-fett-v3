@@ -43,13 +43,13 @@ Chain strategy: stacked-to-main
 
 _Depends on Phase 1._
 
-- [ ] 2.1 `auth/dependencies.py`: `get_current_user`, 401 on missing/expired. (Access Token Validation)
-- [ ] 2.2 `auth/dependencies.py`: `require_admin`. (role blocked from admin routes)
-- [ ] 2.3 `api/auth_routes.py`: login, logout, refresh, me endpoints. (Login, Logout, Refresh, Current User Info)
-- [ ] 2.4 `api/admin_routes.py`: user CRUD, portfolios, threads read-only. (Admin creates user, User Listing, Portfolio/Chat Viewing)
-- [ ] 2.5 `api/routes.py`: guard routes; `/portfolio/{id}`→`/portfolio/me`; ownership checks. (Authenticated edit/delete, Ownership Enforcement)
-- [ ] 2.6 `agent/tools.py`: `_portfolio_id()`→`_user_id()` from `configurable.user_id`. (Portfolio Identity Resolution)
-- [ ] 2.7 pytest integration: login→cookie→scoped request, admin 403, ownership 403 (needs 2.1–2.6).
+- [x] 2.1 `auth/dependencies.py`: `get_current_user`, 401 on missing/expired. (Access Token Validation)
+- [x] 2.2 `auth/dependencies.py`: `require_admin`. (role blocked from admin routes)
+- [x] 2.3 `api/auth_routes.py`: login, logout, refresh, me endpoints. (Login, Logout, Refresh, Current User Info)
+- [x] 2.4 `api/admin_routes.py`: user CRUD, portfolios, threads read-only. (Admin creates user, User Listing, Portfolio/Chat Viewing)
+- [x] 2.5 `api/routes.py`: guard routes; `/portfolio/{id}`→`/portfolio/me`; ownership checks. (Authenticated edit/delete, Ownership Enforcement)
+- [x] 2.6 `agent/tools.py`: `_portfolio_id()`→`_user_id()` from `configurable.user_id`. (Portfolio Identity Resolution)
+- [x] 2.7 pytest integration: login→cookie→scoped request, admin 403, ownership 403 (needs 2.1–2.6).
 
 ## Phase 3 (PR 3): Frontend Auth
 
