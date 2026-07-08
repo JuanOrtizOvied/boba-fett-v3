@@ -8,6 +8,7 @@ dependencies = [
     "langchain-core>=0.3",
     "langchain-anthropic>=0.3",
     "langgraph-cli[inmem]>=0.1.55",
+    "langgraph-checkpoint-postgres>=3.0",
     "typing-extensions>=4.0",
     "asyncpg>=0.29",
     "fastapi>=0.115",

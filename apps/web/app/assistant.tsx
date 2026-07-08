@@ -10,6 +10,7 @@ import {
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { createClient } from "@/lib/chatApi";
+import { createThreadListAdapter } from "@/lib/threadListAdapter";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { dispatchPortfolioRefetch } from "@/lib/portfolioEvents";
 
@@ -21,19 +22,16 @@ export function MyAssistant() {
   const { user } = useAuth();
   const userId = user?.id ?? "";
 
-  // Custom stream callback (based on `unstable_createLangGraphStream`) that
-  // always injects `configurable.user_id` into the run config, so every
-  // portfolio tool call (add/update/delete_product) is scoped to the
-  // signed-in user regardless of per-message `runConfig` (`design.md` —
-  // "LangGraph user scoping").
+  const threadListAdapter = useMemo(
+    () => createThreadListAdapter(client, userId),
+    [client, userId],
+  );
+
   const stream = useMemo<LangGraphStreamCallback<LangChainMessage>>(
     () => async (messages, config) => {
       const { externalId } = await config.initialize();
       if (!externalId) throw new Error("Thread has not been initialized.");
 
-      // Message editing/regeneration (`getCheckpointId`) is not wired in this
-      // runtime, so `config.checkpointId` is always undefined here — no
-      // `checkpoint` field to forward.
       const rawStream = client.runs.stream(externalId, ASSISTANT_ID, {
         input: messages.length ? { messages } : null,
         streamMode: ["messages", "updates", "custom"],
@@ -43,11 +41,6 @@ export function MyAssistant() {
         ...(config.command != null && { command: config.command }),
       });
 
-      // Wrap the raw stream so the portfolio panel (a sibling component,
-      // not reachable via props/context from here) refetches the instant
-      // the run settles — whether it finishes normally, errors, or is
-      // cancelled — instead of waiting for `usePortfolio`'s poll interval
-      // (T-500 — Phase 5 Integration & Polish).
       return (async function* () {
         try {
           for await (const event of rawStream) {
@@ -63,32 +56,24 @@ export function MyAssistant() {
 
   const runtime = useLangGraphRuntime({
     unstable_allowCancellation: true,
+    unstable_threadListAdapter: threadListAdapter,
     stream,
     adapters: {
       attachments: attachmentAdapter,
     },
-    create: async () => {
-      // `metadata.owner_user_id` lets `/admin/threads` and any future
-      // per-user thread listing filter via the LangGraph SDK's native
-      // metadata search (`design.md` — "Thread ownership").
-      const { thread_id } = await client.threads.create({
-        metadata: { owner_user_id: userId },
-      });
-      return { externalId: thread_id };
-    },
     load: async (externalId) => {
-      const state = await client.threads.getState<{
-        messages: LangChainMessage[];
-      }>(externalId);
-      return {
-        messages: state.values.messages ?? [],
-      };
+      try {
+        const state = await client.threads.getState<{
+          messages: LangChainMessage[];
+        }>(externalId);
+        return {
+          messages: state.values?.messages ?? [],
+        };
+      } catch {
+        return { messages: [] };
+      }
     },
     eventHandlers: {
-      // Surface stream-level failures (e.g. the backend is unreachable) so
-      // they aren't silently swallowed. assistant-ui already renders a
-      // recoverable error on the affected message via MessagePrimitive.Error;
-      // this hook is a hook point for additional telemetry/logging.
       onError: (error) => {
         console.error("[assistant] LangGraph stream error", error);
       },

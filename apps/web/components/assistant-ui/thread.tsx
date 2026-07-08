@@ -30,7 +30,7 @@ import {
   RobotIcon,
   SendIcon,
 } from "@/components/icons/Icons";
-import { CATEGORY_META, categoryBgVar, categoryTextVar } from "@/lib/categories";
+import { CATEGORY_META, CATEGORY_ORDER, categoryBgVar, categoryTextVar } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
 import type { Category } from "@/lib/portfolio-types";
 
@@ -326,6 +326,9 @@ type ProposeToolResult =
   | { status: "proposed"; product: ProposedProduct }
   | { status: "error"; message: string };
 
+const proposalInputClass =
+  "w-full rounded-md border border-sabbi-neutral-200 bg-white px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none transition-colors focus:border-sabbi-primary";
+
 function ProposeProductCard({
   result,
 }: ToolCallMessagePartProps<Record<string, unknown>, ProposeToolResult>) {
@@ -333,17 +336,29 @@ function ProposeProductCard({
   const [responded, setResponded] = useState<"yes" | "no" | null>(null);
 
   const parsed = parseToolResult<ProposeToolResult>(result);
-  if (!parsed || parsed.status !== "proposed" || !parsed.product) return null;
+  const product = parsed?.status === "proposed" ? parsed.product : null;
 
-  const { product } = parsed;
-  const meta = CATEGORY_META[product.category];
+  const [name, setName] = useState(product?.name ?? "");
+  const [provider, setProvider] = useState(product?.provider ?? "");
+  const [amount, setAmount] = useState(product ? String(product.amount) : "0");
+  const [category, setCategory] = useState<Category>(product?.category ?? "cash");
+
+  if (!product) return null;
+
+  const meta = CATEGORY_META[category];
   if (!meta) return null;
 
+  const parsedAmount = parseFloat(amount);
+  const isValid = name.trim() !== "" && !isNaN(parsedAmount) && parsedAmount > 0;
+
   const handleConfirm = () => {
+    if (!isValid) return;
     setResponded("yes");
+    const parts: string[] = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${category}`];
+    if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
     runtime.append({
       role: "user",
-      content: [{ type: "text", text: `Sí, agregar "${product.name}" al portafolio.` }],
+      content: [{ type: "text", text: `Sí, agregar al portafolio con: ${parts.join(", ")}.` }],
     });
   };
 
@@ -351,9 +366,11 @@ function ProposeProductCard({
     setResponded("no");
     runtime.append({
       role: "user",
-      content: [{ type: "text", text: `No, no agregar "${product.name}".` }],
+      content: [{ type: "text", text: `No, no agregar "${name}".` }],
     });
   };
+
+  const editable = responded === null;
 
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white shadow-sm">
@@ -361,29 +378,90 @@ function ProposeProductCard({
         <span
           className="tool-badge"
           style={{
-            background: categoryBgVar(product.category),
-            color: categoryTextVar(product.category),
+            background: categoryBgVar(category),
+            color: categoryTextVar(category),
           }}
         >
           {meta.shortLabel}
         </span>
         Producto encontrado
       </div>
-      <div className="px-4 py-3">
-        <div className="text-sm font-semibold text-sabbi-neutral-900">{product.name}</div>
-        {product.provider ? (
-          <div className="mt-0.5 text-xs text-sabbi-neutral-500">{product.provider}</div>
-        ) : null}
-        <div className="mt-1.5 font-display text-lg font-semibold text-[var(--accent-text)]">
-          {formatUsd(product.amount)}
+
+      <div className="flex flex-col gap-2.5 px-4 py-3">
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-medium text-sabbi-neutral-500">Nombre</span>
+          {editable ? (
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={proposalInputClass}
+            />
+          ) : (
+            <span className="text-sm font-semibold text-sabbi-neutral-900">{name}</span>
+          )}
+        </label>
+
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-medium text-sabbi-neutral-500">Proveedor</span>
+          {editable ? (
+            <input
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              placeholder="Ej: BlackRock, SURA"
+              className={proposalInputClass}
+            />
+          ) : (
+            <span className="text-sm text-sabbi-neutral-700">{provider || "—"}</span>
+          )}
+        </label>
+
+        <div className="flex gap-3">
+          <label className="flex flex-1 flex-col gap-0.5">
+            <span className="text-[11px] font-medium text-sabbi-neutral-500">Monto (USD)</span>
+            {editable ? (
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className={proposalInputClass}
+              />
+            ) : (
+              <span className="font-display text-lg font-semibold text-[var(--accent-text)]">
+                {formatUsd(parsedAmount || 0)}
+              </span>
+            )}
+          </label>
+
+          <label className="flex flex-1 flex-col gap-0.5">
+            <span className="text-[11px] font-medium text-sabbi-neutral-500">Categoría</span>
+            {editable ? (
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as Category)}
+                className={proposalInputClass}
+              >
+                {CATEGORY_ORDER.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {CATEGORY_META[cat].label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-sm text-sabbi-neutral-700">{meta.label}</span>
+            )}
+          </label>
         </div>
       </div>
+
       {responded === null ? (
         <div className="flex gap-2 border-t border-sabbi-neutral-200 px-4 py-2.5">
           <button
             type="button"
             onClick={handleConfirm}
-            className="flex-1 rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-sabbi-primary-hover"
+            disabled={!isValid}
+            className="flex-1 rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-sabbi-primary-hover disabled:opacity-40"
           >
             Sí, agregar
           </button>
