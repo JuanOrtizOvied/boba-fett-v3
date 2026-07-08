@@ -8,8 +8,6 @@ export type PortfolioView = "builder" | "resumen";
 type TopbarProps = {
   activeView: PortfolioView;
   onChangeView: (view: PortfolioView) => void;
-  /** Portfolio identity for the "Exportar" download link. */
-  portfolioId: string;
 };
 
 /**
@@ -17,13 +15,14 @@ type TopbarProps = {
  * "Resumen final"), and the export/send actions. Stays pinned above the
  * split layout — only the panels below scroll.
  */
-export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView, portfolioId }) => {
+export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView }) => {
   const handleExport = () => {
-    if (!portfolioId) return;
     // Direct navigation, not fetch+blob — the browser handles the
     // Content-Disposition download itself, zero extra JS bundle impact
-    // (`portfolio-dashboard.spec.md` → "Exportar portafolio a Excel").
-    window.open(`/api/portfolio/${portfolioId}/export`, "_blank");
+    // (`portfolio-dashboard.spec.md` → "Exportar portafolio a Excel"). The
+    // portfolio identity is resolved server-side from the `sabbi_access`
+    // cookie, not a client-supplied id.
+    window.open("/api/portfolio/me/export", "_blank");
   };
 
   return (
@@ -60,7 +59,6 @@ export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView, portfolioId 
         <button
           type="button"
           onClick={handleExport}
-          disabled={!portfolioId}
           aria-label="Exportar"
           className="flex items-center gap-1.5 rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
         >

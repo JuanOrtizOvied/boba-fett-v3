@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   useLangGraphRuntime,
@@ -10,7 +10,7 @@ import {
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { createClient } from "@/lib/chatApi";
-import { getPortfolioId } from "@/lib/portfolioId";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { dispatchPortfolioRefetch } from "@/lib/portfolioEvents";
 
 const ASSISTANT_ID =
@@ -18,16 +18,14 @@ const ASSISTANT_ID =
 
 export function MyAssistant() {
   const client = useMemo(() => createClient(), []);
-  const [portfolioId, setPortfolioId] = useState("");
-
-  useEffect(() => {
-    setPortfolioId(getPortfolioId());
-  }, []);
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
 
   // Custom stream callback (based on `unstable_createLangGraphStream`) that
-  // always injects `configurable.portfolio_id` into the run config, so every
-  // portfolio tool call (add/update/delete_product) writes to the right
-  // portfolio regardless of per-message `runConfig`.
+  // always injects `configurable.user_id` into the run config, so every
+  // portfolio tool call (add/update/delete_product) is scoped to the
+  // signed-in user regardless of per-message `runConfig` (`design.md` —
+  // "LangGraph user scoping").
   const stream = useMemo<LangGraphStreamCallback<LangChainMessage>>(
     () => async (messages, config) => {
       const { externalId } = await config.initialize();
@@ -41,7 +39,7 @@ export function MyAssistant() {
         streamMode: ["messages", "updates", "custom"],
         signal: config.abortSignal,
         onDisconnect: "cancel",
-        config: { configurable: { portfolio_id: portfolioId } },
+        config: { configurable: { user_id: userId } },
         ...(config.command != null && { command: config.command }),
       });
 
@@ -60,7 +58,7 @@ export function MyAssistant() {
         }
       })();
     },
-    [client, portfolioId],
+    [client, userId],
   );
 
   const runtime = useLangGraphRuntime({
@@ -70,7 +68,12 @@ export function MyAssistant() {
       attachments: attachmentAdapter,
     },
     create: async () => {
-      const { thread_id } = await client.threads.create();
+      // `metadata.owner_user_id` lets `/admin/threads` and any future
+      // per-user thread listing filter via the LangGraph SDK's native
+      // metadata search (`design.md` — "Thread ownership").
+      const { thread_id } = await client.threads.create({
+        metadata: { owner_user_id: userId },
+      });
       return { externalId: thread_id };
     },
     load: async (externalId) => {

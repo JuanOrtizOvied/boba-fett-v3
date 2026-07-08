@@ -11,7 +11,6 @@ export interface EditProductModalProps {
   product: Product | null;
   /** Pre-selected category when adding from a specific section. */
   defaultCategory: Category | null;
-  portfolioId: string;
   onClose: () => void;
   /** Called after a successful save, before the modal closes. Should refetch. */
   onSaved: () => void | Promise<void>;
@@ -44,7 +43,6 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   isOpen,
   product,
   defaultCategory,
-  portfolioId,
   onClose,
   onSaved,
 }) => {
@@ -142,7 +140,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           })
-        : await fetch(`/api/portfolio/${portfolioId}/products`, {
+        : await fetch("/api/portfolio/me/products", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),

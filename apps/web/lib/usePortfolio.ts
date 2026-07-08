@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getPortfolioId } from "@/lib/portfolioId";
+import { useRouter } from "next/navigation";
 import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
 import type { Category, Product } from "@/lib/portfolio-types";
 
@@ -21,7 +21,6 @@ const REFETCH_POLL_MS = 15000;
 const NEW_PRODUCT_HIGHLIGHT_MS = 3000;
 
 export interface UsePortfolioResult {
-  portfolioId: string;
   products: Product[];
   isLoading: boolean;
   error: string | null;
@@ -53,7 +52,7 @@ export interface UsePortfolioResult {
  * truth is the backend, not client state.
  */
 export function usePortfolio(): UsePortfolioResult {
-  const portfolioId = useMemo(() => getPortfolioId(), []);
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,10 +92,13 @@ export function usePortfolio(): UsePortfolioResult {
   }, [products]);
 
   const refetch = useCallback(async () => {
-    if (!portfolioId) return;
     setError(null);
     try {
-      const res = await fetch(`/api/portfolio/${portfolioId}`);
+      const res = await fetch("/api/portfolio/me");
+      if (res.status === 401) {
+        router.push("/login");
+        return;
+      }
       if (!res.ok) throw new Error(`Failed to load portfolio (${res.status})`);
       const data: { products: Product[] } = await res.json();
       setProducts(data.products ?? []);
@@ -105,7 +107,7 @@ export function usePortfolio(): UsePortfolioResult {
     } finally {
       setIsLoading(false);
     }
-  }, [portfolioId]);
+  }, [router]);
 
   useEffect(() => {
     void refetch();
@@ -170,7 +172,6 @@ export function usePortfolio(): UsePortfolioResult {
   }, [products, totalAmount]);
 
   return {
-    portfolioId,
     products,
     isLoading,
     error,

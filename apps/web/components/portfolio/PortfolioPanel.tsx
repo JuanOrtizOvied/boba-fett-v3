@@ -19,7 +19,6 @@ import { usePortfolio } from "@/lib/usePortfolio";
  */
 export const PortfolioPanel: FC = () => {
   const {
-    portfolioId,
     products,
     isLoading,
     error,
@@ -152,7 +151,6 @@ export const PortfolioPanel: FC = () => {
         isOpen={isModalOpen}
         product={editingProduct}
         defaultCategory={createCategory}
-        portfolioId={portfolioId}
         onClose={closeModal}
         onSaved={refetch}
       />

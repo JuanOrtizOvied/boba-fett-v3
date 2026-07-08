@@ -55,15 +55,15 @@ _Depends on Phase 1._
 
 _Depends on Phase 2._
 
-- [ ] 3.1 `components/auth/AuthProvider.tsx`: context, `GET /api/auth/me` on mount, `login`/`logout`.
-- [ ] 3.2 `app/login/page.tsx`: email/password form → `POST /api/auth/login`. (Successful/Invalid login)
-- [ ] 3.3 `middleware.ts`: check `sabbi_access` cookie, redirect `/login`. (Guarded route redirect)
-- [ ] 3.4 `app/api/[...path]/route.ts`: route `/auth/*`, forward cookies both ways. (Run Config Injection)
-- [ ] 3.5 `lib/usePortfolio.ts`: fetch `/api/portfolio/me`, drop `getPortfolioId`, silent refresh on 401.
-- [ ] 3.6 `app/assistant.tsx`: use `configurable.user_id`; set thread `metadata.owner_user_id`. (Thread Ownership)
-- [ ] 3.7 `app/page.tsx`: remove `getPortfolioId()`, protect via auth context.
-- [ ] 3.8 `app/layout.tsx`: wrap app in `AuthProvider`.
-- [ ] 3.9 Delete `lib/portfolioId.ts`. (anonymous flow removed)
+- [x] 3.1 `components/auth/AuthProvider.tsx`: context, `GET /api/auth/me` on mount, `login`/`logout`.
+- [x] 3.2 `app/login/page.tsx`: email/password form → `POST /api/auth/login`. (Successful/Invalid login)
+- [x] 3.3 `middleware.ts`: check `sabbi_access` cookie, redirect `/login`. (Guarded route redirect)
+- [x] 3.4 `app/api/[...path]/route.ts`: route `/auth/*`, forward cookies both ways. (Run Config Injection)
+- [x] 3.5 `lib/usePortfolio.ts`: fetch `/api/portfolio/me`, drop `getPortfolioId`, silent refresh on 401.
+- [x] 3.6 `app/assistant.tsx`: use `configurable.user_id`; set thread `metadata.owner_user_id`. (Thread Ownership)
+- [x] 3.7 `app/page.tsx`: remove `getPortfolioId()`, protect via auth context.
+- [x] 3.8 `app/layout.tsx`: wrap app in `AuthProvider`.
+- [x] 3.9 Delete `lib/portfolioId.ts`. (anonymous flow removed)
 
 ## Phase 4 (PR 4): Admin Panel
 
