@@ -69,9 +69,9 @@ _Depends on Phase 2._
 
 _Depends on Phase 2 (admin API) and Phase 3 (AuthProvider, middleware)._
 
-- [ ] 4.1 `app/admin/layout.tsx`: sidebar nav, admin-only guard. (Admin Panel Route Protection)
-- [ ] 4.2 `app/admin/page.tsx`: user list dashboard. (User Listing)
-- [ ] 4.3 `app/admin/users/create/page.tsx`: create-user form → `POST /admin/users`.
-- [ ] 4.4 `app/admin/portfolios/page.tsx`: all-portfolios list. (Admin lists all portfolios)
-- [ ] 4.5 `app/admin/portfolios/[userId]/page.tsx`: read-only portfolio view. (views portfolio, cannot mutate)
-- [ ] 4.6 `app/admin/threads/page.tsx` + viewer: list + read-only thread view. (Chat History Viewing)
+- [x] 4.1 `app/admin/layout.tsx`: sidebar nav, admin-only guard. (Admin Panel Route Protection)
+- [x] 4.2 `app/admin/page.tsx`: user list dashboard. (User Listing)
+- [x] 4.3 `app/admin/users/create/page.tsx`: create-user form → `POST /admin/users`.
+- [x] 4.4 `app/admin/portfolios/page.tsx`: all-portfolios list. (Admin lists all portfolios)
+- [x] 4.5 `app/admin/portfolios/[userId]/page.tsx`: read-only portfolio view. (views portfolio, cannot mutate)
+- [x] 4.6 `app/admin/threads/page.tsx` + viewer: list + read-only thread view. (Chat History Viewing)

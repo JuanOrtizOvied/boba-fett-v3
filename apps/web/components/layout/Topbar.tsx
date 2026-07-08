@@ -1,6 +1,8 @@
 "use client";
 
 import type { FC } from "react";
+import Link from "next/link";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { DownloadIcon, SendIcon } from "@/components/icons/Icons";
 
 export type PortfolioView = "builder" | "resumen";
@@ -16,6 +18,8 @@ type TopbarProps = {
  * split layout — only the panels below scroll.
  */
 export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView }) => {
+  const { user, logout } = useAuth();
+
   const handleExport = () => {
     // Direct navigation, not fetch+blob — the browser handles the
     // Content-Disposition download itself, zero extra JS bundle impact
@@ -84,6 +88,22 @@ export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView }) => {
             Próximamente
           </span>
         </span>
+        {user?.role === "admin" && (
+          <Link
+            href="/admin"
+            className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50"
+          >
+            Admin
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={() => void logout()}
+          aria-label="Cerrar sesión"
+          className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-red-50 hover:text-red-600"
+        >
+          Salir
+        </button>
       </div>
     </header>
   );
