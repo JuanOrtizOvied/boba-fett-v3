@@ -4,15 +4,11 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 
-const inputClass =
-  "rounded-lg border border-sabbi-neutral-200 px-3 py-2 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
+const inputBase =
+  "rounded-lg border px-3 py-2 text-sm text-sabbi-neutral-900 outline-none transition-colors duration-200";
+const inputNormal = `${inputBase} border-sabbi-neutral-200 focus:border-sabbi-primary`;
+const inputError = `${inputBase} border-red-400 bg-red-50/40 focus:border-red-500`;
 
-/**
- * Email/password login form — `POST /api/auth/login` via `AuthProvider.login`.
- * On success the auth context is refreshed from `/api/auth/me` and this
- * redirects to the portfolio builder (`user-auth/spec.md` — "Successful
- * login", "Invalid credentials").
- */
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
@@ -26,8 +22,8 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await login(email, password);
-      router.push("/");
+      const user = await login(email, password);
+      router.push(user.role === "admin" ? "/admin" : "/");
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "No se pudo iniciar sesión",
@@ -66,8 +62,11 @@ export default function LoginPage() {
               required
               autoComplete="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className={inputClass}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (error) setError(null);
+              }}
+              className={error ? inputError : inputNormal}
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -79,19 +78,60 @@ export default function LoginPage() {
               required
               autoComplete="current-password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className={inputClass}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                if (error) setError(null);
+              }}
+              className={error ? inputError : inputNormal}
             />
           </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <div className="animate-login-error flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+              <svg
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="size-4 shrink-0 text-red-500"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <p className="text-sm font-medium text-red-700">{error}</p>
+            </div>
+          )}
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="mt-2 rounded-lg bg-sabbi-primary px-4 py-2 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
+            className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-sabbi-primary px-4 py-2 text-sm font-medium text-white transition-opacity hover:bg-sabbi-primary-hover disabled:opacity-60"
           >
-            {isSubmitting ? "Ingresando…" : "Ingresar"}
+            {isSubmitting && (
+              <svg
+                className="size-4 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  className="opacity-25"
+                />
+                <path
+                  d="M4 12a8 8 0 018-8"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  className="opacity-75"
+                />
+              </svg>
+            )}
+            {isSubmitting ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
       </div>

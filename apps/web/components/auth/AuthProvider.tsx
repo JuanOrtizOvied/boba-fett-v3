@@ -20,7 +20,7 @@ export interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
 }
 
@@ -37,17 +37,19 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchMe = useCallback(async () => {
+  const fetchMe = useCallback(async (): Promise<AuthUser | null> => {
     try {
       const res = await fetch("/api/auth/me");
       if (!res.ok) {
         setUser(null);
-        return;
+        return null;
       }
       const data: AuthUser = await res.json();
       setUser(data);
+      return data;
     } catch {
       setUser(null);
+      return null;
     }
   }, []);
 
@@ -59,7 +61,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, [fetchMe]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string): Promise<AuthUser> => {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,7 +74,9 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
             : `No se pudo iniciar sesión (status ${res.status})`,
         );
       }
-      await fetchMe();
+      const authed = await fetchMe();
+      if (!authed) throw new Error("Login succeeded but user context not set");
+      return authed;
     },
     [fetchMe],
   );

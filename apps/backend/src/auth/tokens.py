@@ -47,7 +47,7 @@ def create_access_token(*, user_id: str, email: str, role: str) -> str:
     and role for FastAPI route authorization."""
     now = datetime.now(timezone.utc)
     claims = {
-        "sub": user_id,
+        "sub": str(user_id),
         "email": email,
         "role": role,
         "type": "access",
@@ -63,7 +63,7 @@ def create_refresh_token(*, user_id: str) -> str:
     validated server-side (not merely decoded) on `/auth/refresh`."""
     now = datetime.now(timezone.utc)
     claims = {
-        "sub": user_id,
+        "sub": str(user_id),
         "type": "refresh",
         "iat": now,
         "exp": now + REFRESH_TOKEN_TTL,
