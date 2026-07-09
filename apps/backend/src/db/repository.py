@@ -97,8 +97,8 @@ class ProductRepository:
         if isinstance(comp, str):
             comp = json.loads(comp)
         return Product(
-            id=row["id"],
-            user_id=row["user_id"],
+            id=str(row["id"]),
+            user_id=str(row["user_id"]),
             name=row["name"],
             provider=row["provider"],
             amount=float(row["amount"]),
