@@ -20,6 +20,11 @@ class UserResponse(BaseModel):
     id: str
     email: str
     role: str
+    active_thread_id: str | None = None
+
+
+class ThreadUpdate(BaseModel):
+    thread_id: str
 
 
 class UserCreate(BaseModel):

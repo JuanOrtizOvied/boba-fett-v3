@@ -14,6 +14,7 @@ export interface AuthUser {
   id: string;
   email: string;
   role: "user" | "admin";
+  active_thread_id: string | null;
 }
 
 export interface AuthContextValue {

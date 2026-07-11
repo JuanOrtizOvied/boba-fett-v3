@@ -12,12 +12,6 @@ export interface LargestPosition {
   percentage: number;
 }
 
-/** Background safety-net poll — the primary refetch trigger is the
- * `PORTFOLIO_REFETCH_EVENT` dispatched by `assistant.tsx` when a chat turn
- * settles (T-500). This slower interval just covers edge cases (another
- * tab/session mutating the same portfolio). */
-const REFETCH_POLL_MS = 15000;
-
 const NEW_PRODUCT_HIGHLIGHT_MS = 3000;
 
 export interface UsePortfolioResult {
@@ -111,13 +105,6 @@ export function usePortfolio(): UsePortfolioResult {
 
   useEffect(() => {
     void refetch();
-  }, [refetch]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void refetch();
-    }, REFETCH_POLL_MS);
-    return () => clearInterval(interval);
   }, [refetch]);
 
   useEffect(() => {

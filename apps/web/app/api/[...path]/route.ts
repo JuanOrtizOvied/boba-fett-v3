@@ -10,7 +10,8 @@ const isFastApiPath = (path: string) =>
   path.startsWith("/portfolio/") ||
   path.startsWith("/products/") ||
   path.startsWith("/auth/") ||
-  path.startsWith("/admin/");
+  path.startsWith("/admin/") ||
+  path.startsWith("/chat/");
 
 /**
  * Proxies browser requests to the right backend: LangGraph for assistant

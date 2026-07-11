@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi import Cookie as CookieParam
 
 from auth.dependencies import get_current_user
-from auth.models import LoginRequest, UserResponse
+from auth.models import LoginRequest, ThreadUpdate, UserResponse
 from auth.passwords import verify_password
 from auth.repository import UserRepository
 from auth.tokens import (
@@ -152,7 +152,20 @@ async def refresh(
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user: dict = Depends(get_current_user)) -> dict:
-    """Return the authenticated user's identity for frontend session
-    bootstrap (`user-auth/spec.md` — "Fetch current user")."""
-    return user
+async def me(
+    request: Request,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    repo = _user_repo(request)
+    thread_id = await repo.get_active_thread_id(user["id"])
+    return {**user, "active_thread_id": thread_id}
+
+
+@router.put("/me/thread", status_code=204)
+async def set_thread(
+    data: ThreadUpdate,
+    request: Request,
+    user: dict = Depends(get_current_user),
+) -> None:
+    repo = _user_repo(request)
+    await repo.set_active_thread_id(user["id"], data.thread_id)

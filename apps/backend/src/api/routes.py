@@ -21,14 +21,19 @@ alongside it or run as a separate container in production.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import os
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.store.postgres.aio import AsyncPostgresStore
 
+from agent.graph import builder as graph_builder
 from api.admin_routes import router as admin_router
 from api.auth_routes import router as auth_router
+from api.chat_routes import router as chat_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
 from db.connection import close_pool, get_pool
@@ -37,18 +42,51 @@ from db.models import ProductCreate, ProductUpdate
 from db.repository import ProductRepository
 
 
+async def _init_chat_graph(app: FastAPI, stack: AsyncExitStack) -> None:
+    """Build the Postgres-backed checkpointer/store and compile the chat
+    graph onto `app.state.chat_graph`.
+
+    Unlike `langgraph dev` (in-memory), this gives the chat endpoints
+    (`api/chat_routes.py`) durable, checkpointed thread history. The
+    checkpointer/store connections are entered on the caller-owned
+    `AsyncExitStack` so they stay open for the lifetime of the app and are
+    closed automatically when the lifespan's `AsyncExitStack` block exits.
+
+    `app.state.chat_graph` stays `None` when `POSTGRES_URI` is not set
+    (e.g. local dev still using `langgraph dev`) — the chat routes return
+    503 in that case instead of failing to start the whole API.
+    """
+    app.state.chat_graph = None
+    postgres_uri = os.environ.get("POSTGRES_URI")
+    if not postgres_uri:
+        return
+
+    checkpointer = await stack.enter_async_context(
+        AsyncPostgresSaver.from_conn_string(postgres_uri)
+    )
+    store = await stack.enter_async_context(AsyncPostgresStore.from_conn_string(postgres_uri))
+    await checkpointer.setup()
+    await store.setup()
+    app.state.chat_graph = graph_builder.compile(checkpointer=checkpointer, store=store)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await get_pool()
     app.state.repo = ProductRepository(pool)
     app.state.user_repo = UserRepository(pool)
-    yield
+
+    async with AsyncExitStack() as stack:
+        await _init_chat_graph(app, stack)
+        yield
+
     await close_pool()
 
 
 app = FastAPI(title="SABBI Portfolio API", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(chat_router)
 
 
 async def _get_owned_product(product_id: str, user: dict):
