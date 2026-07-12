@@ -40,7 +40,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const fetchMe = useCallback(async (): Promise<AuthUser | null> => {
     try {
-      const res = await fetch("/api/auth/me");
+      const { fetchWithAuth } = await import("@/lib/fetchWithAuth");
+      const res = await fetchWithAuth("/api/auth/me");
       if (!res.ok) {
         setUser(null);
         return null;

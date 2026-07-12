@@ -10,6 +10,7 @@ import {
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { dispatchPortfolioRefetch } from "@/lib/portfolioEvents";
 
 // -- Types ----------------------------------------------------------------
@@ -155,7 +156,7 @@ async function* parseSseStream(response: Response): AsyncGenerator<StreamEvent> 
 // -- API helpers ----------------------------------------------------------
 
 async function saveThreadId(threadId: string) {
-  await fetch("/api/auth/me/thread", {
+  await fetchWithAuth("/api/auth/me/thread", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ thread_id: threadId }),
@@ -165,7 +166,7 @@ async function saveThreadId(threadId: string) {
 async function fetchThreadState(
   threadId: string,
 ): Promise<ThreadStateResponse> {
-  const res = await fetch(`/api/chat/threads/${threadId}/state`);
+  const res = await fetchWithAuth(`/api/chat/threads/${threadId}/state`);
   if (!res.ok) return { thread_id: threadId, messages: [] };
   return res.json();
 }
@@ -257,7 +258,7 @@ export function MyAssistant() {
       setIsRunning(true);
 
       try {
-        const res = await fetch(
+        const res = await fetchWithAuth(
           `/api/chat/threads/${threadId}/messages/stream`,
           {
             method: "POST",

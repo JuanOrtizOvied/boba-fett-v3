@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
 import type { Category, Product } from "@/lib/portfolio-types";
 
@@ -88,7 +89,7 @@ export function usePortfolio(): UsePortfolioResult {
   const refetch = useCallback(async () => {
     setError(null);
     try {
-      const res = await fetch("/api/portfolio/me");
+      const res = await fetchWithAuth("/api/portfolio/me");
       if (res.status === 401) {
         router.push("/login");
         return;

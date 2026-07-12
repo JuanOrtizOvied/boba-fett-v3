@@ -35,7 +35,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 ACCESS_COOKIE = "sabbi_access"
 REFRESH_COOKIE = "sabbi_refresh"
 ACCESS_MAX_AGE = 15 * 60
-REFRESH_MAX_AGE = 7 * 24 * 60 * 60
+REFRESH_MAX_AGE = 24 * 60 * 60
 INVALID_CREDENTIALS_MESSAGE = "Invalid email or password"
 
 
