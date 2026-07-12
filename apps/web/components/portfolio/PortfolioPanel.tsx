@@ -6,7 +6,9 @@ import { CategoryTabs } from "@/components/portfolio/CategoryTabs";
 import { EditProductModal } from "@/components/portfolio/EditProductModal";
 import { MetricsRow } from "@/components/portfolio/MetricsRow";
 import { PieIcon } from "@/components/icons/Icons";
+import { useToast } from "@/components/ui/Toast";
 import { CATEGORY_ORDER } from "@/lib/categories";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { Category, Product } from "@/lib/portfolio-types";
 import { usePortfolio } from "@/lib/usePortfolio";
 
@@ -18,6 +20,7 @@ import { usePortfolio } from "@/lib/usePortfolio";
  * portafolio". Design: `design.md` → Frontend Architecture → `PortfolioPanel`.
  */
 export const PortfolioPanel: FC = () => {
+  const { toast } = useToast();
   const {
     products,
     isLoading,
@@ -61,9 +64,11 @@ export const PortfolioPanel: FC = () => {
     activeCategory === "todos" ? CATEGORY_ORDER : [activeCategory];
 
   const handleDeleteProduct = async (productId: string) => {
-    const res = await fetch(`/api/products/${productId}`, { method: "DELETE" });
+    const res = await fetchWithAuth(`/api/products/${productId}`, { method: "DELETE" });
     if (!res.ok) {
-      throw new Error(`No se pudo eliminar el producto (status ${res.status})`);
+      const msg = `No se pudo eliminar el producto (status ${res.status})`;
+      toast(msg);
+      throw new Error(msg);
     }
     await refetch();
   };

@@ -10,6 +10,7 @@ import {
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useToast } from "@/components/ui/Toast";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { dispatchPortfolioRefetch } from "@/lib/portfolioEvents";
 
@@ -175,6 +176,7 @@ async function fetchThreadState(
 
 export function MyAssistant() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const userId = user?.id ?? "";
   const savedThreadId = user?.active_thread_id ?? null;
 
@@ -292,21 +294,47 @@ export function MyAssistant() {
           }
 
           if (ev.event === "error") {
-            const detail = (ev.data as { detail?: string })?.detail;
-            console.error("[assistant] stream error:", detail);
+            const detail =
+              (ev.data as { detail?: string })?.detail ??
+              "Error al procesar la solicitud";
+            toast(detail);
+            const updated = msgsRef.current.map((m) =>
+              m.id === streamingId
+                ? {
+                    ...m,
+                    content: [
+                      { type: "text" as const, text: `⚠ ${detail}` },
+                    ],
+                  }
+                : m,
+            );
+            updateMessages(updated);
           }
         }
       } catch (err) {
-        console.error("[assistant] stream failed:", err);
-        updateMessages(
-          msgsRef.current.filter((m) => m.id !== streamingId),
+        const message =
+          err instanceof Error ? err.message : "No se pudo conectar con el servidor";
+        toast(message);
+        const updated = msgsRef.current.map((m) =>
+          m.id === streamingId
+            ? {
+                ...m,
+                content: [
+                  {
+                    type: "text" as const,
+                    text: `⚠ ${message}`,
+                  },
+                ],
+              }
+            : m,
         );
+        updateMessages(updated);
       } finally {
         setIsRunning(false);
         dispatchPortfolioRefetch();
       }
     },
-    [threadId, isRunning, updateMessages],
+    [threadId, isRunning, updateMessages, toast],
   );
 
   const runtime = useExternalStoreRuntime({

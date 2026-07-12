@@ -2,7 +2,9 @@
 
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { PlusIcon, XIcon } from "@/components/icons/Icons";
+import { useToast } from "@/components/ui/Toast";
 import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { AssetAllocation, Category, Product } from "@/lib/portfolio-types";
 
 export interface EditProductModalProps {
@@ -47,6 +49,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   onSaved,
 }) => {
   const isEditing = product != null;
+  const { toast } = useToast();
 
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("");
@@ -135,12 +138,12 @@ export const EditProductModal: FC<EditProductModalProps> = ({
         composition,
       };
       const res = isEditing
-        ? await fetch(`/api/products/${product.id}`, {
+        ? await fetchWithAuth(`/api/products/${product.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           })
-        : await fetch("/api/portfolio/me/products", {
+        : await fetchWithAuth("/api/portfolio/me/products", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -149,7 +152,9 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       await onSaved();
       onClose();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "No se pudo guardar el producto");
+      const msg = err instanceof Error ? err.message : "No se pudo guardar el producto";
+      setFormError(msg);
+      toast(msg);
     } finally {
       setIsSaving(false);
     }

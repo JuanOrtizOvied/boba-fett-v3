@@ -343,6 +343,22 @@ body {
   border-bottom-right-radius: 0;
 }
 
+/* Toast slide-in animation */
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 200ms ease-out;
+}
+
 .tool-badge {
   flex-shrink: 0;
   font-size: 0.7rem;
