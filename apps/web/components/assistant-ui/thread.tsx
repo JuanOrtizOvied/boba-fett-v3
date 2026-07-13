@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useMemo, useState, type FC } from "react";
 import { ThinkingPanel } from "@/components/chat/ThinkingPanel";
 import type {
   Attachment,
@@ -196,18 +196,122 @@ const WelcomeMessage: FC = () => {
   );
 };
 
-import type { FileMessagePartProps } from "@assistant-ui/react";
+import type { FileMessagePartProps, ImageMessagePartProps } from "@assistant-ui/react";
 
-const UserFileChip: FC<FileMessagePartProps> = ({ filename, mimeType }) => {
-  const fakeAttachment = {
-    type: mimeType?.startsWith("image/") ? ("image" as const) : ("document" as const),
-    contentType: mimeType ?? "application/octet-stream",
+const UserImagePart: FC<ImageMessagePartProps> = ({ image }) => (
+  <img src={image} alt="" className="max-h-48 max-w-full rounded-lg" />
+);
+
+function fileTypeLabel(mimeType: string | undefined): string {
+  if (!mimeType) return "FILE";
+  if (mimeType === "application/pdf") return "PDF";
+  if (mimeType.includes("spreadsheet") || mimeType.includes("excel")) return "XLSX";
+  if (mimeType.includes("word") || mimeType.includes("document")) return "DOC";
+  if (mimeType.startsWith("image/")) return mimeType.split("/")[1]?.toUpperCase() ?? "IMG";
+  return "FILE";
+}
+
+function FileTypeIcon({ mimeType }: { mimeType?: string }) {
+  if (mimeType === "application/pdf") return <PdfIcon size={20} />;
+  if (mimeType?.startsWith("image/")) return <CameraIcon size={20} />;
+  return <FileIcon size={20} />;
+}
+
+function base64ToBlobUrl(dataUrl: string): string | null {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: match[1] });
+  return URL.createObjectURL(blob);
+}
+
+const UserFileChip: FC<FileMessagePartProps> = ({ filename, mimeType, data }) => {
+  const label = filename ?? "Archivo";
+  const badge = fileTypeLabel(mimeType);
+  const isPdf = mimeType === "application/pdf";
+  const isImage = mimeType?.startsWith("image/");
+
+  const blobUrl = useMemo(() => (data ? base64ToBlobUrl(data) : null), [data]);
+
+  const handleDownload = () => {
+    if (!blobUrl) return;
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = label;
+    a.click();
   };
+
+  if (isPdf && blobUrl) {
+    return (
+      <div className="w-full max-w-xs overflow-hidden rounded-lg border border-white/20">
+        <iframe
+          src={blobUrl}
+          title={label}
+          className="pointer-events-none h-44 w-full bg-white"
+        />
+        <div className="flex items-center justify-between bg-white/[.12] px-3 py-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <PdfIcon size={14} />
+            <span className="truncate text-xs font-medium">{label}</span>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="text-[10px] font-medium hover:underline"
+            >
+              Descargar
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open(blobUrl, "_blank")}
+              className="text-[10px] font-medium hover:underline"
+            >
+              Abrir ↗
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isImage && data) {
+    return (
+      <div className="w-full max-w-xs overflow-hidden rounded-lg border border-white/20">
+        <img src={data} alt={label} className="max-h-48 w-full object-contain" />
+        <div className="flex items-center justify-between bg-white/[.12] px-3 py-1.5">
+          <span className="truncate text-xs font-medium">{label}</span>
+          <button
+            type="button"
+            onClick={() => blobUrl && window.open(blobUrl, "_blank")}
+            className="shrink-0 text-[10px] font-medium hover:underline"
+          >
+            Abrir ↗
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/[.12] px-2.5 py-1.5 text-xs">
-      <AttachmentIcon attachment={fakeAttachment as Attachment} />
-      <span className="max-w-[160px] truncate">{filename ?? "Archivo"}</span>
-    </div>
+    <button
+      type="button"
+      onClick={blobUrl ? () => window.open(blobUrl, "_blank") : undefined}
+      className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-white/[.12] px-3 py-2 text-left text-xs transition-colors ${blobUrl ? "cursor-pointer hover:bg-white/[.2]" : "cursor-default"}`}
+    >
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[.15]">
+        <FileTypeIcon mimeType={mimeType} />
+      </div>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="max-w-[180px] truncate font-medium">{label}</span>
+        <span className="text-[10px] text-white/60">
+          {badge}
+          {blobUrl ? " · Click para abrir" : ""}
+        </span>
+      </div>
+    </button>
   );
 };
 
@@ -217,6 +321,7 @@ const UserMessage: FC = () => {
       <div className="flex flex-col gap-2 rounded-[18px_18px_4px_18px] bg-sabbi-primary px-4 py-2.5 text-white">
         <MessagePrimitive.Content
           components={{
+            Image: UserImagePart,
             File: UserFileChip,
           }}
         />

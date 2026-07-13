@@ -163,10 +163,14 @@ def _normalize_attachment(att: dict[str, Any]) -> dict[str, Any]:
     mime = att.get("mime_type", "application/octet-stream")
     data = att.get("data", "")
     block_type = "image" if mime.startswith("image/") else "document"
-    return {
+    result: dict[str, Any] = {
         "type": block_type,
         "source": {"type": "base64", "media_type": mime, "data": data},
     }
+    metadata = att.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("filename"):
+        result["title"] = metadata["filename"]
+    return result
 
 
 def _sse_event(event: str, data: Any) -> str:

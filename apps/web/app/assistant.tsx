@@ -66,12 +66,30 @@ function convertMessages(api: ApiMessage[]): ThreadMessageLike[] {
 
   for (const msg of api) {
     if (msg.type === "human") {
-      const parts: { type: "text"; text: string }[] = [];
+      type UserPart =
+        | { type: "text"; text: string }
+        | { type: "image"; image: string }
+        | { type: "file"; data: string; mimeType: string; filename?: string };
+      const parts: UserPart[] = [];
       if (typeof msg.content === "string") {
         parts.push({ type: "text", text: msg.content });
       } else if (Array.isArray(msg.content)) {
-        for (const b of msg.content as { type?: string; text?: string }[]) {
-          if (b.type === "text" && b.text) parts.push({ type: "text", text: b.text });
+        for (const b of msg.content as Record<string, unknown>[]) {
+          if (b.type === "text" && b.text)
+            parts.push({ type: "text", text: b.text as string });
+          else if (b.type === "image" || b.type === "document") {
+            const src = b.source as
+              | { media_type?: string; data?: string }
+              | undefined;
+            const mime = (src?.media_type as string) ?? "application/octet-stream";
+            const title = b.title as string | undefined;
+            if (b.type === "image" && src?.data) {
+              parts.push({ type: "image", image: `data:${mime};base64,${src.data}` });
+            } else {
+              const dataUrl = src?.data ? `data:${mime};base64,${src.data}` : "";
+              parts.push({ type: "file", data: dataUrl, mimeType: mime, filename: title });
+            }
+          }
         }
       }
       if (parts.length) result.push({ role: "user", id: msg.id, content: parts });
@@ -258,10 +276,24 @@ function AssistantInner() {
           )
           .filter(Boolean) as Record<string, unknown>[] | undefined;
 
+      const userContent: Array<
+        | { type: "text"; text: string }
+        | { type: "file"; data: string; mimeType: string; filename: string }
+      > = [{ type: "text", text }];
+      if (append.attachments?.length) {
+        for (const att of append.attachments) {
+          userContent.push({
+            type: "file",
+            data: "",
+            mimeType: att.contentType ?? "application/octet-stream",
+            filename: att.name,
+          });
+        }
+      }
       const userMsg: ThreadMessageLike = {
         role: "user",
         id: `user-${Date.now()}`,
-        content: [{ type: "text", text }],
+        content: userContent,
       };
       const streamingId = `assistant-${Date.now()}`;
       const streamingMsg: ThreadMessageLike = {
