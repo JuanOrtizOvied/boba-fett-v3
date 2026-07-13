@@ -9,13 +9,23 @@ never appear in `.args`.
 
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import AsyncMock
 
-def test_portfolio_tools_exports_four_tools():
+
+def test_portfolio_tools_exports_six_tools():
     from agent.tools import portfolio_tools
 
-    assert len(portfolio_tools) == 4
+    assert len(portfolio_tools) == 6
     names = {t.name for t in portfolio_tools}
-    assert names == {"add_product", "update_product", "delete_product", "get_portfolio_summary"}
+    assert names == {
+        "search_product",
+        "propose_product",
+        "add_product",
+        "update_product",
+        "delete_product",
+        "get_portfolio_summary",
+    }
 
 
 def test_add_product_schema():
@@ -94,3 +104,182 @@ def test_to_composition_helper_builds_asset_allocations():
     assert isinstance(result[0], AssetAllocation)
     assert result[0].name == "Cripto"
     assert result[0].percentage == 100
+
+
+# --- search_product (cascading search tool) --------------------------------
+
+
+def test_search_product_schema():
+    from agent.tools import search_product
+
+    assert search_product.name == "search_product"
+    assert search_product.description
+    args = search_product.args
+    assert "query" in args
+    assert "config" not in args
+
+
+def test_search_product_calls_cascade_search_and_returns_result(monkeypatch):
+    import agent.tools as tools_module
+    from db.models import SearchResult
+
+    fake_pool = object()
+    get_pool_mock = AsyncMock(return_value=fake_pool)
+    found = SearchResult(name="Vanguard Total World Stock ETF", provenance={"name": "catalog"})
+    cascade_mock = AsyncMock(return_value=found)
+
+    monkeypatch.setattr(tools_module, "get_pool", get_pool_mock)
+    monkeypatch.setattr(tools_module, "cascade_search", cascade_mock)
+
+    result = asyncio.run(tools_module.search_product.ainvoke({"query": "vanguard"}))
+
+    get_pool_mock.assert_awaited_once()
+    cascade_mock.assert_awaited_once_with("vanguard", fake_pool)
+    assert result["status"] == "found"
+    assert result["query"] == "vanguard"
+    assert result["result"]["name"] == "Vanguard Total World Stock ETF"
+    assert result["result"]["provenance"] == {"name": "catalog"}
+
+
+def test_search_product_returns_not_found_when_cascade_finds_nothing(monkeypatch):
+    import agent.tools as tools_module
+
+    monkeypatch.setattr(tools_module, "get_pool", AsyncMock(return_value=object()))
+    monkeypatch.setattr(tools_module, "cascade_search", AsyncMock(return_value=None))
+
+    result = asyncio.run(tools_module.search_product.ainvoke({"query": "Unknown Product XYZ"}))
+
+    assert result == {"status": "not_found", "query": "Unknown Product XYZ"}
+
+
+# --- propose_product enrichment / provenance / reliability tag -------------
+
+
+def test_propose_product_schema_exposes_enrichment_fields():
+    from agent.tools import propose_product
+
+    assert propose_product.name == "propose_product"
+    args = propose_product.args
+    for field in (
+        "name",
+        "amount",
+        "category",
+        "provider",
+        "composition",
+        "asset_class",
+        "currency",
+        "commission",
+        "administrator",
+        "manager",
+        "liquidity",
+        "return_rate",
+        "geographic_focus",
+        "subcategory",
+        "primary_source",
+        "provenance",
+    ):
+        assert field in args, f"missing arg: {field}"
+    assert "config" not in args
+
+
+def test_propose_product_forwards_enrichment_and_provenance():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {
+                "name": "BlackRock Global Bond Fund",
+                "amount": 5000,
+                "category": "publicos",
+                "commission": "0.45%",
+                "administrator": "BlackRock",
+                "primary_source": "web_search",
+                "provenance": {"name": "catalog", "commission": "web_search"},
+            }
+        )
+    )
+
+    product = result["product"]
+    assert result["status"] == "proposed"
+    assert product["commission"] == "0.45%"
+    assert product["administrator"] == "BlackRock"
+    assert product["primary_source"] == "web_search"
+    assert product["provenance"] == {"name": "catalog", "commission": "web_search"}
+    # currency, liquidity, etc. left empty rather than invented (never-invent guardrail)
+    assert product["currency"] == ""
+    assert product["liquidity"] == ""
+
+
+def test_propose_product_tag_verified_when_all_fields_are_catalog():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {
+                "name": "Vanguard Total World Stock ETF",
+                "amount": 1000,
+                "category": "publicos",
+                "provenance": {"name": "catalog", "commission": "catalog"},
+            }
+        )
+    )
+
+    assert result["product"]["reliability_tag"] == "verified"
+
+
+def test_propose_product_tag_web_when_sources_are_mixed():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {
+                "name": "BlackRock Global Bond Fund",
+                "amount": 1000,
+                "category": "publicos",
+                "provenance": {"name": "catalog", "liquidity": "claude_knowledge"},
+            }
+        )
+    )
+
+    assert result["product"]["reliability_tag"] == "web"
+
+
+def test_propose_product_tag_unverified_when_no_catalog_or_web_source():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {
+                "name": "Unknown Widget Corp",
+                "amount": 1000,
+                "category": "otros",
+                "provenance": {"name": "claude_knowledge"},
+            }
+        )
+    )
+
+    assert result["product"]["reliability_tag"] == "unverified"
+
+
+def test_propose_product_tag_unverified_when_provenance_empty():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {"name": "Unknown Widget Corp", "amount": 1000, "category": "otros"}
+        )
+    )
+
+    assert result["product"]["reliability_tag"] == "unverified"
+    assert result["product"]["provenance"] == {}
+
+
+def test_derive_card_tag_directly():
+    from agent.tools import _derive_card_tag
+
+    assert _derive_card_tag({}) == "unverified"
+    assert _derive_card_tag({"name": "catalog", "commission": "catalog"}) == "verified"
+    assert _derive_card_tag({"name": "catalog", "commission": "web_search"}) == "web"
+    assert _derive_card_tag({"name": "catalog", "commission": "claude_knowledge"}) == "web"
+    assert _derive_card_tag({"name": "web_search"}) == "web"
+    assert _derive_card_tag({"name": "claude_knowledge"}) == "unverified"

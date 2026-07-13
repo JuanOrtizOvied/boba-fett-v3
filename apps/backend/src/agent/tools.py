@@ -22,9 +22,9 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from db.catalog_repository import CatalogRepository
-from db.connection import get_catalog_repository, get_pool, get_repository
-from db.models import AssetAllocation, ProductCreate, ProductUpdate
+from agent.search import cascade_search
+from db.connection import get_pool, get_repository
+from db.models import AssetAllocation, FieldSource, ProductCreate, ProductUpdate
 from db.repository import ProductRepository
 
 
@@ -34,10 +34,21 @@ async def _repository() -> ProductRepository:
     return get_repository(pool)
 
 
-async def _catalog_repository() -> CatalogRepository:
-    """Resolve the `CatalogRepository` bound to the process-wide connection pool."""
-    pool = await get_pool()
-    return get_catalog_repository(pool)
+def _derive_card_tag(provenance: dict[str, str]) -> str:
+    """Aggregate a per-field `provenance` map into one card-level reliability
+    tag (`provenance-ui.spec.md` — "Provenance Data Contract"):
+    - every sourced field is `catalog` -> "verified"
+    - no field is `catalog` or `web_search` (only `claude_knowledge`/empty) -> "unverified"
+    - anything else (a mix involving `catalog` and/or `web_search`) -> "web"
+    """
+    sources = set(provenance.values())
+    if not sources:
+        return "unverified"
+    if sources == {"catalog"}:
+        return "verified"
+    if "catalog" in sources or "web_search" in sources:
+        return "web"
+    return "unverified"
 
 
 def _user_id(config: RunnableConfig) -> str:
@@ -60,6 +71,17 @@ async def propose_product(
     category: str,
     provider: str = "",
     composition: list[dict[str, Any]] | None = None,
+    asset_class: str = "",
+    currency: str = "",
+    commission: str = "",
+    administrator: str = "",
+    manager: str = "",
+    liquidity: str = "",
+    return_rate: str = "",
+    geographic_focus: str = "",
+    subcategory: str = "",
+    primary_source: FieldSource = "catalog",
+    provenance: dict[str, FieldSource] | None = None,
     *,
     config: RunnableConfig,
 ) -> dict:
@@ -69,14 +91,35 @@ async def propose_product(
     The UI will render a confirmation card with Yes/No buttons. Only after
     the user confirms should you call add_product with the same data.
 
+    Call `search_product` first and forward its enrichment fields and its
+    `primary_source`/`provenance` here, unmodified, so the confirmation card
+    can show the user where each value came from (catalog, Claude's own
+    knowledge, or a web search).
+
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
         category: One of: directas, privados, club, publicos, otros, cash.
         provider: Provider or fund manager name.
         composition: List of {name, percentage} asset class allocations.
+        asset_class: Asset class, from search_product if available.
+        currency: Currency, from search_product if available.
+        commission: Commission/fee, from search_product if available.
+        administrator: Fund administrator, from search_product if available.
+        manager: Fund manager, from search_product if available.
+        liquidity: Liquidity terms, from search_product if available.
+        return_rate: Historical return rate, from search_product if available.
+        geographic_focus: Geographic focus, from search_product if available.
+        subcategory: Taxonomy leaf subcategory (auto-classified or user-picked).
+        primary_source: Weakest data source used across all fields
+            ('catalog', 'claude_knowledge', or 'web_search'), forwarded
+            from search_product's result.
+        provenance: Per-field source map forwarded from search_product's
+            result — keys are field names, values are 'catalog',
+            'claude_knowledge', or 'web_search'.
     """
     del config
+    resolved_provenance = provenance or {}
     return {
         "status": "proposed",
         "product": {
@@ -85,6 +128,18 @@ async def propose_product(
             "category": category,
             "provider": provider,
             "composition": composition or [{"name": name, "percentage": 100}],
+            "asset_class": asset_class,
+            "currency": currency,
+            "commission": commission,
+            "administrator": administrator,
+            "manager": manager,
+            "liquidity": liquidity,
+            "return_rate": return_rate,
+            "geographic_focus": geographic_focus,
+            "subcategory": subcategory,
+            "primary_source": primary_source,
+            "provenance": resolved_provenance,
+            "reliability_tag": _derive_card_tag(resolved_provenance),
         },
     }
 
@@ -192,37 +247,35 @@ async def get_portfolio_summary(*, config: RunnableConfig) -> dict:
 
 
 @tool
-async def search_catalog(query: str, *, config: RunnableConfig) -> dict:
-    """Search the SABBI product catalog for products matching a name, ticker, or description.
+async def search_product(query: str, *, config: RunnableConfig) -> dict:
+    """Search for an investment product's data via a three-level cascade.
 
-    Use this tool FIRST when a user mentions a product to check if it exists
-    in the catalog. The catalog contains 200+ pre-loaded investment products
-    with detailed info (asset class, commission, currency, geographic focus,
-    underlying, administrator, manager, liquidity, return rate).
+    Use this tool FIRST when a user mentions a product to find out what is
+    already known about it. The cascade queries, in strict order, the SABBI
+    catalog (L1, fastest and most trusted), then Claude's own training
+    knowledge (L2), then a Tavily web search (L3) — stopping as soon as
+    every field is filled. Any field none of the three levels could verify
+    is left empty in the result; never invent a value for it yourself.
 
-    If no matches are found, try alternative terms — translations, tickers,
-    or common names (e.g. search 'oro' if 'GLD' returns nothing).
+    If nothing is found anywhere, try alternative terms — translations,
+    tickers, or common names (e.g. search 'oro' if 'GLD' returns nothing).
 
     Args:
         query: Product name, ticker symbol, or description to search for
                (e.g. 'QQQ', 'Credicorp', 'oro', 'bitcoin').
     """
     del config
-    repo = await _catalog_repository()
-    results = await repo.search(query)
+    pool = await get_pool()
+    result = await cascade_search(query, pool)
 
-    if not results:
-        return {"status": "no_matches", "query": query, "products": []}
+    if result is None:
+        return {"status": "not_found", "query": query}
 
-    return {
-        "status": "found",
-        "query": query,
-        "products": [p.model_dump() for p in results],
-    }
+    return {"status": "found", "query": query, "result": result.model_dump()}
 
 
 portfolio_tools = [
-    search_catalog,
+    search_product,
     propose_product,
     add_product,
     update_product,

@@ -13,10 +13,17 @@ from agent.state import CATEGORIES
 
 
 def _format_categories() -> str:
+    """Render the full 3-level taxonomy (category -> subcategory group ->
+    leaf) exposed by `CATEGORIES` — one header line per category, one
+    indented line per subcategory group listing its leaves."""
     lines = []
     for index, (key, info) in enumerate(CATEGORIES.items(), start=1):
-        subcategories = ", ".join(info["subcategories"])
-        lines.append(f'{index}. {info["label"]} ("{key}"): {subcategories}')
+        lines.append(f'{index}. {info["label"]} ("{key}")')
+        for group_name, leaves in info["groups"].items():
+            if leaves == [group_name]:
+                lines.append(f"   - {group_name}")
+            else:
+                lines.append(f"   - {group_name}: {', '.join(leaves)}")
     return "\n".join(lines)
 
 
@@ -27,25 +34,38 @@ productos de inversión en las 6 categorías del portafolio SABBI:
 
 {_format_categories()}
 
-REGLAS DE CLASIFICACIÓN Y USO DE TOOLS:
+REGLAS DE BÚSQUEDA Y USO DE TOOLS:
 - Cuando el usuario mencione un producto de inversión, usa PRIMERO
-  `search_catalog` para buscarlo en el catálogo de SABBI. Si hay
-  coincidencias, usa los datos del catálogo (comisión, clase de activo,
-  administrador, moneda, etc.) para enriquecer la propuesta. Si no hay
-  coincidencias, intenta buscar con términos alternativos (traducciones,
-  tickers, nombres comunes — por ejemplo, si "GLD" no tiene resultados,
-  busca "oro" o "gold").
-- NUNCA menciones al usuario el catálogo, la búsqueda, ni si encontraste
-  o no el producto en el catálogo. El catálogo es una herramienta interna
-  — el usuario no necesita saber de su existencia. Simplemente presenta
-  el producto directamente.
-- Después de identificar el producto (con o sin catálogo), usa SIEMPRE
-  `propose_product` para presentárselo al usuario. La UI mostrará una
-  tarjeta interactiva con los campos editables y botones "Sí" y "No".
-  Solo después de que el usuario confirme, usa `add_product` con los
-  datos (posiblemente modificados por el usuario en la tarjeta).
+  `search_product` para investigarlo. Esta tool busca en cascada, en orden
+  estricto: primero en el catálogo de SABBI (nivel 1, la fuente más
+  confiable), luego en el conocimiento propio de Claude (nivel 2), y por
+  último en la web vía Tavily (nivel 3) — se detiene apenas todos los
+  campos quedan completos. Si no hay coincidencias en ningún nivel, intenta
+  buscar con términos alternativos (traducciones, tickers, nombres comunes
+  — por ejemplo, si "GLD" no tiene resultados, busca "oro" o "gold").
+- NUNCA menciones al usuario el catálogo, la búsqueda en cascada, ni en qué
+  nivel se encontró cada dato — esa información es para los indicadores de
+  origen de la tarjeta de confirmación (`provenance`), no para tu mensaje de
+  texto. Simplemente presenta el producto directamente.
+- NUNCA inventes ni asumas un valor para un campo que `search_product` dejó
+  vacío (comisión, moneda, administrador, gestor, liquidez, rentabilidad,
+  etc.). Si ningún nivel de la búsqueda pudo verificarlo, déjalo vacío al
+  llamar `propose_product` — más vale un campo vacío que un dato inventado.
+- Después de identificar el producto, usa SIEMPRE `propose_product` para
+  presentárselo al usuario, reenviando sin modificar los campos de
+  enriquecimiento y el `primary_source`/`provenance` que devolvió
+  `search_product`. La UI mostrará una tarjeta interactiva con los campos
+  editables, su origen (catálogo, conocimiento propio o web) y botones "Sí"
+  y "No". Solo después de que el usuario confirme, usa `add_product` con
+  los datos (posiblemente modificados por el usuario en la tarjeta).
+- Clasificación: si `search_product` devolvió `category` y `subcategory`
+  con confianza (auto-clasificación), úsalos directamente al llamar
+  `propose_product`. Si los dejó vacíos porque no pudo clasificar el
+  producto con confianza, NO adivines la categoría ni la subcategoría —
+  pregúntale al usuario explícitamente a cuál de las 6 categorías (y qué
+  subcategoría específica) pertenece el producto antes de proponerlo.
 - NUNCA uses `add_product` directamente sin una confirmación previa del
-  usuario. El flujo es: search_catalog → propose_product → usuario confirma
+  usuario. El flujo es: search_product → propose_product → usuario confirma
   → add_product.
 - NUNCA presentes un producto como texto plano pidiendo confirmación
   verbal. SIEMPRE usa `propose_product` — incluso si ya habías mencionado
