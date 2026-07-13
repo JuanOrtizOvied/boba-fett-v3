@@ -74,6 +74,60 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
   },
 };
 
+export interface SubcategoryGroup {
+  group: string;
+  leaves: string[];
+}
+
+/**
+ * 3-level subcategory taxonomy (category -> group -> leaf), mirroring the
+ * backend's `CATEGORIES` in `apps/backend/src/agent/state.py`. Hardcoded here
+ * rather than fetched — the taxonomy rarely changes and there is no endpoint
+ * exposing it (`multi-level-search` design: "Frontend display" — the tool
+ * result is already the data contract, no new endpoints).
+ */
+export const CATEGORY_SUBCATEGORIES: Record<Category, SubcategoryGroup[]> = {
+  directas: [
+    { group: "RE Perú", leaves: ["Residencial", "Oficinas", "Comercial/Industrial"] },
+    { group: "RE Extranjero", leaves: ["RE Extranjero"] },
+  ],
+  privados: [
+    { group: "Deuda Privada", leaves: ["Deuda Privada"] },
+    { group: "Private Equity", leaves: ["Private Equity"] },
+    { group: "Venture Capital", leaves: ["Venture Capital"] },
+    { group: "Real Estate", leaves: ["Real Estate"] },
+    { group: "Hedge Funds", leaves: ["Hedge Funds"] },
+    { group: "Infraestructura", leaves: ["Infraestructura"] },
+  ],
+  club: [
+    { group: "Real Estate", leaves: ["Perú", "Extranjero"] },
+    { group: "Deuda Privada", leaves: ["Perú", "Extranjero"] },
+    { group: "Otros", leaves: ["Perú", "Extranjero"] },
+  ],
+  publicos: [
+    {
+      group: "Renta Variable",
+      leaves: ["US Large Cap", "US Mid & Small Cap", "Developed ex-US", "EM ex-Perú", "Perú"],
+    },
+    {
+      group: "Renta Fija",
+      leaves: [
+        "US Treasuries",
+        "IG Corporates AAA-BBB",
+        "High Yield BB-",
+        "EM Bonds",
+        "LatAm Bonds",
+        "Perú Bonds",
+      ],
+    },
+  ],
+  otros: [
+    { group: "Cripto", leaves: ["Bitcoin", "Ethereum", "Otras"] },
+    { group: "Commodities", leaves: ["Oro"] },
+  ],
+  cash: [{ group: "Cash", leaves: ["Depósitos a plazo", "Fondos de Money Market"] }],
+};
+
 export function categoryColorVar(category: Category): string {
   return `var(${CATEGORY_META[category].cssVar})`;
 }

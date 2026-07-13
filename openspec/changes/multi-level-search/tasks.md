@@ -55,13 +55,13 @@ Chain strategy: stacked-to-main
 
 ## Phase 4: Frontend Provenance UI (PR 4, depends on Phase 3)
 
-- [ ] 4.1 `lib/portfolio-types.ts`: add `FieldSource`, `ProvenanceMap`; extend `ProposedProduct`
-- [ ] 4.2 `thread.tsx`: extend `ProposedProduct`/`ProposeToolResult` with provenance/`primary_source`
-- [ ] 4.3 `thread.tsx`: card-level badge ("Catálogo SABBI ✓" / "Búsqueda web ⚠" / "No verificado")
-- [ ] 4.4 `thread.tsx`: field-level source markers for non-catalog fields
-- [ ] 4.5 `thread.tsx`: display enriched fields (commission, currency, administrator, manager, liquidity, return_rate)
-- [ ] 4.6 `thread.tsx`: subcategory selector — pre-selected+source when auto-classified, empty+required otherwise
-- [ ] 4.7 `app/assistant.tsx`: confirm `convertMessages` generic JSON passthrough already forwards provenance (no change expected)
+- [x] 4.1 `lib/portfolio-types.ts`: add `FieldSource`, `ProvenanceMap`; extend `ProposedProduct`
+- [x] 4.2 `thread.tsx`: extend `ProposedProduct`/`ProposeToolResult` with provenance/`primary_source`
+- [x] 4.3 `thread.tsx`: card-level badge ("Catálogo SABBI ✓" / "Búsqueda web ⚠" / "No verificado")
+- [x] 4.4 `thread.tsx`: field-level source markers for non-catalog fields
+- [x] 4.5 `thread.tsx`: display enriched fields (commission, currency, administrator, manager, liquidity, return_rate)
+- [x] 4.6 `thread.tsx`: subcategory selector — pre-selected+source when auto-classified, empty+required otherwise
+- [x] 4.7 `app/assistant.tsx`: confirm `convertMessages` generic JSON passthrough already forwards provenance (no change expected)
 
 ## Phase 5: Cleanup / Verification
 

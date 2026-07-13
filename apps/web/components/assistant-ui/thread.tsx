@@ -31,9 +31,15 @@ import {
   RobotIcon,
   SendIcon,
 } from "@/components/icons/Icons";
-import { CATEGORY_META, CATEGORY_ORDER, categoryBgVar, categoryTextVar } from "@/lib/categories";
+import {
+  CATEGORY_META,
+  CATEGORY_ORDER,
+  CATEGORY_SUBCATEGORIES,
+  categoryBgVar,
+  categoryTextVar,
+} from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
-import type { Category } from "@/lib/portfolio-types";
+import type { Category, EnrichedProposedProduct, FieldSource } from "@/lib/portfolio-types";
 
 /**
  * Converts a `File` to a base64 data URL, matching the pattern used by
@@ -423,12 +429,7 @@ function ToolResultItem({
   );
 }
 
-interface ProposedProduct {
-  name: string;
-  amount: number;
-  category: Category;
-  provider?: string;
-}
+type ProposedProduct = EnrichedProposedProduct;
 
 type ProposeToolResult =
   | { status: "proposed"; product: ProposedProduct }
@@ -436,6 +437,69 @@ type ProposeToolResult =
 
 const proposalInputClass =
   "w-full rounded-md border border-sabbi-neutral-200 bg-white px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none transition-colors focus:border-sabbi-primary";
+
+const RELIABILITY_BADGE: Record<string, { label: string; className: string }> = {
+  verified: {
+    label: "Catálogo SABBI ✓",
+    className: "border-green-200 bg-green-50 text-green-700",
+  },
+  web: {
+    label: "Búsqueda web ⚠",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  unverified: {
+    label: "No verificado",
+    className: "border-sabbi-neutral-200 bg-sabbi-neutral-100 text-sabbi-neutral-600",
+  },
+};
+
+/**
+ * Card-level reliability badge (`provenance-ui.spec.md` — "Card-Level
+ * Reliability Badge"). Falls back to "No verificado" for any unrecognized or
+ * missing tag so the card never renders zero badges.
+ */
+function ReliabilityBadge({ tag }: { tag?: string }) {
+  const badge = RELIABILITY_BADGE[tag ?? ""] ?? RELIABILITY_BADGE.unverified;
+  return (
+    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
+
+/**
+ * Small marker next to a field's value distinguishing catalog- from
+ * externally-sourced data (`provenance-ui.spec.md` — "Field-Level Source
+ * Indicators"). Renders nothing for `catalog` — that is the trusted default
+ * and needs no callout.
+ */
+function FieldSourceMarker({ source }: { source?: FieldSource }) {
+  if (!source || source === "catalog") return null;
+  const icon = source === "web_search" ? "🌐" : "🤖";
+  const label = source === "web_search" ? "Fuente: búsqueda web" : "Fuente: conocimiento de Claude";
+  return (
+    <span title={label} className="ml-1 text-[10px]">
+      {icon}
+    </span>
+  );
+}
+
+type EnrichedFieldKey =
+  | "commission"
+  | "currency"
+  | "administrator"
+  | "manager"
+  | "liquidity"
+  | "return_rate";
+
+const ENRICHED_FIELDS: { key: EnrichedFieldKey; label: string }[] = [
+  { key: "commission", label: "Comisión" },
+  { key: "currency", label: "Moneda" },
+  { key: "administrator", label: "Administradora" },
+  { key: "manager", label: "Gestor" },
+  { key: "liquidity", label: "Liquidez" },
+  { key: "return_rate", label: "Rentabilidad histórica" },
+];
 
 function ProposeProductCard({
   result,
@@ -450,19 +514,36 @@ function ProposeProductCard({
   const [provider, setProvider] = useState(product?.provider ?? "");
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
   const [category, setCategory] = useState<Category>(product?.category ?? "cash");
+  const [subcategory, setSubcategory] = useState(product?.subcategory ?? "");
 
   if (!product) return null;
 
   const meta = CATEGORY_META[category];
   if (!meta) return null;
 
+  const provenance = product.provenance;
+  const autoClassified = Boolean(product.subcategory);
+  const subcategoryGroups = CATEGORY_SUBCATEGORIES[category] ?? [];
+  const enrichedFields = ENRICHED_FIELDS.filter(({ key }) => product[key]);
+
   const parsedAmount = parseFloat(amount);
-  const isValid = name.trim() !== "" && !isNaN(parsedAmount) && parsedAmount > 0;
+  const isValid =
+    name.trim() !== "" && !isNaN(parsedAmount) && parsedAmount > 0 && subcategory.trim() !== "";
+
+  const handleCategoryChange = (next: Category) => {
+    setCategory(next);
+    setSubcategory("");
+  };
 
   const handleConfirm = () => {
     if (!isValid) return;
     setResponded("yes");
-    const parts: string[] = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${category}`];
+    const parts: string[] = [
+      `nombre: ${name}`,
+      `monto: ${parsedAmount}`,
+      `categoría: ${category}`,
+      `subcategoría: ${subcategory}`,
+    ];
     if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
     runtime.append({
       role: "user",
@@ -482,17 +563,20 @@ function ProposeProductCard({
 
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-sabbi-neutral-200 bg-[var(--bg-panel)] px-4 py-2.5 text-xs font-semibold text-sabbi-neutral-700">
-        <span
-          className="tool-badge"
-          style={{
-            background: categoryBgVar(category),
-            color: categoryTextVar(category),
-          }}
-        >
-          {meta.shortLabel}
-        </span>
-        Producto encontrado
+      <div className="flex items-center justify-between gap-2 border-b border-sabbi-neutral-200 bg-[var(--bg-panel)] px-4 py-2.5 text-xs font-semibold text-sabbi-neutral-700">
+        <div className="flex items-center gap-2">
+          <span
+            className="tool-badge"
+            style={{
+              background: categoryBgVar(category),
+              color: categoryTextVar(category),
+            }}
+          >
+            {meta.shortLabel}
+          </span>
+          Producto encontrado
+        </div>
+        <ReliabilityBadge tag={product.reliability_tag} />
       </div>
 
       <div className="flex flex-col gap-2.5 px-4 py-3">
@@ -547,7 +631,7 @@ function ProposeProductCard({
             {editable ? (
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as Category)}
+                onChange={(e) => handleCategoryChange(e.target.value as Category)}
                 className={proposalInputClass}
               >
                 {CATEGORY_ORDER.map((cat) => (
@@ -561,6 +645,53 @@ function ProposeProductCard({
             )}
           </label>
         </div>
+
+        <label className="flex flex-col gap-0.5">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-sabbi-neutral-500">
+            Subcategoría
+            {autoClassified ? (
+              <span className="rounded-full bg-sabbi-primary-soft px-1.5 py-0.5 text-[9px] font-semibold text-sabbi-primary">
+                Auto-clasificado
+              </span>
+            ) : null}
+          </span>
+          {editable ? (
+            <select
+              value={subcategory}
+              onChange={(e) => setSubcategory(e.target.value)}
+              className={proposalInputClass}
+            >
+              <option value="" disabled>
+                Seleccionar subcategoría
+              </option>
+              {subcategoryGroups.map(({ group, leaves }) => (
+                <optgroup key={group} label={group}>
+                  {leaves.map((leaf) => (
+                    <option key={leaf} value={leaf}>
+                      {leaf}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          ) : (
+            <span className="text-sm text-sabbi-neutral-700">{subcategory || "—"}</span>
+          )}
+        </label>
+
+        {enrichedFields.length > 0 ? (
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-sabbi-neutral-100 pt-2.5">
+            {enrichedFields.map(({ key, label }) => (
+              <div key={key} className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-medium text-sabbi-neutral-500">{label}</span>
+                <span className="text-sm text-sabbi-neutral-700">
+                  {product[key]}
+                  <FieldSourceMarker source={provenance?.[key]} />
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {responded === null ? (
