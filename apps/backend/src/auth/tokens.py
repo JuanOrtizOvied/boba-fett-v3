@@ -21,7 +21,7 @@ import jwt
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
-REFRESH_TOKEN_TTL = timedelta(days=1)
+REFRESH_TOKEN_TTL = timedelta(days=7)
 
 
 def _access_secret() -> str:

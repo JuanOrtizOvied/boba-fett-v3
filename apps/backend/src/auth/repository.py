@@ -54,7 +54,8 @@ class UserRepository:
 
     async def get_refresh_token(self, token_hash: str) -> asyncpg.Record | None:
         return await self.pool.fetchrow(
-            "SELECT * FROM refresh_tokens WHERE token_hash = $1", token_hash
+            "SELECT * FROM refresh_tokens WHERE token_hash = $1 AND expires_at > now()",
+            token_hash,
         )
 
     async def delete_refresh_token(self, token_hash: str) -> None:
