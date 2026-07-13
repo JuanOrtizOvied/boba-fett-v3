@@ -458,11 +458,16 @@ interface ProposalEntry {
   responded: "yes" | "no" | null;
 }
 
+interface CardConfirmFns {
+  markDone: () => void;
+  getText: () => string;
+}
+
 interface ProposalBatchCtx {
   register: (id: string, entry: ProposalEntry) => void;
   unregister: (id: string) => void;
-  confirmAll: (() => void) | null;
-  setConfirmFn: (id: string, fn: () => void) => void;
+  confirmAll: (() => string) | null;
+  setConfirmFn: (id: string, fns: CardConfirmFns) => void;
   entries: Map<string, ProposalEntry>;
 }
 
@@ -470,10 +475,22 @@ const ProposalBatchContext = createContext<ProposalBatchCtx | null>(null);
 
 function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
   const entriesRef = useRef(new Map<string, ProposalEntry>());
-  const confirmFnsRef = useRef(new Map<string, () => void>());
-  const [, forceUpdate] = useState(0);
+  const confirmFnsRef = useRef(new Map<string, CardConfirmFns>());
+  const [revision, forceUpdate] = useState(0);
 
   const register = useCallback((id: string, entry: ProposalEntry) => {
+    const prev = entriesRef.current.get(id);
+    if (
+      prev &&
+      prev.isValid === entry.isValid &&
+      prev.responded === entry.responded &&
+      prev.name === entry.name &&
+      prev.amount === entry.amount &&
+      prev.category === entry.category &&
+      prev.subcategory === entry.subcategory
+    ) {
+      return;
+    }
     entriesRef.current.set(id, entry);
     forceUpdate((n) => n + 1);
   }, []);
@@ -484,20 +501,29 @@ function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
     forceUpdate((n) => n + 1);
   }, []);
 
-  const setConfirmFn = useCallback((id: string, fn: () => void) => {
-    confirmFnsRef.current.set(id, fn);
+  const setConfirmFn = useCallback((id: string, fns: CardConfirmFns) => {
+    confirmFnsRef.current.set(id, fns);
   }, []);
 
-  const confirmAll = useMemo(() => {
-    const entries = Array.from(entriesRef.current.values());
-    const pending = entries.filter((e) => e.responded === null);
-    if (pending.length === 0) return null;
-    if (pending.some((e) => !e.isValid)) return null;
+  const confirmAll = useMemo((): (() => string) | null => {
+    const entries = Array.from(entriesRef.current.entries());
+    const pendingIds = entries
+      .filter(([, e]) => e.responded === null)
+      .map(([id]) => id);
+    if (pendingIds.length === 0) return null;
+    if (entries.some(([, e]) => e.responded === null && !e.isValid)) return null;
     return () => {
-      for (const fn of confirmFnsRef.current.values()) fn();
+      const parts: string[] = [];
+      for (const id of pendingIds) {
+        const fns = confirmFnsRef.current.get(id);
+        if (!fns) continue;
+        parts.push(fns.getText());
+        fns.markDone();
+      }
+      return `Sí, agregar todos al portafolio:\n${parts.join("\n")}`;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entriesRef.current.size, ...Array.from(entriesRef.current.values()).map((e) => `${e.isValid}-${e.responded}`)]);
+  }, [revision]);
 
   const ctx = useMemo(
     (): ProposalBatchCtx => ({
@@ -507,7 +533,8 @@ function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
       setConfirmFn,
       entries: entriesRef.current,
     }),
-    [register, unregister, confirmAll, setConfirmFn],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [register, unregister, confirmAll, setConfirmFn, revision],
   );
 
   return <ProposalBatchContext.Provider value={ctx}>{children}</ProposalBatchContext.Provider>;
@@ -584,6 +611,8 @@ function ProposeProductCard({
 }: ToolCallMessagePartProps<Record<string, unknown>, ProposeToolResult>) {
   const runtime = useThreadRuntime();
   const batch = useContext(ProposalBatchContext);
+  const batchRef = useRef(batch);
+  batchRef.current = batch;
   const cardId = useId();
   const [responded, setResponded] = useState<"yes" | "no" | null>(null);
 
@@ -629,8 +658,14 @@ function ProposeProductCard({
   };
 
   useEffect(() => {
-    if (!batch || !product) return;
-    batch.register(cardId, {
+    const id = cardId;
+    return () => { batchRef.current?.unregister(id); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardId]);
+
+  useEffect(() => {
+    if (!batchRef.current || !product) return;
+    batchRef.current.register(cardId, {
       name,
       amount: parsedAmount,
       category,
@@ -640,9 +675,16 @@ function ProposeProductCard({
       missingFields,
       responded,
     });
-    batch.setConfirmFn(cardId, handleConfirm);
-    return () => batch.unregister(cardId);
-  });
+    batchRef.current.setConfirmFn(cardId, {
+      markDone: () => setResponded("yes"),
+      getText: () => {
+        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${category}`, `subcategoría: ${subcategory}`];
+        if (provider.trim()) p.push(`proveedor: ${provider.trim()}`);
+        return p.join(", ");
+      },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardId, product, name, parsedAmount, category, subcategory, provider, isValid, responded]);
 
   if (!product) return null;
 
@@ -829,6 +871,7 @@ function ProposeProductCard({
 }
 
 function BulkAcceptBar() {
+  const runtime = useThreadRuntime();
   const batch = useContext(ProposalBatchContext);
   if (!batch) return null;
 
@@ -842,6 +885,12 @@ function BulkAcceptBar() {
   const incomplete = pending.filter((e) => !e.isValid);
   const allReady = incomplete.length === 0;
 
+  const handleBulkAccept = () => {
+    if (!batch.confirmAll) return;
+    const text = batch.confirmAll();
+    runtime.append({ role: "user", content: [{ type: "text", text }] });
+  };
+
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white shadow-sm">
       <div className="px-4 py-3">
@@ -851,7 +900,7 @@ function BulkAcceptBar() {
           </span>
           <button
             type="button"
-            onClick={() => batch.confirmAll?.()}
+            onClick={handleBulkAccept}
             disabled={!allReady}
             className="rounded-lg bg-sabbi-primary px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-sabbi-primary-hover disabled:opacity-40"
           >

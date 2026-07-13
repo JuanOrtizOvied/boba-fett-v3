@@ -282,9 +282,13 @@ function AssistantInner() {
       > = [{ type: "text", text }];
       if (append.attachments?.length) {
         for (const att of append.attachments) {
+          const filePart = (att.content ?? []).find(
+            (c): c is { type: "file"; data: string; mimeType?: string } =>
+              c.type === "file" && "data" in c,
+          );
           userContent.push({
             type: "file",
-            data: "",
+            data: filePart?.data ?? "",
             mimeType: att.contentType ?? "application/octet-stream",
             filename: att.name,
           });
