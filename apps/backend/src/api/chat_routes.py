@@ -28,6 +28,13 @@ from auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
+_NODE_LABELS: dict[str, str] = {
+    "router": "Analizando solicitud",
+    "process_document": "Procesando documento",
+    "agent": "Consultando al modelo",
+    "tools": "Ejecutando herramientas",
+}
+
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(min_length=1)
@@ -86,6 +93,7 @@ def _content_to_text(content: Any) -> str:
             part if isinstance(part, str) else str(part.get("text", ""))
             for part in content
             if isinstance(part, (str, dict))
+            and not (isinstance(part, dict) and part.get("type") == "thinking")
         )
     return ""
 
@@ -105,6 +113,60 @@ def _stream_event_text(event: Any) -> str:
     if content is not None:
         return _content_to_text(content)
     return ""
+
+
+def _stream_event_reasoning(event: Any) -> str:
+    """Extract thinking/reasoning content from a stream event chunk."""
+    if not isinstance(event, dict):
+        return ""
+    if event.get("event") not in {"on_chat_model_stream", "on_llm_stream"}:
+        return ""
+    data = event.get("data", {})
+    if not isinstance(data, dict):
+        return ""
+    chunk = data.get("chunk") or data.get("output")
+    if chunk is None:
+        return ""
+    content = getattr(chunk, "content", None)
+    if not isinstance(content, list):
+        return ""
+    for part in content:
+        if isinstance(part, dict) and part.get("type") == "thinking":
+            thinking = part.get("thinking", "")
+            if thinking:
+                return thinking
+    return ""
+
+
+def _stream_event_progress(event: Any) -> dict[str, str] | None:
+    """Detect graph node/tool transitions and return a progress step."""
+    if not isinstance(event, dict):
+        return None
+    ev_type = event.get("event", "")
+    name = event.get("name", "")
+    if ev_type == "on_chain_start" and name in _NODE_LABELS:
+        return {"step": name, "label": _NODE_LABELS[name]}
+    if ev_type == "on_tool_start" and name:
+        return {"step": f"tool_{name}", "label": f"Ejecutando: {name}"}
+    return None
+
+
+def _normalize_attachment(att: dict[str, Any]) -> dict[str, Any]:
+    """Convert frontend ``{type: "file"}`` blocks to Anthropic API format.
+
+    The API expects ``type: "image"`` for images and ``type: "document"``
+    for everything else (PDFs, spreadsheets, etc.), each with a nested
+    ``source`` object carrying the base64 payload.
+    """
+    if att.get("type") != "file":
+        return att
+    mime = att.get("mime_type", "application/octet-stream")
+    data = att.get("data", "")
+    block_type = "image" if mime.startswith("image/") else "document"
+    return {
+        "type": block_type,
+        "source": {"type": "base64", "media_type": mime, "data": data},
+    }
 
 
 def _sse_event(event: str, data: Any) -> str:
@@ -150,10 +212,9 @@ async def stream_message(
     if not message_text:
         raise HTTPException(status_code=422, detail="message is required")
 
-    # Build message content — plain text or with attachments.
     if body.attachments:
         content: list[dict[str, Any]] = [{"type": "text", "text": message_text}]
-        content.extend(body.attachments)
+        content.extend(_normalize_attachment(a) for a in body.attachments)
         input_message = HumanMessage(content=content)
     else:
         input_message = HumanMessage(content=message_text)
@@ -163,20 +224,36 @@ async def stream_message(
     config["configurable"]["user_id"] = user_id
 
     async def events() -> AsyncIterator[str]:
-        yield _sse_event("thinking", {"status": "thinking"})
+        yield _sse_event("progress", {"step": "loading_context", "label": "Cargando contexto"})
+        has_emitted_text = False
         try:
             if hasattr(graph, "astream_events"):
                 stream = graph.astream_events(input_data, config=config, version="v2")
                 if inspect.isawaitable(stream):
                     stream = await stream
                 async for event in stream:
+                    progress = _stream_event_progress(event)
+                    if progress:
+                        yield _sse_event("progress", progress)
+
+                    reasoning = _stream_event_reasoning(event)
+                    if reasoning:
+                        yield _sse_event("reasoning", {"content": reasoning})
+
                     text = _stream_event_text(event)
                     if text:
+                        if not has_emitted_text:
+                            yield _sse_event(
+                                "progress",
+                                {"step": "streaming", "label": "Generando respuesta"},
+                            )
+                            has_emitted_text = True
                         yield _sse_event("text", {"content": text})
             else:
                 await graph.ainvoke(input_data, config=config)
 
-            # Get final state with all messages.
+            yield _sse_event("progress", {"step": "finalizing", "label": "Finalizando"})
+
             final_state = await graph.aget_state(config=_graph_config(thread_id))
             messages = _state_messages(final_state)
             final = ThreadStateResponse(
@@ -198,10 +275,4 @@ async def delete_thread(
     request: Request,
     user: dict = Depends(get_current_user),
 ) -> None:
-    """Acknowledge thread deletion.
-
-    The checkpointer doesn't expose a delete API directly, so this is a
-    no-op that returns 204 — thread state is simply overwritten/superseded
-    on next use. Dev/debug use only.
-    """
     return None

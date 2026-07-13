@@ -8,6 +8,12 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import {
+  ThinkingProvider,
+  useThinking,
+  THINKING_INITIAL,
+  type ProgressStep,
+} from "@/components/chat/ThinkingPanel";
 import { attachmentAdapter } from "@/components/assistant-ui/thread";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
@@ -30,7 +36,8 @@ type ThreadStateResponse = {
 };
 
 type StreamEvent =
-  | { event: "thinking"; data: { status: string } }
+  | { event: "progress"; data: { step: string; label: string } }
+  | { event: "reasoning"; data: { content: string } }
   | { event: "text"; data: { content: string } }
   | { event: "final"; data: ThreadStateResponse }
   | { event: "done"; data: unknown }
@@ -44,7 +51,6 @@ function convertMessages(api: ApiMessage[]): ThreadMessageLike[] {
   const result: ThreadMessageLike[] = [];
   const toolResults = new Map<string, JSONValue>();
 
-  // Collect tool results first so we can merge them into tool-call parts
   for (const msg of api) {
     if (msg.type === "tool" && msg.tool_call_id) {
       try {
@@ -102,7 +108,6 @@ function convertMessages(api: ApiMessage[]): ThreadMessageLike[] {
 
       if (parts.length) result.push({ role: "assistant", id: msg.id, content: parts });
     }
-    // Tool messages are merged into the preceding assistant message above
   }
 
   return result;
@@ -172,11 +177,23 @@ async function fetchThreadState(
   return res.json();
 }
 
-// -- Component ------------------------------------------------------------
+// -- Thinking helpers -----------------------------------------------------
 
-export function MyAssistant() {
+function addProgressStep(
+  prev: ProgressStep[],
+  step: string,
+  label: string,
+): ProgressStep[] {
+  const updated = prev.map((s) => (s.completed ? s : { ...s, completed: true }));
+  return [...updated, { step, label, completed: false }];
+}
+
+// -- Inner component (needs ThinkingContext) -------------------------------
+
+function AssistantInner() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { setThinking } = useThinking();
   const userId = user?.id ?? "";
   const savedThreadId = user?.active_thread_id ?? null;
 
@@ -193,7 +210,6 @@ export function MyAssistant() {
     [],
   );
 
-  // Hydrate thread on mount
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
@@ -217,7 +233,6 @@ export function MyAssistant() {
     };
   }, [userId, savedThreadId, updateMessages]);
 
-  // Send a message via FastAPI SSE
   const onNew = useCallback(
     async (append: AppendMessage) => {
       if (!threadId || isRunning) return;
@@ -226,7 +241,6 @@ export function MyAssistant() {
       const text = textPart && "text" in textPart ? textPart.text.trim() : "";
       if (!text) return;
 
-      // Build attachment content blocks for the API
       const attachments: Record<string, unknown>[] | undefined =
         append.attachments
           ?.flatMap((att) =>
@@ -258,6 +272,7 @@ export function MyAssistant() {
 
       updateMessages([...msgsRef.current, userMsg, streamingMsg]);
       setIsRunning(true);
+      setThinking({ steps: [], reasoning: "", visible: true });
 
       try {
         const res = await fetchWithAuth(
@@ -277,6 +292,22 @@ export function MyAssistant() {
         let streamed = "";
 
         for await (const ev of parseSseStream(res)) {
+          if (ev.event === "progress") {
+            const { step, label } = ev.data as { step: string; label: string };
+            setThinking((prev) => ({
+              ...prev,
+              steps: addProgressStep(prev.steps, step, label),
+            }));
+          }
+
+          if (ev.event === "reasoning") {
+            const chunk = (ev.data as { content?: string })?.content ?? "";
+            setThinking((prev) => ({
+              ...prev,
+              reasoning: prev.reasoning + chunk,
+            }));
+          }
+
           if (ev.event === "text") {
             const chunk = (ev.data as { content?: string })?.content ?? "";
             streamed += chunk;
@@ -289,6 +320,11 @@ export function MyAssistant() {
           }
 
           if (ev.event === "final") {
+            setThinking((prev) => ({
+              ...prev,
+              steps: prev.steps.map((s) => ({ ...s, completed: true })),
+              visible: false,
+            }));
             const final = ev.data as ThreadStateResponse;
             if (final?.messages) updateMessages(convertMessages(final.messages));
           }
@@ -298,14 +334,10 @@ export function MyAssistant() {
               (ev.data as { detail?: string })?.detail ??
               "Error al procesar la solicitud";
             toast(detail);
+            setThinking(THINKING_INITIAL);
             const updated = msgsRef.current.map((m) =>
               m.id === streamingId
-                ? {
-                    ...m,
-                    content: [
-                      { type: "text" as const, text: `⚠ ${detail}` },
-                    ],
-                  }
+                ? { ...m, content: [{ type: "text" as const, text: `⚠ ${detail}` }] }
                 : m,
             );
             updateMessages(updated);
@@ -315,26 +347,20 @@ export function MyAssistant() {
         const message =
           err instanceof Error ? err.message : "No se pudo conectar con el servidor";
         toast(message);
+        setThinking(THINKING_INITIAL);
         const updated = msgsRef.current.map((m) =>
           m.id === streamingId
-            ? {
-                ...m,
-                content: [
-                  {
-                    type: "text" as const,
-                    text: `⚠ ${message}`,
-                  },
-                ],
-              }
+            ? { ...m, content: [{ type: "text" as const, text: `⚠ ${message}` }] }
             : m,
         );
         updateMessages(updated);
       } finally {
         setIsRunning(false);
+        setThinking(THINKING_INITIAL);
         dispatchPortfolioRefetch();
       }
     },
-    [threadId, isRunning, updateMessages, toast],
+    [threadId, isRunning, updateMessages, toast, setThinking],
   );
 
   const runtime = useExternalStoreRuntime({
@@ -352,5 +378,15 @@ export function MyAssistant() {
     <AssistantRuntimeProvider runtime={runtime}>
       <ChatPanel />
     </AssistantRuntimeProvider>
+  );
+}
+
+// -- Exported wrapper (provides ThinkingContext) ---------------------------
+
+export function MyAssistant() {
+  return (
+    <ThinkingProvider>
+      <AssistantInner />
+    </ThinkingProvider>
   );
 }

@@ -9,7 +9,7 @@ here, unlike the original bootstrap's `agent.models` factory.
 from __future__ import annotations
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, SystemMessage
 
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import AgentState
@@ -94,6 +94,31 @@ def _strip_thinking(msg: AIMessage) -> AIMessage:
     return msg.model_copy(update={"content": cleaned})
 
 
+def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
+    """Convert ``{type: "file"}`` content blocks to Anthropic's expected
+    format (``document`` or ``image``) so checkpointed messages from older
+    sessions don't cause 400 errors."""
+    content = getattr(msg, "content", None)
+    if not isinstance(content, list):
+        return msg
+    needs_fix = any(isinstance(b, dict) and b.get("type") == "file" for b in content)
+    if not needs_fix:
+        return msg
+    fixed = []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "file":
+            mime = block.get("mime_type", "application/octet-stream")
+            data = block.get("data", "")
+            block_type = "image" if mime.startswith("image/") else "document"
+            fixed.append({
+                "type": block_type,
+                "source": {"type": "base64", "media_type": mime, "data": data},
+            })
+        else:
+            fixed.append(block)
+    return msg.model_copy(update={"content": fixed})
+
+
 async def agent_node(state: AgentState) -> dict:
     """Main conversational node — invokes Claude with portfolio tools bound."""
     system_parts = [SYSTEM_PROMPT]
@@ -104,7 +129,7 @@ async def agent_node(state: AgentState) -> dict:
         elif isinstance(msg, AIMessage):
             conversation.append(_strip_thinking(msg))
         else:
-            conversation.append(msg)
+            conversation.append(_normalize_file_blocks(msg))
     messages = [SystemMessage(content="\n\n".join(system_parts)), *conversation]
     response = await llm_with_tools.ainvoke(messages)
     return {"messages": [response]}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FC } from "react";
+import { ThinkingPanel } from "@/components/chat/ThinkingPanel";
 import type {
   Attachment,
   AttachmentAdapter,
@@ -146,6 +147,8 @@ export const Thread: FC = () => {
               return null;
             }}
           </ThreadPrimitive.Messages>
+
+          <ThinkingPanel />
         </ThreadPrimitive.Viewport>
 
         <div className="shrink-0 border-t border-sabbi-neutral-200 px-4 py-4">
