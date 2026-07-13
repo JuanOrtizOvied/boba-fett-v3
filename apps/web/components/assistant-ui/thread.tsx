@@ -527,8 +527,11 @@ function ProposeProductCard({
   const enrichedFields = ENRICHED_FIELDS.filter(({ key }) => product[key]);
 
   const parsedAmount = parseFloat(amount);
-  const isValid =
-    name.trim() !== "" && !isNaN(parsedAmount) && parsedAmount > 0 && subcategory.trim() !== "";
+  const missingFields: string[] = [];
+  if (!name.trim()) missingFields.push("nombre");
+  if (isNaN(parsedAmount) || parsedAmount <= 0) missingFields.push("monto");
+  if (!subcategory.trim()) missingFields.push("subcategoría");
+  const isValid = missingFields.length === 0;
 
   const handleCategoryChange = (next: Category) => {
     setCategory(next);
@@ -659,7 +662,7 @@ function ProposeProductCard({
             <select
               value={subcategory}
               onChange={(e) => setSubcategory(e.target.value)}
-              className={proposalInputClass}
+              className={`${proposalInputClass} ${!subcategory.trim() ? "ring-2 ring-amber-400" : ""}`}
             >
               <option value="" disabled>
                 Seleccionar subcategoría
@@ -695,7 +698,13 @@ function ProposeProductCard({
       </div>
 
       {responded === null ? (
-        <div className="flex gap-2 border-t border-sabbi-neutral-200 px-4 py-2.5">
+        <div className="border-t border-sabbi-neutral-200">
+          {missingFields.length > 0 ? (
+            <p className="px-4 pt-2 text-xs font-medium text-amber-600">
+              Completa: {missingFields.join(", ")}
+            </p>
+          ) : null}
+          <div className="flex gap-2 px-4 py-2.5">
           <button
             type="button"
             onClick={handleConfirm}
@@ -711,6 +720,7 @@ function ProposeProductCard({
           >
             No
           </button>
+          </div>
         </div>
       ) : (
         <div className="border-t border-sabbi-neutral-200 px-4 py-2 text-xs text-sabbi-neutral-500">
