@@ -9,7 +9,7 @@ here, unlike the original bootstrap's `agent.models` factory.
 from __future__ import annotations
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, AnyMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import AgentState
@@ -101,12 +101,18 @@ def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
     content = getattr(msg, "content", None)
     if not isinstance(content, list):
         return msg
-    needs_fix = any(isinstance(b, dict) and b.get("type") == "file" for b in content)
+    needs_fix = any(
+        isinstance(b, dict)
+        and (b.get("type") == "file" or (b.get("type") == "image" and "title" in b))
+        for b in content
+    )
     if not needs_fix:
         return msg
     fixed = []
     for block in content:
-        if isinstance(block, dict) and block.get("type") == "file":
+        if not isinstance(block, dict):
+            fixed.append(block)
+        elif block.get("type") == "file":
             mime = block.get("mime_type", "application/octet-stream")
             data = block.get("data", "")
             block_type = "image" if mime.startswith("image/") else "document"
@@ -114,9 +120,51 @@ def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
                 "type": block_type,
                 "source": {"type": "base64", "media_type": mime, "data": data},
             })
+        elif block.get("type") == "image" and "title" in block:
+            fixed.append({k: v for k, v in block.items() if k != "title"})
         else:
             fixed.append(block)
     return msg.model_copy(update={"content": fixed})
+
+
+def _get_tool_use_ids(msg: AIMessage) -> set[str]:
+    """Extract tool_use IDs from an AIMessage's content blocks."""
+    if not isinstance(msg.content, list):
+        return set()
+    return {
+        b["id"]
+        for b in msg.content
+        if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id")
+    }
+
+
+def _patch_orphan_tool_calls(conversation: list[AnyMessage]) -> list[AnyMessage]:
+    """Ensure every tool_use block has a matching tool_result immediately after.
+    Orphaned tool calls (from interrupted runs or checkpoint corruption) cause
+    Anthropic API 400 errors."""
+    result: list[AnyMessage] = []
+    for i, msg in enumerate(conversation):
+        result.append(msg)
+        if not isinstance(msg, AIMessage):
+            continue
+        tool_ids = _get_tool_use_ids(msg)
+        if not tool_ids:
+            continue
+        answered: set[str] = set()
+        for following in conversation[i + 1 :]:
+            if isinstance(following, ToolMessage):
+                answered.add(following.tool_call_id)
+            else:
+                break
+        orphans = tool_ids - answered
+        for tool_id in orphans:
+            result.append(
+                ToolMessage(
+                    content="[interrupted — no result available]",
+                    tool_call_id=tool_id,
+                )
+            )
+    return result
 
 
 async def agent_node(state: AgentState) -> dict:
@@ -130,6 +178,7 @@ async def agent_node(state: AgentState) -> dict:
             conversation.append(_strip_thinking(msg))
         else:
             conversation.append(_normalize_file_blocks(msg))
+    conversation = _patch_orphan_tool_calls(conversation)
     messages = [SystemMessage(content="\n\n".join(system_parts)), *conversation]
     response = await llm_with_tools.ainvoke(messages)
     return {"messages": [response]}

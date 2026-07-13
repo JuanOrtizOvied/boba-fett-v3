@@ -168,7 +168,7 @@ def _normalize_attachment(att: dict[str, Any]) -> dict[str, Any]:
         "source": {"type": "base64", "media_type": mime, "data": data},
     }
     metadata = att.get("metadata")
-    if isinstance(metadata, dict) and metadata.get("filename"):
+    if block_type == "document" and isinstance(metadata, dict) and metadata.get("filename"):
         result["title"] = metadata["filename"]
     return result
 

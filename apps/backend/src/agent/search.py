@@ -55,7 +55,7 @@ _SOURCE_RANK: dict[FieldSource, int] = {
 
 # Cheap, fast model for structured extraction — separate from the main agent
 # LLM (which is bound to tools and would recurse) per design.md.
-EXTRACTION_MODEL_NAME = "claude-haiku-3"
+EXTRACTION_MODEL_NAME = "claude-haiku-4-5"
 
 _EXTRACTION_SYSTEM_PROMPT = """You are a financial product data extraction assistant for SABBI, an investment portfolio platform.
 
