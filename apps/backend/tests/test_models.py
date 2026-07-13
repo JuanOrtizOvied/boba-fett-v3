@@ -137,3 +137,71 @@ def test_product_update_composition_replaces_full_list():
     assert update.composition is not None
     assert len(update.composition) == 1
     assert update.composition[0].name == "Cripto"
+
+
+def test_catalog_product_category_and_subcategory_default_empty():
+    from db.models import CatalogProduct
+
+    product = CatalogProduct(id=1, name="Vanguard Total World Stock ETF")
+
+    assert product.category == ""
+    assert product.subcategory == ""
+
+
+def test_catalog_product_accepts_explicit_category_and_subcategory():
+    from db.models import CatalogProduct
+
+    product = CatalogProduct(
+        id=2,
+        name="US Treasury Bond Fund",
+        category="publicos",
+        subcategory="US Treasuries",
+    )
+
+    assert product.category == "publicos"
+    assert product.subcategory == "US Treasuries"
+
+
+def test_search_result_defaults_are_all_empty():
+    from db.models import SearchResult
+
+    result = SearchResult()
+
+    assert result.name == ""
+    assert result.asset_class == ""
+    assert result.geographic_focus == ""
+    assert result.underlying == ""
+    assert result.commission == ""
+    assert result.currency == ""
+    assert result.administrator == ""
+    assert result.manager == ""
+    assert result.liquidity == ""
+    assert result.return_rate == ""
+    assert result.category == ""
+    assert result.subcategory == ""
+    assert result.primary_source == "catalog"
+    assert result.provenance == {}
+
+
+def test_search_result_tracks_per_field_provenance():
+    from db.models import SearchResult
+
+    result = SearchResult(
+        name="Vanguard Total World Stock ETF",
+        commission="0.07%",
+        primary_source="claude_knowledge",
+        provenance={"name": "catalog", "commission": "claude_knowledge"},
+    )
+
+    assert result.provenance["name"] == "catalog"
+    assert result.provenance["commission"] == "claude_knowledge"
+
+
+def test_search_result_provenance_defaults_are_independent_instances():
+    from db.models import SearchResult
+
+    first = SearchResult()
+    second = SearchResult()
+    first.provenance["name"] = "catalog"
+
+    assert second.provenance == {}

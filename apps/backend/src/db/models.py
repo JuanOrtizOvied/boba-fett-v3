@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -48,3 +49,28 @@ class CatalogProduct(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    category: str = ""
+    subcategory: str = ""
+
+
+FieldSource = Literal["catalog", "claude_knowledge", "web_search"]
+
+
+class SearchResult(BaseModel):
+    """Unified result of a cascading L1 (catalog) -> L2 (Claude knowledge) ->
+    L3 (Tavily web search) product search, with per-field provenance."""
+
+    name: str = ""
+    asset_class: str = ""
+    geographic_focus: str = ""
+    underlying: str = ""
+    commission: str = ""
+    currency: str = ""
+    administrator: str = ""
+    manager: str = ""
+    liquidity: str = ""
+    return_rate: str = ""
+    category: str = ""
+    subcategory: str = ""
+    primary_source: FieldSource = "catalog"
+    provenance: dict[str, FieldSource] = Field(default_factory=dict)

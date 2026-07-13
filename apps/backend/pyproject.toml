@@ -17,6 +17,7 @@ dependencies = [
     "openpyxl>=3.1",
     "bcrypt>=4.1",
     "PyJWT>=2.8",
+    "tavily-python>=0.5",
 ]
 
 [project.optional-dependencies]

@@ -46,4 +46,6 @@ class CatalogRepository:
             manager=row["manager"] or "",
             liquidity=row["liquidity"] or "",
             return_rate=row["return_rate"] or "",
+            category=row["category"] or "",
+            subcategory=row["subcategory"] or "",
         )

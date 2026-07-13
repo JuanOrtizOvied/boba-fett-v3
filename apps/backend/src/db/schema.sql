@@ -50,8 +50,13 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     administrator TEXT DEFAULT '',
     manager TEXT DEFAULT '',
     liquidity TEXT DEFAULT '',
-    return_rate TEXT DEFAULT ''
+    return_rate TEXT DEFAULT '',
+    category TEXT DEFAULT '',
+    subcategory TEXT DEFAULT ''
 );
+
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '';
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS subcategory TEXT DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_catalog_name_trgm
     ON product_catalog USING gin (name gin_trgm_ops);

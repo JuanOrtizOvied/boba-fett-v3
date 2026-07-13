@@ -26,53 +26,71 @@ class AgentState(TypedDict):
 
 
 # SABBI category taxonomy. Shared by the system prompt, the tools' category
-# validation, and the Excel export (Phase 4) so there is a single source of
-# truth for valid categories/subcategories.
+# validation, the cascading search classifier (multi-level-search), and the
+# Excel export so there is a single source of truth for valid
+# categories/subcategory groups/leaves.
+#
+# 3-level hierarchy: category -> subcategory group -> leaf. Groups with no
+# further breakdown (e.g. "RE Extranjero") use their own name as the single
+# leaf, so every group always exposes at least one leaf.
 CATEGORIES: dict[str, dict[str, object]] = {
     "directas": {
-        "label": "Inversiones directas",
-        "subcategories": [
-            "Accionariado",
-            "RE Perú - Residencial",
-            "RE Perú - Comercial",
-            "RE Perú - Terrenos",
-            "RE Extranjero",
-        ],
+        "label": "Real Estate Directo",
+        "groups": {
+            "RE Perú": ["Residencial", "Oficinas", "Comercial/Industrial"],
+            "RE Extranjero": ["RE Extranjero"],
+        },
     },
     "privados": {
-        "label": "Mercados privados",
-        "subcategories": [
-            "Deuda privada",
-            "Private equity",
-            "Venture capital",
-            "Real estate",
-            "Hedge funds",
-            "Infraestructura",
-        ],
+        "label": "Mercados Privados",
+        "groups": {
+            "Deuda Privada": ["Deuda Privada"],
+            "Private Equity": ["Private Equity"],
+            "Venture Capital": ["Venture Capital"],
+            "Real Estate": ["Real Estate"],
+            "Hedge Funds": ["Hedge Funds"],
+            "Infraestructura": ["Infraestructura"],
+        },
     },
     "club": {
-        "label": "Club deals",
-        "subcategories": ["Real estate", "Deuda privada", "Otros"],
+        "label": "Club Deals",
+        "groups": {
+            "Real Estate": ["Perú", "Extranjero"],
+            "Deuda Privada": ["Perú", "Extranjero"],
+            "Otros": ["Perú", "Extranjero"],
+        },
     },
     "publicos": {
-        "label": "Mercados públicos",
-        "subcategories": [
-            "RV US Large Cap",
-            "RV US Small Cap",
-            "RV International",
-            "RV Emerging Markets",
-            "RF Government",
-            "RF Corporate",
-            "RF High Yield",
-            "RF Emerging Markets",
-        ],
+        "label": "Mercados Públicos",
+        "groups": {
+            "Renta Variable": [
+                "US Large Cap",
+                "US Mid & Small Cap",
+                "Developed ex-US",
+                "EM ex-Perú",
+                "Perú",
+            ],
+            "Renta Fija": [
+                "US Treasuries",
+                "IG Corporates AAA-BBB",
+                "High Yield BB-",
+                "EM Bonds",
+                "LatAm Bonds",
+                "Perú Bonds",
+            ],
+        },
     },
     "otros": {
         "label": "Otros",
-        "subcategories": ["Cripto", "Commodities"],
+        "groups": {
+            "Cripto": ["Bitcoin", "Ethereum", "Otras"],
+            "Commodities": ["Oro"],
+        },
     },
     "cash": {
-        "label": "Cash y equivalentes",
-        "subcategories": ["Depósitos a plazo", "Money market", "Cuentas corrientes"],
+        "label": "Cash y Equivalentes",
+        "groups": {
+            "Cash": ["Depósitos a plazo", "Fondos de Money Market"],
+        },
     },
 }

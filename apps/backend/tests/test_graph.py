@@ -41,4 +41,4 @@ def test_categories_taxonomy_has_all_six_sabbi_categories():
     }
     for info in CATEGORIES.values():
         assert info["label"]
-        assert info["subcategories"]
+        assert info["groups"]
