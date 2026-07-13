@@ -65,6 +65,6 @@ Chain strategy: stacked-to-main
 
 ## Phase 5: Cleanup / Verification
 
-- [ ] 5.1 Remove `search_catalog` references from comments/docstrings (`tools.py`, `prompts.py`)
-- [ ] 5.2 Grep for old flat-taxonomy references; confirm none remain
-- [ ] 5.3 Manual smoke test: unset `TAVILY_API_KEY`, confirm graceful degradation end-to-end
+- [x] 5.1 Remove `search_catalog` references from comments/docstrings (`tools.py`, `prompts.py`)
+- [x] 5.2 Grep for old flat-taxonomy references; confirm none remain
+- [x] 5.3 Manual smoke test: unset `TAVILY_API_KEY`, confirm graceful degradation end-to-end
