@@ -1,6 +1,16 @@
 "use client";
 
-import { useMemo, useState, type FC } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FC,
+} from "react";
 import { ThinkingPanel } from "@/components/chat/ThinkingPanel";
 import type {
   Attachment,
@@ -435,6 +445,74 @@ type ProposeToolResult =
   | { status: "proposed"; product: ProposedProduct }
   | { status: "error"; message: string };
 
+// --- Proposal Batch Context -------------------------------------------------
+
+interface ProposalEntry {
+  name: string;
+  amount: number;
+  category: string;
+  subcategory: string;
+  provider: string;
+  isValid: boolean;
+  missingFields: string[];
+  responded: "yes" | "no" | null;
+}
+
+interface ProposalBatchCtx {
+  register: (id: string, entry: ProposalEntry) => void;
+  unregister: (id: string) => void;
+  confirmAll: (() => void) | null;
+  setConfirmFn: (id: string, fn: () => void) => void;
+  entries: Map<string, ProposalEntry>;
+}
+
+const ProposalBatchContext = createContext<ProposalBatchCtx | null>(null);
+
+function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
+  const entriesRef = useRef(new Map<string, ProposalEntry>());
+  const confirmFnsRef = useRef(new Map<string, () => void>());
+  const [, forceUpdate] = useState(0);
+
+  const register = useCallback((id: string, entry: ProposalEntry) => {
+    entriesRef.current.set(id, entry);
+    forceUpdate((n) => n + 1);
+  }, []);
+
+  const unregister = useCallback((id: string) => {
+    entriesRef.current.delete(id);
+    confirmFnsRef.current.delete(id);
+    forceUpdate((n) => n + 1);
+  }, []);
+
+  const setConfirmFn = useCallback((id: string, fn: () => void) => {
+    confirmFnsRef.current.set(id, fn);
+  }, []);
+
+  const confirmAll = useMemo(() => {
+    const entries = Array.from(entriesRef.current.values());
+    const pending = entries.filter((e) => e.responded === null);
+    if (pending.length === 0) return null;
+    if (pending.some((e) => !e.isValid)) return null;
+    return () => {
+      for (const fn of confirmFnsRef.current.values()) fn();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entriesRef.current.size, ...Array.from(entriesRef.current.values()).map((e) => `${e.isValid}-${e.responded}`)]);
+
+  const ctx = useMemo(
+    (): ProposalBatchCtx => ({
+      register,
+      unregister,
+      confirmAll,
+      setConfirmFn,
+      entries: entriesRef.current,
+    }),
+    [register, unregister, confirmAll, setConfirmFn],
+  );
+
+  return <ProposalBatchContext.Provider value={ctx}>{children}</ProposalBatchContext.Provider>;
+}
+
 const proposalInputClass =
   "w-full rounded-md border border-sabbi-neutral-200 bg-white px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none transition-colors focus:border-sabbi-primary";
 
@@ -505,6 +583,8 @@ function ProposeProductCard({
   result,
 }: ToolCallMessagePartProps<Record<string, unknown>, ProposeToolResult>) {
   const runtime = useThreadRuntime();
+  const batch = useContext(ProposalBatchContext);
+  const cardId = useId();
   const [responded, setResponded] = useState<"yes" | "no" | null>(null);
 
   const parsed = parseToolResult<ProposeToolResult>(result);
@@ -516,6 +596,54 @@ function ProposeProductCard({
   const [category, setCategory] = useState<Category>(product?.category ?? "cash");
   const [subcategory, setSubcategory] = useState(product?.subcategory ?? "");
 
+  const parsedAmount = parseFloat(amount);
+  const missingFields: string[] = [];
+  if (!name.trim()) missingFields.push("nombre");
+  if (isNaN(parsedAmount) || parsedAmount <= 0) missingFields.push("monto");
+  if (!subcategory.trim()) missingFields.push("subcategoría");
+  const isValid = missingFields.length === 0;
+
+  const handleConfirm = useCallback(() => {
+    const amt = parseFloat(amount);
+    if (!name.trim() || isNaN(amt) || amt <= 0 || !subcategory.trim()) return;
+    setResponded("yes");
+    const parts: string[] = [
+      `nombre: ${name}`,
+      `monto: ${amt}`,
+      `categoría: ${category}`,
+      `subcategoría: ${subcategory}`,
+    ];
+    if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
+    runtime.append({
+      role: "user",
+      content: [{ type: "text", text: `Sí, agregar al portafolio con: ${parts.join(", ")}.` }],
+    });
+  }, [name, amount, category, subcategory, provider, runtime]);
+
+  const handleReject = () => {
+    setResponded("no");
+    runtime.append({
+      role: "user",
+      content: [{ type: "text", text: `No, no agregar "${name}".` }],
+    });
+  };
+
+  useEffect(() => {
+    if (!batch || !product) return;
+    batch.register(cardId, {
+      name,
+      amount: parsedAmount,
+      category,
+      subcategory,
+      provider,
+      isValid,
+      missingFields,
+      responded,
+    });
+    batch.setConfirmFn(cardId, handleConfirm);
+    return () => batch.unregister(cardId);
+  });
+
   if (!product) return null;
 
   const meta = CATEGORY_META[category];
@@ -526,40 +654,9 @@ function ProposeProductCard({
   const subcategoryGroups = CATEGORY_SUBCATEGORIES[category] ?? [];
   const enrichedFields = ENRICHED_FIELDS.filter(({ key }) => product[key]);
 
-  const parsedAmount = parseFloat(amount);
-  const missingFields: string[] = [];
-  if (!name.trim()) missingFields.push("nombre");
-  if (isNaN(parsedAmount) || parsedAmount <= 0) missingFields.push("monto");
-  if (!subcategory.trim()) missingFields.push("subcategoría");
-  const isValid = missingFields.length === 0;
-
   const handleCategoryChange = (next: Category) => {
     setCategory(next);
     setSubcategory("");
-  };
-
-  const handleConfirm = () => {
-    if (!isValid) return;
-    setResponded("yes");
-    const parts: string[] = [
-      `nombre: ${name}`,
-      `monto: ${parsedAmount}`,
-      `categoría: ${category}`,
-      `subcategoría: ${subcategory}`,
-    ];
-    if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
-    runtime.append({
-      role: "user",
-      content: [{ type: "text", text: `Sí, agregar al portafolio con: ${parts.join(", ")}.` }],
-    });
-  };
-
-  const handleReject = () => {
-    setResponded("no");
-    runtime.append({
-      role: "user",
-      content: [{ type: "text", text: `No, no agregar "${name}".` }],
-    });
   };
 
   const editable = responded === null;
@@ -731,6 +828,52 @@ function ProposeProductCard({
   );
 }
 
+function BulkAcceptBar() {
+  const batch = useContext(ProposalBatchContext);
+  if (!batch) return null;
+
+  const entries = Array.from(batch.entries.values());
+  if (entries.length < 2) return null;
+
+  const pending = entries.filter((e) => e.responded === null);
+  if (pending.length === 0) return null;
+
+  const ready = pending.filter((e) => e.isValid);
+  const incomplete = pending.filter((e) => !e.isValid);
+  const allReady = incomplete.length === 0;
+
+  return (
+    <div className="my-2 overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white shadow-sm">
+      <div className="px-4 py-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-semibold text-sabbi-neutral-800">
+            {ready.length} de {pending.length} productos listos
+          </span>
+          <button
+            type="button"
+            onClick={() => batch.confirmAll?.()}
+            disabled={!allReady}
+            className="rounded-lg bg-sabbi-primary px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-sabbi-primary-hover disabled:opacity-40"
+          >
+            Agregar todos
+          </button>
+        </div>
+        {incomplete.length > 0 ? (
+          <div className="flex flex-col gap-1">
+            {incomplete.map((e, i) => (
+              <p key={i} className="text-xs text-amber-600">
+                <span className="font-medium">{e.name || "Sin nombre"}</span>
+                {" — completa: "}
+                {e.missingFields.join(", ")}
+              </p>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 const MarkdownText: FC = () => (
   <MarkdownTextPrimitive className="assistant-markdown" remarkPlugins={[remarkGfm]} />
 );
@@ -781,22 +924,25 @@ const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="mr-auto flex w-full min-w-0 flex-col items-start gap-1">
       <div className="min-w-0 max-w-full px-0 py-2 text-sabbi-neutral-900">
-        <MessagePrimitive.Content
-          components={{
-            Text: MarkdownText,
-            Empty: ThinkingIndicator,
-            Reasoning: ReasoningPart,
-            tools: {
-              by_name: {
-                propose_product: ProposeProductCard,
-                add_product: ToolResultItem,
-                update_product: ToolResultItem,
-                delete_product: ToolResultItem,
+        <ProposalBatchProvider>
+          <MessagePrimitive.Content
+            components={{
+              Text: MarkdownText,
+              Empty: ThinkingIndicator,
+              Reasoning: ReasoningPart,
+              tools: {
+                by_name: {
+                  propose_product: ProposeProductCard,
+                  add_product: ToolResultItem,
+                  update_product: ToolResultItem,
+                  delete_product: ToolResultItem,
+                },
+                Fallback: () => null,
               },
-              Fallback: () => null,
-            },
-          }}
-        />
+            }}
+          />
+          <BulkAcceptBar />
+        </ProposalBatchProvider>
         <MessagePrimitive.Error>
           <ErrorPrimitive.Root className="mt-2 flex flex-col gap-2 rounded-md border border-red-400 bg-red-50 px-3 py-2 text-sm text-red-700">
             <ErrorPrimitive.Message />
