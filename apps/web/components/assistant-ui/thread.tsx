@@ -331,9 +331,12 @@ const UserFileChip: FC<FileMessagePartProps> = ({ filename, mimeType, data }) =>
   );
 };
 
+const messageActionBtn =
+  "rounded-lg p-1.5 text-sabbi-neutral-500 transition-colors hover:bg-sabbi-neutral-200 hover:text-sabbi-primary";
+
 const UserMessage: FC = () => {
   return (
-    <MessagePrimitive.Root className="ml-auto flex max-w-[85%] flex-col items-end gap-1">
+    <MessagePrimitive.Root className="group/msg ml-auto flex max-w-[85%] flex-col items-end gap-1">
       <div className="flex flex-col gap-2 rounded-[18px_18px_4px_18px] bg-sabbi-primary px-4 py-2.5 text-white">
         <MessagePrimitive.Content
           components={{
@@ -358,6 +361,18 @@ const UserMessage: FC = () => {
           )}
         </MessagePrimitive.Attachments>
       </div>
+      <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
+        <ActionBarPrimitive.Copy asChild>
+          <button type="button" className={messageActionBtn} title="Copiar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </ActionBarPrimitive.Copy>
+        <ActionBarPrimitive.Reload asChild>
+          <button type="button" className={messageActionBtn} title="Reintentar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </ActionBarPrimitive.Reload>
+      </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
   );
 };
@@ -660,7 +675,6 @@ function ProposeProductCard({
   useEffect(() => {
     const id = cardId;
     return () => { batchRef.current?.unregister(id); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId]);
 
   useEffect(() => {
@@ -971,7 +985,7 @@ const ReasoningPart: FC<ReasoningMessagePartProps> = ({ text, status }) => {
 
 const AssistantMessage: FC = () => {
   return (
-    <MessagePrimitive.Root className="mr-auto flex w-full min-w-0 flex-col items-start gap-1">
+    <MessagePrimitive.Root className="group/msg mr-auto flex w-full min-w-0 flex-col items-start gap-1">
       <div className="min-w-0 max-w-full px-0 py-2 text-sabbi-neutral-900">
         <ProposalBatchProvider>
           <MessagePrimitive.Content
@@ -1003,6 +1017,18 @@ const AssistantMessage: FC = () => {
           </ErrorPrimitive.Root>
         </MessagePrimitive.Error>
       </div>
+      <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
+        <ActionBarPrimitive.Copy asChild>
+          <button type="button" className={messageActionBtn} title="Copiar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </ActionBarPrimitive.Copy>
+        <ActionBarPrimitive.Reload asChild>
+          <button type="button" className={messageActionBtn} title="Reintentar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </ActionBarPrimitive.Reload>
+      </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
   );
 };

@@ -251,54 +251,14 @@ function AssistantInner() {
     };
   }, [userId, savedThreadId, updateMessages]);
 
-  const onNew = useCallback(
-    async (append: AppendMessage) => {
-      if (!threadId || isRunning) return;
+  const streamMessage = useCallback(
+    async (text: string, opts?: {
+      attachments?: Record<string, unknown>[];
+      prependMessages?: ThreadMessageLike[];
+      userMsg?: ThreadMessageLike;
+    }) => {
+      if (!threadId) return;
 
-      const textPart = append.content.find((p) => p.type === "text");
-      const text = textPart && "text" in textPart ? textPart.text.trim() : "";
-      if (!text) return;
-
-      const attachments: Record<string, unknown>[] | undefined =
-        append.attachments
-          ?.flatMap((att) =>
-            (att.content ?? []).map((c) => {
-              if (c.type === "file" && "data" in c) {
-                return {
-                  type: "file",
-                  data: c.data,
-                  mime_type: "mimeType" in c ? c.mimeType : "application/octet-stream",
-                  metadata: { filename: att.name },
-                };
-              }
-              return null;
-            }),
-          )
-          .filter(Boolean) as Record<string, unknown>[] | undefined;
-
-      const userContent: Array<
-        | { type: "text"; text: string }
-        | { type: "file"; data: string; mimeType: string; filename: string }
-      > = [{ type: "text", text }];
-      if (append.attachments?.length) {
-        for (const att of append.attachments) {
-          const filePart = (att.content ?? []).find(
-            (c): c is { type: "file"; data: string; mimeType?: string } =>
-              c.type === "file" && "data" in c,
-          );
-          userContent.push({
-            type: "file",
-            data: filePart?.data ?? "",
-            mimeType: att.contentType ?? "application/octet-stream",
-            filename: att.name,
-          });
-        }
-      }
-      const userMsg: ThreadMessageLike = {
-        role: "user",
-        id: `user-${Date.now()}`,
-        content: userContent,
-      };
       const streamingId = `assistant-${Date.now()}`;
       const streamingMsg: ThreadMessageLike = {
         role: "assistant",
@@ -306,7 +266,12 @@ function AssistantInner() {
         content: [{ type: "text", text: "" }],
       };
 
-      updateMessages([...msgsRef.current, userMsg, streamingMsg]);
+      const base = opts?.prependMessages ?? msgsRef.current;
+      if (opts?.userMsg) {
+        updateMessages([...base, opts.userMsg, streamingMsg]);
+      } else {
+        updateMessages([...base, streamingMsg]);
+      }
       setIsRunning(true);
       setThinking({ steps: [], reasoning: "", visible: true });
 
@@ -318,7 +283,7 @@ function AssistantInner() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: text,
-              attachments: attachments?.length ? attachments : undefined,
+              attachments: opts?.attachments?.length ? opts.attachments : undefined,
             }),
           },
         );
@@ -396,7 +361,95 @@ function AssistantInner() {
         dispatchPortfolioRefetch();
       }
     },
-    [threadId, isRunning, updateMessages, toast, setThinking],
+    [threadId, updateMessages, toast, setThinking],
+  );
+
+  const onNew = useCallback(
+    async (append: AppendMessage) => {
+      if (!threadId || isRunning) return;
+
+      const textPart = append.content.find((p) => p.type === "text");
+      const text = textPart && "text" in textPart ? textPart.text.trim() : "";
+      if (!text) return;
+
+      const attachments: Record<string, unknown>[] | undefined =
+        append.attachments
+          ?.flatMap((att) =>
+            (att.content ?? []).map((c) => {
+              if (c.type === "file" && "data" in c) {
+                return {
+                  type: "file",
+                  data: c.data,
+                  mime_type: "mimeType" in c ? c.mimeType : "application/octet-stream",
+                  metadata: { filename: att.name },
+                };
+              }
+              return null;
+            }),
+          )
+          .filter(Boolean) as Record<string, unknown>[] | undefined;
+
+      const userContent: Array<
+        | { type: "text"; text: string }
+        | { type: "file"; data: string; mimeType: string; filename: string }
+      > = [{ type: "text", text }];
+      if (append.attachments?.length) {
+        for (const att of append.attachments) {
+          const filePart = (att.content ?? []).find(
+            (c) => c.type === "file" && "data" in c,
+          ) as { type: "file"; data: string; mimeType?: string } | undefined;
+          userContent.push({
+            type: "file",
+            data: filePart?.data ?? "",
+            mimeType: att.contentType ?? "application/octet-stream",
+            filename: att.name,
+          });
+        }
+      }
+      const userMsg: ThreadMessageLike = {
+        role: "user",
+        id: `user-${Date.now()}`,
+        content: userContent,
+      };
+
+      await streamMessage(text, { attachments, userMsg });
+    },
+    [threadId, isRunning, streamMessage],
+  );
+
+  const onReload = useCallback(
+    async (parentId: string | null) => {
+      if (!threadId || isRunning) return;
+
+      const current = msgsRef.current;
+      let userMsgIdx = -1;
+
+      if (parentId) {
+        userMsgIdx = current.findIndex((m) => m.id === parentId);
+      }
+      if (userMsgIdx === -1) {
+        for (let i = current.length - 1; i >= 0; i--) {
+          if (current[i].role === "user") { userMsgIdx = i; break; }
+        }
+      }
+      if (userMsgIdx === -1) return;
+
+      const userMsg = current[userMsgIdx];
+      const textContent = Array.isArray(userMsg.content)
+        ? (userMsg.content as Array<{ type: string; text?: string }>)
+            .filter((p) => p.type === "text")
+            .map((p) => p.text ?? "")
+            .join("")
+            .trim()
+        : typeof userMsg.content === "string"
+          ? userMsg.content.trim()
+          : "";
+      if (!textContent) return;
+
+      const kept = current.slice(0, userMsgIdx + 1);
+      await streamMessage(textContent, { prependMessages: kept });
+    },
+    [threadId, isRunning, streamMessage],
   );
 
   const runtime = useExternalStoreRuntime({
@@ -404,6 +457,7 @@ function AssistantInner() {
     convertMessage: (m) => m,
     setMessages: updateMessages,
     onNew,
+    onReload,
     isRunning,
     adapters: {
       attachments: attachmentAdapter,
