@@ -2,10 +2,10 @@
 
 :root {
   /* Warm neutral surface tokens */
-  --bg-page: #f6f5f2;
+  --bg-page: #F2EDE4;
   --bg-card: #ffffff;
-  --bg-panel: #fafaf8;
-  --bg-chat: #f0efec;
+  --bg-panel: #F7F4EF;
+  --bg-chat: #EBE7DF;
 
   --text-1: #1a1a18;
   --text-2: #6b6a65;
@@ -14,11 +14,11 @@
   --border: #e2e1dc;
   --border-strong: #cccbc5;
 
-  /* Accent (indigo) */
-  --accent: #4338ca;
-  --accent-hover: #3730a3;
-  --accent-light: #eef2ff;
-  --accent-text: #3730a3;
+  /* Accent (brand green) */
+  --accent: #2B3C2B;
+  --accent-hover: #1E2E1E;
+  --accent-light: #EFF3EC;
+  --accent-text: #1E3526;
 
   /* Status colors */
   --danger: #dc2626;
@@ -34,6 +34,12 @@
   --sabbi-primary: var(--accent);
   --sabbi-primary-hover: var(--accent-hover);
   --sabbi-primary-soft: var(--accent-light);
+
+  /* SABBI brand tokens */
+  --sabbi-green: #2B3C2B;
+  --sabbi-lime: #C5D82D;
+  --sabbi-gold: #D4A843;
+  --sabbi-cream: #F2EDE4;
 
   /* Portfolio category taxonomy (6 categories) — accent / badge bg / badge text */
   --sabbi-cat-directas: #c2410c; /* Inversiones directas */
@@ -91,6 +97,11 @@
   --color-sabbi-primary: var(--sabbi-primary);
   --color-sabbi-primary-hover: var(--sabbi-primary-hover);
   --color-sabbi-primary-soft: var(--sabbi-primary-soft);
+
+  --color-sabbi-green: var(--sabbi-green);
+  --color-sabbi-lime: var(--sabbi-lime);
+  --color-sabbi-gold: var(--sabbi-gold);
+  --color-sabbi-cream: var(--sabbi-cream);
 
   --color-sabbi-cat-directas: var(--sabbi-cat-directas);
   --color-sabbi-cat-privados: var(--sabbi-cat-privados);

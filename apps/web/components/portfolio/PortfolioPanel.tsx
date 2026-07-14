@@ -89,7 +89,10 @@ export const PortfolioPanel: FC = () => {
         </div>
       ) : isEmpty ? (
         <div className="m-auto flex max-w-sm flex-col items-center gap-3 text-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-sabbi-primary-soft text-sabbi-primary">
+          <div
+            className="flex size-14 items-center justify-center rounded-full"
+            style={{ backgroundColor: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
+          >
             <PieIcon size={26} />
           </div>
           <p className="text-base font-medium text-sabbi-neutral-900">
@@ -102,7 +105,8 @@ export const PortfolioPanel: FC = () => {
           <button
             type="button"
             onClick={() => openCreateModal()}
-            className="mt-2 rounded-lg bg-sabbi-primary px-4 py-2 text-sm font-medium text-white hover:bg-sabbi-primary-hover"
+            className="mt-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
           >
             Agregar producto manualmente
           </button>

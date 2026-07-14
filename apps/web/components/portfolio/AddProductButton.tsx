@@ -15,7 +15,7 @@ export const AddProductButton: FC<AddProductButtonProps> = ({ onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="flex min-h-[140px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-sabbi-neutral-300 text-sm font-medium text-sabbi-neutral-600 transition-colors hover:border-sabbi-primary hover:bg-sabbi-primary-soft hover:text-sabbi-primary"
+    className="flex min-h-[140px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-sabbi-neutral-300 text-sm font-medium text-sabbi-neutral-600 transition-colors hover:border-sabbi-lime hover:bg-[color-mix(in_srgb,var(--sabbi-lime)_15%,white)] hover:text-sabbi-green"
   >
     <PlusIcon size={20} />
     Agregar producto

@@ -48,8 +48,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <div className="mb-6 flex items-center gap-2 px-2">
           <div
             aria-hidden="true"
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #7c3aed, #4338ca)" }}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+            style={{ background: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
           >
             S
           </div>
@@ -66,9 +66,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 aria-current={active ? "page" : undefined}
                 className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   active
-                    ? "bg-sabbi-primary-soft text-sabbi-primary"
+                    ? "text-sabbi-neutral-900"
                     : "text-sabbi-neutral-600 hover:bg-sabbi-neutral-50"
                 }`}
+                style={active ? { backgroundColor: "var(--sabbi-lime)" } : undefined}
               >
                 {link.label}
               </Link>

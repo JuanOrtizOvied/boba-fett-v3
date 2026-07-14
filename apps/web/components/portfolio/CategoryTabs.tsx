@@ -65,18 +65,20 @@ const Tab: FC<{
     onClick={onClick}
     style={
       active
-        ? {
-            backgroundColor: color ? `color-mix(in srgb, ${color} 15%, white)` : undefined,
-            color,
-            borderColor: color,
-          }
+        ? color
+          ? {
+              backgroundColor: `color-mix(in srgb, ${color} 15%, white)`,
+              color,
+              borderColor: color,
+            }
+          : { backgroundColor: "var(--sabbi-lime)" }
         : undefined
     }
     className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
       active
         ? color
           ? "border"
-          : "border-transparent bg-sabbi-primary-soft text-sabbi-primary"
+          : "border-transparent text-sabbi-neutral-900"
         : "border-sabbi-neutral-200 text-sabbi-neutral-600 hover:bg-sabbi-neutral-50"
     }`}
   >

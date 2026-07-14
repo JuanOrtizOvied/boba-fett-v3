@@ -34,8 +34,8 @@ export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView }) => {
       <div className="flex items-center gap-2">
         <div
           aria-hidden="true"
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white"
-          style={{ background: "linear-gradient(135deg, #7c3aed, #4338ca)" }}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+          style={{ background: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
         >
           S
         </div>
@@ -75,7 +75,8 @@ export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView }) => {
             disabled
             aria-label="Enviar a SABBI"
             aria-describedby="sabbi-submit-tooltip"
-            className="flex items-center gap-1.5 rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
           >
             <SendIcon size={16} />
             <span className="hidden sm:inline">Enviar a SABBI</span>
@@ -120,9 +121,10 @@ const TabButton: FC<{
     aria-pressed={active}
     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
       active
-        ? "bg-sabbi-primary-soft text-sabbi-primary"
+        ? "text-sabbi-neutral-900"
         : "text-sabbi-neutral-600 hover:bg-sabbi-neutral-50"
     }`}
+    style={active ? { backgroundColor: "var(--sabbi-lime)" } : undefined}
   >
     {children}
   </button>

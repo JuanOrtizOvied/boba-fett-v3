@@ -4,8 +4,8 @@
  * by index so the same composition always renders with the same colors.
  */
 const COMPOSITION_PALETTE = [
-  "#7c3aed",
-  "#6d28d9",
+  "#2B3C2B",
+  "#3D5A3D",
   "#0d9488",
   "#2563eb",
   "#64748b",
