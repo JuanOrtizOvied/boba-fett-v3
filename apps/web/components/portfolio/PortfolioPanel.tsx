@@ -77,7 +77,7 @@ export const PortfolioPanel: FC = () => {
   const isEmpty = !isLoading && products.length === 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-sabbi-neutral-50 px-6 py-6">
+    <div className="flex h-full min-h-0 flex-col bg-sabbi-neutral-50">
       {isInitialLoading ? (
         <div
           className="m-auto flex flex-col items-center gap-3"
@@ -88,7 +88,7 @@ export const PortfolioPanel: FC = () => {
           <p className="text-sm text-sabbi-neutral-600">Cargando portafolio…</p>
         </div>
       ) : isEmpty ? (
-        <div className="m-auto flex max-w-sm flex-col items-center gap-3 text-center">
+        <div className="m-auto flex max-w-sm flex-col items-center gap-3 px-6 text-center">
           <div
             className="flex size-14 items-center justify-center rounded-full"
             style={{ backgroundColor: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
@@ -112,48 +112,54 @@ export const PortfolioPanel: FC = () => {
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
-          <MetricsRow
-            totalAmount={totalAmount}
-            productCount={productCount}
-            largestPosition={largestPosition}
-            categoriesUsedCount={categoriesUsedCount}
-          />
+        <>
+          <div className="shrink-0 border-b border-sabbi-neutral-200 bg-sabbi-neutral-50 px-6 pt-6 pb-5">
+            <div className="flex flex-col gap-5">
+              <MetricsRow
+                totalAmount={totalAmount}
+                productCount={productCount}
+                largestPosition={largestPosition}
+                categoriesUsedCount={categoriesUsedCount}
+              />
 
-          <CategoryTabs
-            activeCategory={activeCategory}
-            onChange={setActiveCategory}
-            totalCount={productCount}
-            countsByCategory={countsByCategory}
-          />
-
-          {error && (
-            <p className="text-sm text-red-600">
-              No se pudo cargar el portafolio: {error}
-            </p>
-          )}
-
-          <div className="flex flex-col gap-6">
-            {visibleCategories.map((category) => {
-              const categoryProducts = productsByCategory[category];
-              if (activeCategory === "todos" && categoryProducts.length === 0) {
-                return null;
-              }
-              return (
-                <CategorySection
-                  key={category}
-                  category={category}
-                  index={CATEGORY_ORDER.indexOf(category)}
-                  products={categoryProducts}
-                  newProductIds={newProductIds}
-                  onEditProduct={openEditModal}
-                  onDeleteProduct={handleDeleteProduct}
-                  onAddProduct={openCreateModal}
-                />
-              );
-            })}
+              <CategoryTabs
+                activeCategory={activeCategory}
+                onChange={setActiveCategory}
+                totalCount={productCount}
+                countsByCategory={countsByCategory}
+              />
+            </div>
           </div>
-        </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            {error && (
+              <p className="mb-4 text-sm text-red-600">
+                No se pudo cargar el portafolio: {error}
+              </p>
+            )}
+
+            <div className="flex flex-col gap-6">
+              {visibleCategories.map((category) => {
+                const categoryProducts = productsByCategory[category];
+                if (activeCategory === "todos" && categoryProducts.length === 0) {
+                  return null;
+                }
+                return (
+                  <CategorySection
+                    key={category}
+                    category={category}
+                    index={CATEGORY_ORDER.indexOf(category)}
+                    products={categoryProducts}
+                    newProductIds={newProductIds}
+                    onEditProduct={openEditModal}
+                    onDeleteProduct={handleDeleteProduct}
+                    onAddProduct={openCreateModal}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
 
       <EditProductModal
