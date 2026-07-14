@@ -23,6 +23,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
     "ruff>=0.6",
 ]
 
@@ -43,3 +45,10 @@ select = ["E", "F", "I"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+# Real-Postgres fixtures (`tests/conftest.py`) hold one asyncpg connection
+# open for the whole session; asyncpg connections are bound to the event
+# loop that created them, so fixtures AND tests must share a single
+# session-scoped loop instead of pytest-asyncio's per-function default.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

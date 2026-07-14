@@ -462,7 +462,7 @@ type ProposeToolResult =
 
 // --- Proposal Batch Context -------------------------------------------------
 
-interface ProposalEntry {
+export interface ProposalEntry {
   name: string;
   amount: number;
   category: string;
@@ -486,9 +486,14 @@ interface ProposalBatchCtx {
   entries: Map<string, ProposalEntry>;
 }
 
-const ProposalBatchContext = createContext<ProposalBatchCtx | null>(null);
+/**
+ * Exported (alongside {@link ProposalBatchProvider}) so component tests can
+ * wrap `ProposeProductCard`/`BulkAcceptBar` and inspect batch registration
+ * state directly — see `__tests__/propose-product-card.test.tsx`.
+ */
+export const ProposalBatchContext = createContext<ProposalBatchCtx | null>(null);
 
-function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
+export function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
   const entriesRef = useRef(new Map<string, ProposalEntry>());
   const confirmFnsRef = useRef(new Map<string, CardConfirmFns>());
   const [revision, forceUpdate] = useState(0);
@@ -621,7 +626,7 @@ const ENRICHED_FIELDS: { key: EnrichedFieldKey; label: string }[] = [
   { key: "return_rate", label: "Rentabilidad histórica" },
 ];
 
-function ProposeProductCard({
+export function ProposeProductCard({
   result,
 }: ToolCallMessagePartProps<Record<string, unknown>, ProposeToolResult>) {
   const runtime = useThreadRuntime();
@@ -884,7 +889,7 @@ function ProposeProductCard({
   );
 }
 
-function BulkAcceptBar() {
+export function BulkAcceptBar() {
   const runtime = useThreadRuntime();
   const batch = useContext(ProposalBatchContext);
   if (!batch) return null;
