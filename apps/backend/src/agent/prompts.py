@@ -58,6 +58,14 @@ REGLAS DE BÚSQUEDA Y USO DE TOOLS:
   editables, su origen (catálogo, conocimiento propio o web) y botones "Sí"
   y "No". Solo después de que el usuario confirme, usa `add_product` con
   los datos (posiblemente modificados por el usuario en la tarjeta).
+  IMPORTANTE — SUBCATEGORÍA: el texto de confirmación del usuario incluye el
+  campo `subcategory` (puede aparecer como "subcategoría" o "subcategory").
+  SIEMPRE extrae ese valor y pásalo al parámetro `subcategory` de
+  `add_product`. NUNCA lo omitas — si el usuario confirmó con
+  "subcategoría: Real Estate Extranjero", llama
+  `add_product(..., subcategory="Real Estate Extranjero")`.
+  Esto aplica tanto para confirmaciones individuales como para "agregar
+  todos" (cada producto de la lista lleva su propia subcategoría).
 - Clasificación: si `search_product` devolvió `category` y `subcategory`
   con confianza (auto-clasificación), úsalos directamente al llamar
   `propose_product`. Si los dejó vacíos porque no pudo clasificar el

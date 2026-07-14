@@ -151,6 +151,7 @@ async def add_product(
     category: str,
     provider: str = "",
     composition: list[dict[str, Any]] | None = None,
+    subcategory: str = "",
     *,
     config: RunnableConfig,
 ) -> dict:
@@ -163,6 +164,7 @@ async def add_product(
         provider: Provider or fund manager name.
         composition: List of {name, percentage} asset class allocations. When
             omitted, the product is treated as 100% allocated to itself.
+        subcategory: Taxonomy leaf subcategory (e.g. 'Real Estate Extranjero').
     """
     repo = await _repository()
     user_id = _user_id(config)
@@ -174,6 +176,7 @@ async def add_product(
             provider=provider,
             amount=amount,
             category=category,
+            subcategory=subcategory,
             composition=comp,
         ),
     )

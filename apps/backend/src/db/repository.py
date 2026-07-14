@@ -29,14 +29,15 @@ class ProductRepository:
         product_id = f"prod_{uuid.uuid4().hex[:8]}"
         await self.pool.execute(
             """INSERT INTO products
-               (id, user_id, name, provider, amount, category, composition)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)""",
+               (id, user_id, name, provider, amount, category, subcategory, composition)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
             product_id,
             user_id,
             data.name,
             data.provider,
             data.amount,
             data.category,
+            data.subcategory,
             json.dumps([a.model_dump() for a in data.composition]),
         )
         return Product(id=product_id, user_id=user_id, **data.model_dump())
@@ -103,5 +104,6 @@ class ProductRepository:
             provider=row["provider"],
             amount=float(row["amount"]),
             category=row["category"],
+            subcategory=row["subcategory"] or "",
             composition=[AssetAllocation(**a) for a in (comp or [])],
         )

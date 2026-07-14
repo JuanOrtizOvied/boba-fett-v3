@@ -198,19 +198,19 @@ def _classify(result: SearchResult) -> None:
     if not haystack:
         return
 
-    matches: set[tuple[str, str]] = set()
+    matches: set[tuple[str, str, str]] = set()
     for category_key, info in CATEGORIES.items():
-        for leaves in info["groups"].values():
+        for group_name, leaves in info["groups"].items():
             for leaf in leaves:
                 if leaf and leaf.lower() in haystack:
-                    matches.add((category_key, leaf))
+                    matches.add((category_key, group_name, leaf))
 
     if len(matches) != 1:
         return
 
-    category_key, leaf = next(iter(matches))
+    category_key, group_name, leaf = next(iter(matches))
     result.category = category_key
-    result.subcategory = leaf
+    result.subcategory = leaf if leaf == group_name else f"{group_name} {leaf}"
     result.provenance["category"] = result.primary_source
     result.provenance["subcategory"] = result.primary_source
 

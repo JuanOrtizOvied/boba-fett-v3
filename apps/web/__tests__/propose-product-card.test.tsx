@@ -32,15 +32,19 @@ type ProductInput = {
   provider?: string;
 };
 
+let cardCounter = 0;
+
 function cardProps(product: ProductInput) {
   return {
     result: { status: "proposed", product },
+    toolCallId: `tc_${++cardCounter}`,
   } as unknown as ComponentProps<typeof ProposeProductCard>;
 }
 
 function errorCardProps() {
   return {
     result: { status: "error", message: "boom" },
+    toolCallId: `tc_${++cardCounter}`,
   } as unknown as ComponentProps<typeof ProposeProductCard>;
 }
 
@@ -78,7 +82,7 @@ describe("ProposeProductCard rendering", () => {
           name: "BlackRock Fund",
           amount: 1000,
           category: "publicos",
-          subcategory: "US Treasuries",
+          subcategory: "Renta Fija US Treasuries",
         })}
       />,
     );
@@ -86,7 +90,7 @@ describe("ProposeProductCard rendering", () => {
     expect(screen.getByLabelText("Nombre")).toHaveValue("BlackRock Fund");
     expect(screen.getByLabelText("Monto (USD)")).toHaveValue(1000);
     expect(screen.getByLabelText("Categoría")).toHaveValue("publicos");
-    expect(screen.getByLabelText(/Subcategoría/)).toHaveValue("US Treasuries");
+    expect(screen.getByLabelText(/Subcategoría/)).toHaveValue("Renta Fija US Treasuries");
     expect(screen.getByText("Merc. públicos")).toBeInTheDocument();
     expect(screen.queryByText(/Completa:/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sí, agregar" })).not.toBeDisabled();
@@ -162,7 +166,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
       content: [
         {
           type: "text",
-          text: "Sí, agregar al portafolio con: nombre: BlackRock Fund, monto: 1000, categoría: publicos, subcategoría: Renta Fija.",
+          text: "Sí, agregar al portafolio con: nombre: BlackRock Fund, monto: 1000, categoría: publicos, subcategory: Renta Fija.",
         },
       ],
     });

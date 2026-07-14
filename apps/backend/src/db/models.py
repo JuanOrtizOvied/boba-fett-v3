@@ -18,6 +18,7 @@ class Product(BaseModel):
     provider: str = ""
     amount: float = Field(gt=0)
     category: str = Field(description="One of: directas, privados, club, publicos, otros, cash")
+    subcategory: str = ""
     composition: list[AssetAllocation] = Field(default_factory=list)
 
 
@@ -26,6 +27,7 @@ class ProductCreate(BaseModel):
     provider: str = ""
     amount: float = Field(gt=0)
     category: str
+    subcategory: str = ""
     composition: list[AssetAllocation] = Field(default_factory=list)
 
 
@@ -34,6 +36,7 @@ class ProductUpdate(BaseModel):
     provider: str | None = None
     amount: float | None = None
     category: str | None = None
+    subcategory: str | None = None
     composition: list[AssetAllocation] | None = None
 
 

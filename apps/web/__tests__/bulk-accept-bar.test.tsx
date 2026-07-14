@@ -30,9 +30,12 @@ type ProductInput = {
   provider?: string;
 };
 
+let cardCounter = 0;
+
 function cardProps(product: ProductInput) {
   return {
     result: { status: "proposed", product },
+    toolCallId: `tc_${++cardCounter}`,
   } as unknown as ComponentProps<typeof ProposeProductCard>;
 }
 
@@ -146,8 +149,8 @@ describe("BulkAcceptBar combined confirmation", () => {
           type: "text",
           text:
             "Sí, agregar todos al portafolio:\n" +
-            "nombre: Fund A, monto: 500, categoría: cash, subcategoría: Depósitos a plazo\n" +
-            "nombre: Fund B, monto: 800, categoría: cash, subcategoría: Fondos de Money Market",
+            "nombre: Fund A, monto: 500, categoría: cash, subcategory: Depósitos a plazo\n" +
+            "nombre: Fund B, monto: 800, categoría: cash, subcategory: Fondos de Money Market",
         },
       ],
     });

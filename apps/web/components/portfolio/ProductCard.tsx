@@ -124,9 +124,11 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
               <p className="truncate text-sm font-semibold text-sabbi-neutral-900">
                 {product.name}
               </p>
-              {product.provider && (
+              {(product.subcategory || product.provider) && (
                 <p className="truncate text-xs text-sabbi-neutral-600">
-                  {product.provider}
+                  {product.subcategory && product.provider
+                    ? `${product.subcategory} · ${product.provider}`
+                    : product.subcategory || product.provider}
                 </p>
               )}
             </div>
@@ -154,35 +156,47 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
             {formatUsd(product.amount)}
           </p>
 
-          {product.composition.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <div className="flex h-2 overflow-hidden rounded-full bg-sabbi-neutral-100">
-                {product.composition.map((asset, index) => (
-                  <div
-                    key={`${asset.name}-${index}`}
-                    style={{
-                      width: `${asset.percentage}%`,
-                      backgroundColor: compositionColor(index),
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {product.composition.map((asset, index) => (
-                  <span
-                    key={`${asset.name}-${index}`}
-                    className="flex items-center gap-1 text-xs text-sabbi-neutral-600"
-                  >
-                    <span
-                      className="size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: compositionColor(index) }}
+          {product.composition.length > 0 && (() => {
+            const isSingleSelf =
+              product.composition.length === 1 &&
+              product.composition[0].percentage >= 99.9 &&
+              product.composition[0].name === product.name;
+            return (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex h-2 overflow-hidden rounded-full bg-sabbi-neutral-100">
+                  {product.composition.map((asset, index) => (
+                    <div
+                      key={`${asset.name}-${index}`}
+                      style={{
+                        width: `${asset.percentage}%`,
+                        backgroundColor: compositionColor(index),
+                      }}
                     />
-                    {asset.name} · {asset.percentage.toFixed(0)}%
+                  ))}
+                </div>
+                {isSingleSelf && product.subcategory ? (
+                  <span className="text-xs text-sabbi-neutral-600">
+                    {product.subcategory}
                   </span>
-                ))}
+                ) : (
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {product.composition.map((asset, index) => (
+                      <span
+                        key={`${asset.name}-${index}`}
+                        className="flex items-center gap-1 text-xs text-sabbi-neutral-600"
+                      >
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: compositionColor(index) }}
+                        />
+                        {asset.name} · {asset.percentage.toFixed(0)}%
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <span
             className="w-fit rounded-full px-2 py-0.5 text-xs font-medium text-white"

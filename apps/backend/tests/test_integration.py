@@ -146,6 +146,7 @@ def _fake_row(**overrides) -> dict:
         "provider": "Provider A",
         "amount": 10000.0,
         "category": "directas",
+        "subcategory": "",
         "composition": json.dumps([{"name": "Fund A", "percentage": 100}]),
     }
     row.update(overrides)

@@ -5,7 +5,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -356,7 +355,7 @@ function parseProductLine(line: string): ParsedProduct | null {
     nombre: fields.nombre,
     monto: fields.monto,
     categoría: fields["categoría"] ?? "",
-    subcategoría: fields["subcategoría"] ?? "",
+    subcategoría: fields["subcategoría"] ?? fields["subcategory"] ?? "",
     proveedor: fields.proveedor,
   };
 }
@@ -551,6 +550,10 @@ type ProposeToolResult =
 
 // --- Proposal Batch Context -------------------------------------------------
 
+// Module-level set — survives provider remounts caused by assistant-ui
+// re-rendering message components after runtime.append().
+const _globalRespondedIds = new Set<string>();
+
 export interface ProposalEntry {
   name: string;
   amount: number;
@@ -573,6 +576,7 @@ interface ProposalBatchCtx {
   confirmAll: (() => string) | null;
   setConfirmFn: (id: string, fns: CardConfirmFns) => void;
   entries: Map<string, ProposalEntry>;
+  respondedIds: Set<string>;
 }
 
 /**
@@ -585,6 +589,7 @@ export const ProposalBatchContext = createContext<ProposalBatchCtx | null>(null)
 export function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
   const entriesRef = useRef(new Map<string, ProposalEntry>());
   const confirmFnsRef = useRef(new Map<string, CardConfirmFns>());
+  const respondedIdsRef = useRef(new Set<string>());
   const [revision, forceUpdate] = useState(0);
 
   const register = useCallback((id: string, entry: ProposalEntry) => {
@@ -628,7 +633,12 @@ export function ProposalBatchProvider({ children }: { children: React.ReactNode 
         if (!fns) continue;
         parts.push(fns.getText());
         fns.markDone();
+        respondedIdsRef.current.add(id);
+        _globalRespondedIds.add(id);
+        const entry = entriesRef.current.get(id);
+        if (entry) entriesRef.current.set(id, { ...entry, responded: "yes" });
       }
+      forceUpdate((n) => n + 1);
       return `Sí, agregar todos al portafolio:\n${parts.join("\n")}`;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -641,6 +651,7 @@ export function ProposalBatchProvider({ children }: { children: React.ReactNode 
       confirmAll,
       setConfirmFn,
       entries: entriesRef.current,
+      respondedIds: respondedIdsRef.current,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [register, unregister, confirmAll, setConfirmFn, revision],
@@ -717,13 +728,15 @@ const ENRICHED_FIELDS: { key: EnrichedFieldKey; label: string }[] = [
 
 export function ProposeProductCard({
   result,
+  toolCallId,
 }: ToolCallMessagePartProps<Record<string, unknown>, ProposeToolResult>) {
   const runtime = useThreadRuntime();
   const batch = useContext(ProposalBatchContext);
   const batchRef = useRef(batch);
   batchRef.current = batch;
-  const cardId = useId();
-  const [responded, setResponded] = useState<"yes" | "no" | null>(null);
+  const cardId = toolCallId;
+  const [localResponded, setLocalResponded] = useState<"yes" | "no" | null>(null);
+  const responded = localResponded ?? (_globalRespondedIds.has(toolCallId) ? "yes" : null);
 
   const parsed = parseToolResult<ProposeToolResult>(result);
   const product = parsed?.status === "proposed" ? parsed.product : null;
@@ -744,22 +757,26 @@ export function ProposeProductCard({
   const handleConfirm = useCallback(() => {
     const amt = parseFloat(amount);
     if (!name.trim() || isNaN(amt) || amt <= 0 || !subcategory.trim()) return;
-    setResponded("yes");
+    setLocalResponded("yes");
+    _globalRespondedIds.add(cardId);
+    batchRef.current?.respondedIds.add(cardId);
     const parts: string[] = [
       `nombre: ${name}`,
       `monto: ${amt}`,
       `categoría: ${category}`,
-      `subcategoría: ${subcategory}`,
+      `subcategory: ${subcategory}`,
     ];
     if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
     runtime.append({
       role: "user",
       content: [{ type: "text", text: `Sí, agregar al portafolio con: ${parts.join(", ")}.` }],
     });
-  }, [name, amount, category, subcategory, provider, runtime]);
+  }, [name, amount, category, subcategory, provider, runtime, cardId]);
 
   const handleReject = () => {
-    setResponded("no");
+    setLocalResponded("no");
+    _globalRespondedIds.add(cardId);
+    batchRef.current?.respondedIds.add(cardId);
     runtime.append({
       role: "user",
       content: [{ type: "text", text: `No, no agregar "${name}".` }],
@@ -784,9 +801,9 @@ export function ProposeProductCard({
       responded,
     });
     batchRef.current.setConfirmFn(cardId, {
-      markDone: () => setResponded("yes"),
+      markDone: () => setLocalResponded("yes"),
       getText: () => {
-        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${category}`, `subcategoría: ${subcategory}`];
+        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${category}`, `subcategory: ${subcategory}`];
         if (provider.trim()) p.push(`proveedor: ${provider.trim()}`);
         return p.join(", ");
       },
@@ -916,11 +933,14 @@ export function ProposeProductCard({
               </option>
               {subcategoryGroups.map(({ group, leaves }) => (
                 <optgroup key={group} label={group}>
-                  {leaves.map((leaf) => (
-                    <option key={leaf} value={leaf}>
-                      {leaf}
-                    </option>
-                  ))}
+                  {leaves.map((leaf) => {
+                    const val = leaf === group ? leaf : `${group} ${leaf}`;
+                    return (
+                      <option key={leaf} value={val}>
+                        {leaf}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               ))}
             </select>

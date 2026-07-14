@@ -82,9 +82,9 @@ def test_category_sheet_row_count_matches_products_plus_total(sample_products):
     assert ws.max_row == 3
     assert ws.cell(row=1, column=1).value == "Nombre"
     assert ws.cell(row=2, column=1).value == "Accionariado XYZ"
-    assert ws.cell(row=2, column=3).value == 20_000
+    assert ws.cell(row=2, column=4).value == 20_000
     assert ws.cell(row=3, column=1).value == "Total"
-    assert ws.cell(row=3, column=3).value == 20_000
+    assert ws.cell(row=3, column=4).value == 20_000
 
 
 def test_summary_sheet_totals_match_input_products(sample_products):

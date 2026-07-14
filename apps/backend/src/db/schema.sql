@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS products (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+ALTER TABLE products ADD COLUMN IF NOT EXISTS subcategory TEXT DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;

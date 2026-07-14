@@ -24,6 +24,7 @@ export interface Product {
   provider: string;
   amount: number;
   category: Category;
+  subcategory: string;
   composition: AssetAllocation[];
 }
 
@@ -32,6 +33,7 @@ export interface ProductCreateInput {
   provider?: string;
   amount: number;
   category: Category;
+  subcategory?: string;
   composition: AssetAllocation[];
 }
 
@@ -40,6 +42,7 @@ export interface ProductUpdateInput {
   provider?: string;
   amount?: number;
   category?: Category;
+  subcategory?: string;
   composition?: AssetAllocation[];
 }
 
