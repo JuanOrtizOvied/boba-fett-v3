@@ -17,6 +17,7 @@ import type {
   AttachmentAdapter,
   CompleteAttachment,
   PendingAttachment,
+  TextMessagePartProps,
   ToolCallMessagePartProps,
   EmptyMessagePartProps,
   ReasoningMessagePartProps,
@@ -294,9 +295,10 @@ const UserFileChip: FC<FileMessagePartProps> = ({ filename, mimeType, data }) =>
   }
 
   if (isImage && data) {
+    const imgSrc = data.startsWith("data:") ? data : `data:${mimeType};base64,${data}`;
     return (
       <div className="w-full max-w-xs overflow-hidden rounded-lg border border-white/20">
-        <img src={data} alt={label} className="max-h-48 w-full object-contain" />
+        <img src={imgSrc} alt={label} className="max-h-48 w-full object-contain" />
         <div className="flex items-center justify-between bg-white/[.12] px-3 py-1.5">
           <span className="truncate text-xs font-medium">{label}</span>
           <button
@@ -334,12 +336,99 @@ const UserFileChip: FC<FileMessagePartProps> = ({ filename, mimeType, data }) =>
 const messageActionBtn =
   "rounded-lg p-1.5 text-sabbi-neutral-500 transition-colors hover:bg-sabbi-neutral-200 hover:text-sabbi-primary";
 
+type ParsedProduct = {
+  nombre: string;
+  monto: string;
+  categoría: string;
+  subcategoría: string;
+  proveedor?: string;
+};
+
+function parseProductLine(line: string): ParsedProduct | null {
+  const fields: Record<string, string> = {};
+  for (const pair of line.split(/,\s*/)) {
+    const idx = pair.indexOf(":");
+    if (idx === -1) continue;
+    fields[pair.slice(0, idx).trim().toLowerCase()] = pair.slice(idx + 1).trim();
+  }
+  if (!fields.nombre || !fields.monto) return null;
+  return {
+    nombre: fields.nombre,
+    monto: fields.monto,
+    categoría: fields["categoría"] ?? "",
+    subcategoría: fields["subcategoría"] ?? "",
+    proveedor: fields.proveedor,
+  };
+}
+
+function formatAmount(raw: string): string {
+  const num = parseFloat(raw);
+  if (isNaN(num)) return raw;
+  return `$${num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function categoryShortLabel(cat: string): string {
+  const key = cat.toLowerCase().trim();
+  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  return meta?.shortLabel ?? cat;
+}
+
+function categoryCssVars(cat: string) {
+  const key = cat.toLowerCase().trim();
+  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  if (!meta) return { bg: "rgba(255,255,255,0.15)", text: "white" };
+  return { bg: `var(${meta.bgCssVar})`, text: `var(${meta.textCssVar})` };
+}
+
+const PortfolioConfirmTable: FC<{ products: ParsedProduct[]; header: string }> = ({ products, header }) => (
+  <div className="flex flex-col gap-2">
+    <span className="text-sm font-medium">{header}</span>
+    <div className="overflow-hidden rounded-lg border border-white/20 bg-white/[.08]">
+      {products.map((p, i) => {
+        const vars = categoryCssVars(p.categoría);
+        return (
+          <div
+            key={i}
+            className={`flex items-center gap-3 px-3 py-2 text-xs ${i > 0 ? "border-t border-white/10" : ""}`}
+          >
+            <span
+              className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight"
+              style={{ backgroundColor: vars.bg, color: vars.text }}
+            >
+              {categoryShortLabel(p.categoría)}
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">{p.nombre}</span>
+            <span className="shrink-0 tabular-nums font-semibold">{formatAmount(p.monto)}</span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+const UserTextPart: FC<TextMessagePartProps> = ({ text }) => {
+  const bulkMatch = text.match(/^(Sí, agregar todos al portafolio):\n(.+)/s);
+  if (bulkMatch) {
+    const products = bulkMatch[2].split("\n").map(parseProductLine).filter(Boolean) as ParsedProduct[];
+    if (products.length > 0) return <PortfolioConfirmTable products={products} header={bulkMatch[1]} />;
+  }
+
+  const singleMatch = text.match(/^(Sí, agregar al portafolio) con: (.+)\.$/);
+  if (singleMatch) {
+    const product = parseProductLine(singleMatch[2]);
+    if (product) return <PortfolioConfirmTable products={[product]} header={singleMatch[1]} />;
+  }
+
+  return <p className="whitespace-pre-wrap">{text}</p>;
+};
+
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="group/msg ml-auto flex max-w-[85%] flex-col items-end gap-1">
       <div className="flex flex-col gap-2 rounded-[18px_18px_4px_18px] bg-sabbi-primary px-4 py-2.5 text-white">
         <MessagePrimitive.Content
           components={{
+            Text: UserTextPart,
             Image: UserImagePart,
             File: UserFileChip,
           }}

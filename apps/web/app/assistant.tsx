@@ -391,6 +391,7 @@ function AssistantInner() {
 
       const userContent: Array<
         | { type: "text"; text: string }
+        | { type: "image"; image: string }
         | { type: "file"; data: string; mimeType: string; filename: string }
       > = [{ type: "text", text }];
       if (append.attachments?.length) {
@@ -398,12 +399,20 @@ function AssistantInner() {
           const filePart = (att.content ?? []).find(
             (c) => c.type === "file" && "data" in c,
           ) as { type: "file"; data: string; mimeType?: string } | undefined;
-          userContent.push({
-            type: "file",
-            data: filePart?.data ?? "",
-            mimeType: att.contentType ?? "application/octet-stream",
-            filename: att.name,
-          });
+          const mime = att.contentType ?? "application/octet-stream";
+          if (mime.startsWith("image/") && filePart?.data) {
+            userContent.push({
+              type: "image",
+              image: `data:${mime};base64,${filePart.data}`,
+            });
+          } else {
+            userContent.push({
+              type: "file",
+              data: filePart?.data ?? "",
+              mimeType: mime,
+              filename: att.name,
+            });
+          }
         }
       }
       const userMsg: ThreadMessageLike = {
