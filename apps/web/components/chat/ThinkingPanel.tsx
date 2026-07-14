@@ -54,31 +54,60 @@ export function useThinking(): ThinkingContextValue {
 
 export const ThinkingPanel: FC = () => {
   const { thinking } = useThinking();
+  const [stepsExpanded, setStepsExpanded] = useState(false);
   const [reasoningExpanded, setReasoningExpanded] = useState(false);
 
   if (!thinking.visible || thinking.steps.length === 0) return null;
 
+  const currentStep =
+    thinking.steps.findLast((s) => !s.completed) ??
+    thinking.steps[thinking.steps.length - 1];
+
   return (
     <div className="animate-card-enter mx-auto mb-3 w-full max-w-[640px] rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-4 py-3 text-sm">
-      <p className="mb-2 font-medium text-[var(--text-2)]">Procesando…</p>
+      <button
+        type="button"
+        onClick={() => setStepsExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <span
+          className="inline-block text-xs text-[var(--text-3)] transition-transform"
+          style={{ transform: stepsExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
+        >
+          ▸
+        </span>
+        {currentStep.completed ? (
+          <span className="text-[var(--success)]">✓</span>
+        ) : (
+          <span className="inline-block size-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+        )}
+        <span className="font-medium text-[var(--text-2)]">
+          {currentStep.label}
+        </span>
+        <span className="ml-auto text-xs text-[var(--text-3)]">
+          {thinking.steps.filter((s) => s.completed).length}/{thinking.steps.length}
+        </span>
+      </button>
 
-      <ul className="flex flex-col gap-1">
-        {thinking.steps.map((s, i) => (
-          <li
-            key={`${s.step}-${i}`}
-            className="flex items-center gap-2 text-[var(--text-2)]"
-          >
-            {s.completed ? (
-              <span className="text-[var(--success)]">✓</span>
-            ) : (
-              <span className="inline-block size-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
-            )}
-            <span className={s.completed ? "text-[var(--text-3)]" : ""}>
-              {s.label}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {stepsExpanded && (
+        <ul className="mt-2 flex flex-col gap-1 border-t border-[var(--border)] pt-2">
+          {thinking.steps.map((s, i) => (
+            <li
+              key={`${s.step}-${i}`}
+              className="flex items-center gap-2 text-[var(--text-2)]"
+            >
+              {s.completed ? (
+                <span className="text-[var(--success)]">✓</span>
+              ) : (
+                <span className="inline-block size-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+              )}
+              <span className={s.completed ? "text-[var(--text-3)]" : ""}>
+                {s.label}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {thinking.reasoning && (
         <div className="mt-3 border-t border-[var(--border)] pt-2">

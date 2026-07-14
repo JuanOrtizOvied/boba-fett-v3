@@ -218,6 +218,7 @@ function AssistantInner() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const msgsRef = useRef<ThreadMessageLike[]>([]);
 
   const updateMessages = useCallback(
@@ -229,8 +230,12 @@ function AssistantInner() {
   );
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setIsLoadingHistory(false);
+      return;
+    }
     let cancelled = false;
+    setIsLoadingHistory(true);
 
     (async () => {
       let tid = savedThreadId;
@@ -241,9 +246,13 @@ function AssistantInner() {
       if (cancelled) return;
       setThreadId(tid);
 
-      const state = await fetchThreadState(tid);
-      if (cancelled) return;
-      updateMessages(convertMessages(state.messages));
+      try {
+        const state = await fetchThreadState(tid);
+        if (cancelled) return;
+        updateMessages(convertMessages(state.messages));
+      } finally {
+        if (!cancelled) setIsLoadingHistory(false);
+      }
     })();
 
     return () => {
@@ -475,7 +484,7 @@ function AssistantInner() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ChatPanel />
+      <ChatPanel isLoadingHistory={isLoadingHistory} />
     </AssistantRuntimeProvider>
   );
 }
