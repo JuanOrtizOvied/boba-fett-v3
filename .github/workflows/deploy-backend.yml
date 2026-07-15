@@ -54,20 +54,10 @@ jobs:
             docker stop boba-fett-backend || true
             docker rm boba-fett-backend || true
 
-            # NOTE: langgraph_api.server:app (this image's entrypoint) is the
-            # full LangGraph Platform runtime and fails fast at startup
-            # unless DATABASE_URI (Postgres) and REDIS_URI (Redis) are set —
-            # verified via local docker run during this bootstrap. Provision
-            # those data stores before running this workflow for real; they
-            # are not created here (out of scope for this template).
-            #
-            # SABBI-specific: the agent is Anthropic-only (no LLM_PROVIDER
-            # indirection) and the portfolio tools/REST API (`src/api/routes.py`)
-            # write directly to Postgres via DATABASE_URL — separate from the
-            # LangGraph Platform's own DATABASE_URI checkpoint store above.
-            # PORTFOLIO_API_URL is provisioned here so a future single-ASGI
-            # mount (LangGraph + FastAPI) or sidecar container can resolve the
-            # portfolio API without a redeploy.
+            # This image serves FastAPI (`api.routes:app`) on :8000. It owns
+            # SABBI auth, portfolio CRUD/export, admin APIs, and the current
+            # chat SSE endpoints. `POSTGRES_URI` is required for chat
+            # checkpoints; without it `/chat/*` returns 503.
             docker run -d \
               --name boba-fett-backend \
               --restart unless-stopped \
@@ -76,8 +66,12 @@ jobs:
               -e LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }} \
               -e LANGSMITH_TRACING=true \
               -e LANGSMITH_PROJECT=boba-fett-v3 \
-              -e DATABASE_URI=${{ secrets.DATABASE_URI }} \
-              -e REDIS_URI=${{ secrets.REDIS_URI }} \
               -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-              -e PORTFOLIO_API_URL=${{ secrets.PORTFOLIO_API_URL }} \
+              -e POSTGRES_URI=${{ secrets.POSTGRES_URI }} \
+              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              -e JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }} \
+              -e ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }} \
+              -e ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }} \
+              -e TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }} \
+              -e LANGGRAPH_API_URL=${{ secrets.LANGGRAPH_API_URL }} \
               ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest

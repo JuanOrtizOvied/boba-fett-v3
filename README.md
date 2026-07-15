@@ -1,18 +1,37 @@
-# Boba Fett v3
+# SABBI Portfolio Builder
 
-AI assistant monorepo — Next.js + assistant-ui frontend with a configurable LangGraph (Python) backend.
+SABBI is an AI-assisted investment portfolio builder. The app combines a Next.js + assistant-ui frontend, a FastAPI portfolio/auth/chat API, a LangGraph Claude agent, and PostgreSQL as the shared source of truth.
+
+## Services
+
+| Service | Path | Dev Port | Purpose |
+|---------|------|----------|---------|
+| Frontend | `apps/web` | `3000` | Authenticated portfolio UI, chat panel, admin panel, API proxy |
+| FastAPI API | `apps/backend/src/api` | `3003` | Auth, portfolio CRUD/export, chat SSE, admin APIs |
+| LangGraph dev server | `apps/backend/src/agent` | `2024` | Local LangGraph graph server for development and traces |
+| PostgreSQL | external | `5432` | Users, refresh tokens, products, catalog, chat checkpoints |
+
+In the current app, browser traffic goes through the Next.js proxy at `/api/[...path]`:
+
+| Frontend path | Upstream |
+|---------------|----------|
+| `/api/auth/*`, `/api/portfolio/*`, `/api/products/*`, `/api/admin/*`, `/api/chat/*` | FastAPI (`PORTFOLIO_API_URL`) |
+| Other paths, such as LangGraph SDK endpoints | LangGraph (`LANGGRAPH_API_URL`) |
+
+The main chat UI uses FastAPI SSE endpoints under `/api/chat/*`. It does not use the browser LangGraph SDK runtime.
 
 ## Prerequisites
 
-- **Node.js** >= 20 (LTS recommended)
-- **Python** >= 3.11
-- **uv** (recommended) or **pip**
+- Node.js >= 20
+- Yarn 4.x via Corepack
+- Python >= 3.11
+- PostgreSQL >= 14 with `pgcrypto` and `pg_trgm`
+- Anthropic API key
+- Optional: Tavily API key for web-search enrichment
 
 ## Setup
 
-### 1. Enable Corepack and activate Yarn 4
-
-This project uses Yarn Berry (4.x) via Corepack. If you see a version mismatch error, run:
+### 1. Enable Yarn
 
 ```bash
 corepack enable
@@ -34,84 +53,116 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### 4. Configure environment variables
+### 4. Configure environment
 
-Copy the example files and fill in your API keys:
+Create `apps/web/.env.local`:
 
-```bash
-cp apps/web/.env.example apps/web/.env.local
-cp apps/backend/.env.example apps/backend/.env
+```env
+LANGGRAPH_API_URL=http://localhost:2024
+PORTFOLIO_API_URL=http://localhost:3003
+NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
 ```
 
-**Frontend** (`apps/web/.env.local`):
+Create `apps/backend/.env`:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_LANGGRAPH_API_URL` | LangGraph dev server URL | `http://localhost:2024` |
-| `NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID` | Graph/assistant ID | `agent` |
-| `LANGCHAIN_API_KEY` | LangSmith key (production proxy) | — |
+```env
+ANTHROPIC_API_KEY=your_anthropic_key
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sabbi
+POSTGRES_URI=postgresql://postgres:postgres@localhost:5432/sabbi
+JWT_SECRET=replace-with-a-long-random-secret
+JWT_REFRESH_SECRET=replace-with-a-different-long-random-secret
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=replace-with-a-secure-password
 
-**Backend** (`apps/backend/.env`):
+# Optional
+TAVILY_API_KEY=
+LANGSMITH_API_KEY=
+LANGSMITH_TRACING=false
+LANGSMITH_PROJECT=sabbi-portfolio-agent
+```
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_PROVIDER` | `openai` or `anthropic` | `openai` |
-| `LLM_MODEL` | Model name | `gpt-4o-mini` |
-| `OPENAI_API_KEY` | OpenAI key (when provider is `openai`) | — |
-| `ANTHROPIC_API_KEY` | Anthropic key (when provider is `anthropic`) | — |
-| `LANGSMITH_API_KEY` | LangSmith key for tracing | — |
+`DATABASE_URL` is used by the portfolio/auth/catalog tables. `POSTGRES_URI` is used by LangGraph's Postgres checkpointer/store for the FastAPI chat endpoints. If `POSTGRES_URI` is missing, `/api/chat/*` returns `503`.
 
-## Running the project
+## Run Locally
 
-### Full stack (frontend + backend)
+From the repository root:
 
 ```bash
 yarn dev
 ```
 
-This starts both services via Turborepo:
-- Frontend (Next.js) → http://localhost:3000
-- Backend (LangGraph) → http://localhost:2024
+This starts:
 
-### Frontend only
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| LangGraph dev server | http://localhost:2024 |
+| FastAPI API | http://localhost:3003 |
+
+Run individual services when needed:
 
 ```bash
 yarn dev:web
+yarn dev:backend
+yarn dev:graph
+yarn dev:api
 ```
 
-### Backend only
+## Testing
+
+Frontend:
 
 ```bash
-yarn dev:backend
+yarn workspace web test
 ```
 
-> **Note:** The backend requires an activated Python virtualenv with dependencies installed. If `langgraph dev` can't find the package, make sure you ran `pip install -e .` from `apps/backend/`.
+Backend unit tests:
 
-## Build
+```bash
+cd apps/backend
+pytest -q
+```
+
+Backend integration tests require a real Postgres database:
+
+```bash
+cd apps/backend
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sabbi_test pytest -q tests/integration
+```
+
+## Build And Lint
 
 ```bash
 yarn build
-```
-
-## Lint
-
-```bash
 yarn lint
 ```
 
-This runs Next.js lint on the frontend and ruff on the backend.
+## Production Notes
 
-## Project structure
+The frontend Docker image serves Next.js with PM2 and expects `PORTFOLIO_API_URL` to point at the backend FastAPI container.
 
-```
+The backend Dockerfile serves FastAPI `api.routes:app` with Gunicorn + Uvicorn workers on port `8000`. This container owns `/auth`, `/portfolio`, `/products`, `/admin`, and `/chat`.
+
+Required production secrets include `DATABASE_URL`, `POSTGRES_URI`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `ANTHROPIC_API_KEY`. `POSTGRES_URI` is required for chat checkpoint persistence.
+
+## Documentation
+
+- `apps/web/DOCUMENTATION.md` - frontend architecture, routes, chat UI, dashboard, tests
+- `apps/backend/DOCUMENTATION.md` - backend architecture, API routes, auth, database, search, deployment notes
+- `openspec/specs/` - current behavior specifications
+- `openspec/changes/` - active and archived SDD changes
+
+## Project Structure
+
+```text
 boba-fett-v3/
 ├── apps/
-│   ├── web/              # Next.js + assistant-ui frontend
-│   └── backend/          # LangGraph Python backend
+│   ├── web/              # Next.js frontend
+│   └── backend/          # FastAPI + LangGraph Python backend
 ├── packages/
-│   └── shared/           # Shared packages (placeholder)
-├── openspec/             # SDD specifications
+│   └── shared/           # Shared workspace placeholder
+├── openspec/             # SDD specifications and changes
 ├── turbo.json            # Turborepo config
 ├── Makefile              # Dev command shortcuts
-└── package.json          # Workspace root
+└── package.json          # Yarn workspace root
 ```

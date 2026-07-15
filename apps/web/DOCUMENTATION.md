@@ -11,9 +11,9 @@ SABBI (Sistema de Asesoría de Portafolio) is an AI-assisted investment portfoli
 | Framework | Next.js | 15.x |
 | UI Library | React | 19.x |
 | Styling | Tailwind CSS | 4.x |
-| Chat Runtime | @assistant-ui/react, @assistant-ui/react-langgraph | 0.14.x |
+| Chat Runtime | @assistant-ui/react custom external-store runtime | 0.14.x |
 | Markdown | @assistant-ui/react-markdown, remark-gfm | 0.14.x / 4.x |
-| LangGraph SDK | @langchain/langgraph-sdk | 1.9.x |
+| LangGraph SDK | @langchain/langgraph-sdk | 1.9.x (legacy/helper only, not the main chat runtime) |
 | Testing | Vitest, @testing-library/react, jsdom | 4.x / 16.x |
 | Build Output | Standalone (Docker/PM2) | -- |
 
@@ -118,6 +118,8 @@ LANGGRAPH_API_URL    (default: http://localhost:2024)
 LANGCHAIN_API_KEY    (optional, injected for LangGraph requests)
 PORTFOLIO_API_URL    (default: http://localhost:3003)
 ```
+
+The main chat UI uses the FastAPI SSE route under `/api/chat/*`, so local chat requires `PORTFOLIO_API_URL` to point at the FastAPI service. `NEXT_PUBLIC_LANGGRAPH_API_URL` is not required for the current chat runtime.
 
 ---
 
@@ -976,17 +978,16 @@ Both test files mock `@assistant-ui/react` primitives with proxy stubs and track
 
 ---
 
-## LangGraph SDK Client
+## Legacy LangGraph SDK Helper
 
 **File:** `lib/chatApi.ts`
 
-Factory function for the LangGraph SDK `Client`:
+Factory function for the LangGraph SDK `Client`. This is kept as a helper for compatibility with earlier scaffolded assistant-ui code, but it is not used by the current portfolio chat runtime.
 
-- **Browser (dev):** Uses `NEXT_PUBLIC_LANGGRAPH_API_URL` (direct connection to `:2024`)
-- **Browser (prod):** Falls back to `/api` (proxied through Next.js)
+- **Browser:** Uses `NEXT_PUBLIC_LANGGRAPH_API_URL` when present, otherwise falls back to `/api`
 - **Server (SSR):** Falls back to `/api`
 
-Note: This client is currently used only for the `createClient()` export. The actual chat streaming in `assistant.tsx` uses `fetchWithAuth` directly instead of the SDK client.
+The actual chat streaming in `assistant.tsx` uses `fetchWithAuth` directly against `POST /api/chat/threads/:threadId/messages/stream`.
 
 ---
 

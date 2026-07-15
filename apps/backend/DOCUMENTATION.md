@@ -32,7 +32,7 @@ apps/backend/
 ├── langgraph.json              # LangGraph server config (graph ID "agent")
 ├── package.json                # Yarn workspace scripts (dev, lint, test)
 ├── pyproject.toml              # Python project metadata and dependencies
-├── requirements.txt            # Minimal pip requirements (subset of pyproject.toml)
+├── requirements.txt            # Runtime pip requirements mirror (pyproject.toml is source of truth)
 ├── src/
 │   ├── agent/                  # LangGraph conversational agent
 │   │   ├── __init__.py
@@ -183,7 +183,7 @@ The prompt is dynamically constructed with `_format_categories()` which renders 
 
 **File:** `src/agent/tools.py`
 
-All tools persist directly to PostgreSQL via `ProductRepository`. The `user_id` is supplied per-run via `RunnableConfig["configurable"]["user_id"]` — injected by the Next.js proxy from the authenticated JWT subject claim.
+All tools persist directly to PostgreSQL via `ProductRepository`. The `user_id` is supplied per-run via `RunnableConfig["configurable"]["user_id"]`. In the current FastAPI chat flow, `api/chat_routes.py` resolves the authenticated user from the `sabbi_access` cookie and injects that `user_id` into the graph config before streaming.
 
 #### `search_product(query: str) -> dict`
 
@@ -251,7 +251,7 @@ When a user uploads a file (PDF, image, spreadsheet), the `router` node detects 
 
 **Attachment detection** (`_has_attachment`): checks if any content block in the last message has `type` in `("image_url", "image", "document", "file")`.
 
-**Extraction prompt** (`EXTRACTION_PROMPT`): instructs Claude to analyze the attached document, extract ALL investment products (name, provider, amount, category, composition), present them in a clear list, and use `add_product` for each one.
+**Extraction prompt** (`EXTRACTION_PROMPT`): instructs Claude to analyze the attached document, extract ALL investment products (name, provider, amount, category, composition), present them in a clear list, and use `add_product` for each one. This is a deliberate document-ingestion exception to the normal chat flow, where the agent should propose products before adding them.
 
 The extraction prompt is injected as a `SystemMessage` (not a `HumanMessage`) so it does not render as a user bubble in the chat UI.
 
@@ -431,7 +431,7 @@ Send a message and stream the agent's response via SSE.
 - **Body:** `ChatMessageRequest` (`{message, attachments?}`)
 - **Response:** `StreamingResponse` (SSE with progress/reasoning/text/final/error/done events)
 - **Attachment handling:** Frontend `{type: "file"}` blocks are normalized to Anthropic's `{type: "image"|"document", source: {type: "base64", ...}}` format
-- **Returns 503** if the chat graph was not initialized (missing `POSTGRES_URI`)
+- **Returns 503** if the chat graph was not initialized. For the current FastAPI chat UI, this means `POSTGRES_URI` must be configured.
 
 #### `DELETE /chat/threads/{thread_id}`
 
@@ -895,10 +895,10 @@ Returns `None` only if all three levels find nothing.
 
 **File:** `apps/backend/Dockerfile` (described in root CLAUDE.md)
 
-Uses **Gunicorn with Uvicorn workers** for production:
+The current Dockerfile starts the FastAPI API app:
 
 ```
-gunicorn langgraph_api.server:app \
+gunicorn api.routes:app \
   --bind 0.0.0.0:8000 \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
@@ -910,13 +910,15 @@ gunicorn langgraph_api.server:app \
 - 120s timeout for long-running LLM streaming responses
 - 30s graceful timeout for in-flight requests on reload
 
+This runtime serves the FastAPI routes documented above (`/auth`, `/portfolio`, `/products`, `/admin`, `/chat`). `POSTGRES_URI` must be set for the chat graph checkpointer/store; otherwise `/chat/*` returns 503.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key for Claude models |
 | `DATABASE_URL` | Yes | `postgresql://postgres:postgres@localhost:5432/sabbi` | PostgreSQL connection string for portfolio data |
-| `POSTGRES_URI` | No | — | PostgreSQL URI for LangGraph checkpointer/store (chat persistence). If unset, chat endpoints return 503. |
+| `POSTGRES_URI` | Yes for `/chat/*` | — | PostgreSQL URI for LangGraph checkpointer/store used by the FastAPI chat endpoints. If unset, chat endpoints return 503. |
 | `JWT_SECRET` | Yes (at runtime) | — | Secret for signing access tokens |
 | `JWT_REFRESH_SECRET` | Yes (at runtime) | — | Secret for signing refresh tokens |
 | `ADMIN_EMAIL` | No | — | Initial admin account email (seed on first boot) |
@@ -925,7 +927,7 @@ gunicorn langgraph_api.server:app \
 | `LANGSMITH_API_KEY` | No | — | LangSmith API key for tracing |
 | `LANGSMITH_TRACING` | No | — | Set to `true` to enable LangSmith tracing |
 | `LANGSMITH_PROJECT` | No | — | LangSmith project name |
-| `LANGGRAPH_API_URL` | No | `http://localhost:2024` | LangGraph SDK endpoint (used by admin thread routes) |
+| `LANGGRAPH_API_URL` | No | `http://localhost:2024` | LangGraph SDK endpoint used by admin thread routes. It must resolve to the same thread/checkpoint backend if admins are expected to inspect current FastAPI chat threads. |
 | `NODE_ENV` or `ENV` | No | — | Set to `production` to enable `Secure` flag on auth cookies |
 
 ### Dev Scripts

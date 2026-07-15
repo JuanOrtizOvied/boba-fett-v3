@@ -241,10 +241,15 @@ npx assistant-ui@latest init
 ### 3. Environment variables (`apps/web/.env.local`)
 
 ```env
-# For local development — points to the LangGraph dev server
-NEXT_PUBLIC_LANGGRAPH_API_URL=http://localhost:2024
+# Current SABBI frontend traffic goes through the Next.js `/api` proxy.
+# `/api/chat/*`, `/api/auth/*`, `/api/portfolio/*`, `/api/products/*`, and
+# `/api/admin/*` are routed to FastAPI.
+PORTFOLIO_API_URL=http://localhost:3003
 
-# The graph/assistant ID registered in langgraph.json
+# LangGraph fallback/proxy target for SDK routes that are not FastAPI paths.
+LANGGRAPH_API_URL=http://localhost:2024
+
+# Legacy scaffold helper. The current chat runtime does not require this.
 NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
 
 # For production (uncomment and fill in):
@@ -252,117 +257,30 @@ NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
 # LANGGRAPH_API_URL=your_production_langgraph_cloud_url
 ```
 
-### 4. LangGraph SDK client (`apps/web/lib/chatApi.ts`)
+### 4. Chat runtime (`apps/web/app/assistant.tsx`)
 
-```typescript
-import { Client } from "@langchain/langgraph-sdk";
+The current SABBI chat runtime is custom. It uses `useExternalStoreRuntime` from `@assistant-ui/react`, persists the active thread ID on the authenticated user, and streams responses from FastAPI:
 
-export const createClient = () => {
-  const apiUrl =
-    process.env["NEXT_PUBLIC_LANGGRAPH_API_URL"] ||
-    (typeof window !== "undefined"
-      ? new URL("/api", window.location.href).href
-      : "/api");
-  return new Client({ apiUrl });
-};
+```text
+POST /api/chat/threads/:threadId/messages/stream
 ```
 
-### 5. Assistant runtime component (`apps/web/app/assistant.tsx`)
+Do not rebuild the active chat flow with the old scaffolded `useLangGraphRuntime` example unless the product intentionally moves back to direct LangGraph SDK streaming.
 
-```tsx
-"use client";
+### 5. Legacy LangGraph SDK helper (`apps/web/lib/chatApi.ts`)
 
-import { useMemo } from "react";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import {
-  useLangGraphRuntime,
-  unstable_createLangGraphStream,
-  type LangChainMessage,
-} from "@assistant-ui/react-langgraph";
-import { Thread } from "@/components/assistant-ui/thread";
-import { createClient } from "@/lib/chatApi";
-
-const ASSISTANT_ID = process.env["NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID"]!;
-
-export function MyAssistant() {
-  const client = useMemo(() => createClient(), []);
-
-  const stream = useMemo(
-    () =>
-      unstable_createLangGraphStream({
-        client,
-        assistantId: ASSISTANT_ID,
-      }),
-    [client]
-  );
-
-  const runtime = useLangGraphRuntime({
-    unstable_allowCancellation: true,
-    stream,
-    create: async () => {
-      const { thread_id } = await client.threads.create();
-      return { externalId: thread_id };
-    },
-    load: async (externalId) => {
-      const state = await client.threads.getState<{
-        messages: LangChainMessage[];
-      }>(externalId);
-      return {
-        messages: state.values.messages,
-      };
-    },
-  });
-
-  return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <Thread />
-    </AssistantRuntimeProvider>
-  );
-}
-```
+`createClient()` still exists for compatibility with earlier scaffolded code, but the main chat UI does not use it. Treat it as a helper for LangGraph SDK routes, not as the source of truth for SABBI chat.
 
 ### 6. API proxy route (`apps/web/app/api/[...path]/route.ts`)
 
-This proxy forwards requests from the frontend to the LangGraph backend in production, injecting the API key server-side so it's never exposed to the browser:
+The proxy splits traffic by path prefix:
 
-```typescript
-import { NextRequest, NextResponse } from "next/server";
+| Path prefix | Upstream |
+|-------------|----------|
+| `/auth/*`, `/portfolio/*`, `/products/*`, `/admin/*`, `/chat/*` | FastAPI via `PORTFOLIO_API_URL` |
+| Everything else | LangGraph via `LANGGRAPH_API_URL` |
 
-const LANGGRAPH_API_URL =
-  process.env["LANGGRAPH_API_URL"] || "http://localhost:2024";
-const LANGCHAIN_API_KEY = process.env["LANGCHAIN_API_KEY"];
-
-async function handleRequest(req: NextRequest) {
-  const path = req.nextUrl.pathname.replace(/^\/api/, "");
-  const url = new URL(path, LANGGRAPH_API_URL);
-  url.search = req.nextUrl.search;
-
-  const headers = new Headers(req.headers);
-  if (LANGCHAIN_API_KEY) {
-    headers.set("x-api-key", LANGCHAIN_API_KEY);
-  }
-  headers.delete("host");
-
-  const response = await fetch(url, {
-    method: req.method,
-    headers,
-    body: req.body,
-    // @ts-expect-error — duplex is required for streaming request bodies
-    duplex: "half",
-  });
-
-  return new NextResponse(response.body, {
-    status: response.status,
-    headers: response.headers,
-  });
-}
-
-export const GET = handleRequest;
-export const POST = handleRequest;
-export const PUT = handleRequest;
-export const PATCH = handleRequest;
-export const DELETE = handleRequest;
-```
+It injects `LANGCHAIN_API_KEY` only for LangGraph requests, forwards auth cookies to FastAPI, preserves multiple `Set-Cookie` headers, and returns a JSON `502` when the selected upstream is unreachable.
 
 ### 7. Page entry point (`apps/web/app/page.tsx`)
 
@@ -613,19 +531,18 @@ openspec update                 # Refresh AI agent instructions
 
 ### Frontend ↔ Backend Communication
 
-In **development**, the frontend connects directly to the LangGraph dev server at `http://localhost:2024` via `NEXT_PUBLIC_LANGGRAPH_API_URL`. The `@langchain/langgraph-sdk` client makes requests from the browser.
+In **development**, the frontend sends browser requests to the Next.js API proxy. The proxy sends `/auth/*`, `/portfolio/*`, `/products/*`, `/admin/*`, and `/chat/*` to FastAPI via `PORTFOLIO_API_URL` and sends non-FastAPI paths to LangGraph via `LANGGRAPH_API_URL`.
 
-In **production**, both frontend and backend run as Docker containers on EC2 instances (images stored in ECR). The Next.js server runs with **PM2** as process manager, so the API proxy route (`/api/[...path]`) works natively — it injects the `LANGCHAIN_API_KEY` server-side, keeping it secret from the browser. The backend runs with **Gunicorn + Uvicorn workers** for async performance. Set `LANGGRAPH_API_URL` and `LANGCHAIN_API_KEY` as server-side env vars in your deployment.
+In **production**, the Next.js server runs with **PM2** as process manager, so the API proxy route (`/api/[...path]`) works natively and injects `LANGCHAIN_API_KEY` server-side for LangGraph requests. `PORTFOLIO_API_URL` must point at the backend FastAPI deployment serving `api.routes:app`.
 
 ### assistant-ui Runtime
 
-The project uses `useLangGraphRuntime` from `@assistant-ui/react-langgraph`, which provides:
+The current SABBI chat UI uses a custom `useExternalStoreRuntime` from `@assistant-ui/react` and streams from FastAPI `POST /api/chat/threads/:threadId/messages/stream`. Earlier scaffolded code used `useLangGraphRuntime`; treat that as legacy reference, not the active runtime.
 
-- **Streaming**: Real-time token-by-token response rendering via SSE
-- **Thread management**: Create, load, and switch between conversation threads
-- **Cancellation**: In-flight request cancellation support
-- **Tool call display**: Automatic rendering of LLM tool invocations
-- **Generative UI**: Map LangGraph `push_ui_message` calls to custom React components
+- **Streaming**: Real-time token-by-token response rendering via FastAPI SSE
+- **Thread management**: Active thread ID stored on the authenticated user record
+- **Tool call display**: Converted from persisted LangChain messages into assistant-ui parts
+- **Thinking/progress UI**: Driven by custom SSE `progress` and `reasoning` events
 
 ### LangGraph Dev Server
 
@@ -633,12 +550,12 @@ The `langgraph dev` command runs a lightweight, in-memory API server with hot-re
 
 ### Dual Backend: LangGraph + FastAPI
 
-The Python backend runs **two services** that share the same PostgreSQL `products` table via `db.repository.ProductRepository`:
+The Python backend runs **two development services** that share the same PostgreSQL `products` table via `db.repository.ProductRepository`:
 
-- **LangGraph** (`:2024` dev / `:8000` prod) — the conversational agent. Portfolio-mutating tools (`add_product`, `update_product`, `delete_product`, `get_portfolio_summary` in `agent/tools.py`) write directly to Postgres; the LangGraph checkpoint itself only stores `messages` (see `agent/state.py`).
-- **FastAPI** (`:3003` dev / `PORTFOLIO_API_URL` in prod, `src/api/routes.py`) — direct CRUD for the portfolio panel (manual add/edit/delete, summary, Excel export). No LLM call is involved on this path.
+- **LangGraph dev server** (`:2024`) — local graph server for development and traces.
+- **FastAPI** (`:3003` dev / `PORTFOLIO_API_URL` in prod, `src/api/routes.py`) — auth, portfolio CRUD/export, admin APIs, and the current chat SSE endpoints. It compiles the graph with a Postgres checkpointer/store when `POSTGRES_URI` is set.
 
-The Next.js API proxy (`apps/web/app/api/[...path]/route.ts`) splits incoming requests by path prefix: `/api/threads/*`, `/api/runs/*` → LangGraph; `/api/portfolio/*`, `/api/products/*` → FastAPI (`PORTFOLIO_API_URL`). Both paths write to the same database, so the frontend refetches the portfolio after either a chat turn completes or a manual CRUD operation succeeds (`apps/web/lib/usePortfolio.ts`).
+The Next.js API proxy (`apps/web/app/api/[...path]/route.ts`) splits incoming requests by path prefix: `/api/auth/*`, `/api/portfolio/*`, `/api/products/*`, `/api/admin/*`, `/api/chat/*` → FastAPI (`PORTFOLIO_API_URL`); everything else → LangGraph (`LANGGRAPH_API_URL`). The frontend refetches the portfolio after each chat stream completes and after manual CRUD operations (`apps/web/lib/usePortfolio.ts`).
 
 ---
 
@@ -811,16 +728,10 @@ FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-# --- Dependencies ---
-COPY pyproject.toml requirements.txt* ./
-RUN pip install --no-cache-dir \
-    gunicorn \
-    uvicorn[standard] \
-    && pip install --no-cache-dir -e . 2>/dev/null \
-    || pip install --no-cache-dir -r requirements.txt
-
-# --- Application ---
+# --- Application + dependencies ---
 COPY . .
+RUN pip install --no-cache-dir gunicorn \
+    && pip install --no-cache-dir -e .
 
 RUN useradd --system --no-create-home appuser
 USER appuser
@@ -833,7 +744,7 @@ EXPOSE 8000
 #   --timeout 120     → long timeout for streaming LLM responses
 #   --graceful-timeout 30 → time for in-flight requests to finish on reload
 CMD ["gunicorn", \
-     "langgraph_api.server:app", \
+     "api.routes:app", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "4", \
      "--worker-class", "uvicorn.workers.UvicornWorker", \
@@ -1050,13 +961,17 @@ jobs:
               -e LANGSMITH_TRACING=true \
               -e LANGSMITH_PROJECT=boba-fett-v3 \
               -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-              -e PORTFOLIO_API_URL=${{ secrets.PORTFOLIO_API_URL }} \
+              -e POSTGRES_URI=${{ secrets.POSTGRES_URI }} \
+              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              -e JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }} \
+              -e ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }} \
+              -e ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }} \
+              -e TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }} \
+              -e LANGGRAPH_API_URL=${{ secrets.LANGGRAPH_API_URL }} \
               ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
 ```
 
-See `.github/workflows/deploy-backend.yml` for the full, up-to-date command
-(it also sets `DATABASE_URI`/`REDIS_URI` for the LangGraph Platform runtime's
-own checkpoint store, separate from the portfolio `DATABASE_URL` above).
+See `.github/workflows/deploy-backend.yml` for the full, up-to-date command.
 
 ### EC2 Instance Setup (one-time)
 
@@ -1108,7 +1023,7 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 | Problem | Solution |
 |---------|----------|
 | `langgraph dev` fails to start | Ensure `langgraph-cli[inmem]` is installed and `LANGSMITH_API_KEY` is set |
-| Frontend can't reach backend | Verify `NEXT_PUBLIC_LANGGRAPH_API_URL=http://localhost:2024` in `.env.local` |
+| Frontend can't reach backend | Verify `PORTFOLIO_API_URL=http://localhost:3003` and `LANGGRAPH_API_URL=http://localhost:2024` in `apps/web/.env.local` |
 | CORS errors in browser | The LangGraph dev server allows localhost by default; ensure the port matches |
 | `turbo` not found | Run `yarn install` at the root to install the turbo binary |
 | Duplicate `@assistant-ui/core` | Run `npx assistant-ui@latest doctor` to diagnose version conflicts |
@@ -1122,8 +1037,8 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 | Docker pull fails on EC2 | The instance profile needs `ecr:BatchGetImage` and `ecr:GetDownloadUrlForLayer`; re-run `aws ecr get-login-password` |
 | `asyncpg.exceptions.InvalidCatalogNameError` / connection refused | Postgres isn't running or `DATABASE_URL` is wrong; start Postgres (`docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`) and verify `DATABASE_URL` in `apps/backend/.env` |
 | Products don't appear after Postgres restart | Schema is auto-applied on first `get_pool()` call (`db/connection.py` runs `schema.sql`), but the `products` table itself is unaffected by restarts — check `docker ps`/`psql` if data looks missing, not the schema step |
-| Portfolio panel stuck loading / `fetch` to `/api/portfolio/:id` fails | The FastAPI service isn't running — start it with `yarn dev:api` (`:3003`) alongside `yarn dev:backend` (LangGraph `:2024`), or `yarn dev:all` for both |
-| Proxy returns 502/404 for `/api/portfolio/*` | Check `PORTFOLIO_API_URL` in `apps/web/.env.local` (dev) or the deploy env var (prod) — the proxy (`app/api/[...path]/route.ts`) routes `/api/portfolio/*` and `/api/products/*` to this URL, everything else to `LANGGRAPH_API_URL` |
+| Portfolio panel stuck loading / `fetch` to `/api/portfolio/*` fails | The FastAPI service isn't running — start it with `yarn dev:api` (`:3003`) or `yarn dev:backend` |
+| Proxy returns 502/404 for `/api/portfolio/*` or `/api/chat/*` | Check `PORTFOLIO_API_URL` in `apps/web/.env.local` (dev) or the deploy env var (prod). These paths require the backend FastAPI container serving `api.routes:app`. |
 | Agent doesn't call `add_product` after a document upload | Verify the uploaded file's content block `type` is one of `image_url`, `image`, `document`, `file` (`agent/nodes.py` → `_ATTACHMENT_CONTENT_TYPES`) so `has_file_attachment` routes to `process_document` |
 
 ---
