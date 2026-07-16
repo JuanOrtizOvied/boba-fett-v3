@@ -42,6 +42,14 @@ class UserRepository:
     async def list_all(self) -> list[asyncpg.Record]:
         return await self.pool.fetch("SELECT * FROM users ORDER BY created_at")
 
+    async def list_active_threads(self) -> list[asyncpg.Record]:
+        return await self.pool.fetch(
+            """SELECT id, email, active_thread_id, updated_at, created_at
+               FROM users
+               WHERE active_thread_id IS NOT NULL AND active_thread_id <> ''
+               ORDER BY updated_at DESC, created_at DESC"""
+        )
+
     async def store_refresh_token(self, *, user_id: str, token_hash: str) -> None:
         expires_at = datetime.now(timezone.utc) + REFRESH_TOKEN_TTL
         await self.pool.execute(
@@ -71,7 +79,7 @@ class UserRepository:
 
     async def set_active_thread_id(self, user_id: str, thread_id: str) -> None:
         await self.pool.execute(
-            "UPDATE users SET active_thread_id = $1 WHERE id = $2",
+            "UPDATE users SET active_thread_id = $1, updated_at = now() WHERE id = $2",
             thread_id,
             user_id,
         )

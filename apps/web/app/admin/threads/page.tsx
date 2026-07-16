@@ -6,14 +6,14 @@ import { useEffect, useState } from "react";
 interface AdminThread {
   thread_id: string;
   user_id: string | null;
+  email?: string;
   created_at: string | null;
 }
 
 /**
  * Read-only thread directory across all users (`admin-panel/spec.md` ->
- * "Admin browses a user's thread list"). Threads created before auth was
- * added may lack `metadata.owner_user_id` — the backend surfaces those with
- * `user_id: null` instead of raising, rendered here as "Sin usuario".
+ * "Admin browses a user's thread list"). The backend lists the current
+ * FastAPI chat thread persisted on each user (`active_thread_id`).
  */
 export default function AdminThreadsPage() {
   const [threads, setThreads] = useState<AdminThread[] | null>(null);
@@ -53,7 +53,7 @@ export default function AdminThreadsPage() {
               <thead className="bg-sabbi-neutral-50 text-xs font-medium tracking-wide text-sabbi-neutral-600 uppercase">
                 <tr>
                   <th className="px-4 py-2">Usuario</th>
-                  <th className="px-4 py-2">Creado</th>
+                  <th className="px-4 py-2">Actualizado</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
@@ -61,7 +61,7 @@ export default function AdminThreadsPage() {
                 {threads.map((t) => (
                   <tr key={t.thread_id}>
                     <td className="px-4 py-2 text-sabbi-neutral-900">
-                      {t.user_id ?? (
+                      {t.email ?? t.user_id ?? (
                         <span className="text-sabbi-neutral-400">Sin usuario</span>
                       )}
                     </td>

@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from db.models import SearchResult
 
-
 # --- _merge_fields (pure function) -----------------------------------------
 
 
@@ -222,7 +221,7 @@ def test_classify_sets_confident_taxonomy_match():
     _classify(result)
 
     assert result.category == "publicos"
-    assert result.subcategory == "US Treasuries"
+    assert result.subcategory == "Renta Fija US Treasuries"
     assert result.provenance["category"] == result.primary_source
     assert result.provenance["subcategory"] == result.primary_source
 

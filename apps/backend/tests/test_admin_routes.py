@@ -11,13 +11,26 @@ routes").
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from langchain_core.messages import HumanMessage
 
 from auth.tokens import create_access_token
+
+
+class FakeChatGraph:
+    def __init__(self, final_messages=None):
+        self.final_messages = final_messages or []
+        self.aget_state_calls: list[dict[str, Any]] = []
+
+    async def aget_state(self, config):
+        self.aget_state_calls.append(config)
+        return SimpleNamespace(values={"messages": self.final_messages})
 
 
 def _admin_token() -> str:
@@ -36,6 +49,7 @@ def app_client():
     app.include_router(router)
     app.state.user_repo = AsyncMock()
     app.state.repo = AsyncMock()
+    app.state.chat_graph = None
     return app, TestClient(app)
 
 
@@ -197,30 +211,26 @@ def test_non_admin_cannot_view_admin_portfolios_list(app_client):
 
 
 # ---------------------------------------------------------------------------
-# Thread listing (read-only, via LangGraph SDK)
+# Thread listing (read-only, via FastAPI chat graph)
 # ---------------------------------------------------------------------------
 
 
-def test_admin_lists_threads(app_client, monkeypatch):
+def test_admin_lists_threads(app_client):
     app, client = app_client
-
-    fake_client = AsyncMock()
-    fake_client.threads.search.return_value = [
+    app.state.user_repo.list_active_threads.return_value = [
         {
-            "thread_id": "th_1",
-            "created_at": "2026-01-01T00:00:00Z",
-            "metadata": {"owner_user_id": "usr_1"},
+            "id": "usr_1",
+            "email": "a@sabbi.com",
+            "active_thread_id": "th_1",
+            "updated_at": "2026-01-01T00:00:00Z",
         },
         {
-            "thread_id": "th_2",
-            "created_at": "2026-01-02T00:00:00Z",
-            "metadata": {},  # pre-auth thread — no owner metadata
+            "id": "usr_2",
+            "email": "b@sabbi.com",
+            "active_thread_id": "th_2",
+            "updated_at": "2026-01-02T00:00:00Z",
         },
     ]
-
-    import api.admin_routes as admin_routes_module
-
-    monkeypatch.setattr(admin_routes_module, "_get_langgraph_client", lambda: fake_client)
     client.cookies.set("sabbi_access", _admin_token())
 
     response = client.get("/admin/threads")
@@ -228,26 +238,44 @@ def test_admin_lists_threads(app_client, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body == [
-        {"thread_id": "th_1", "user_id": "usr_1", "created_at": "2026-01-01T00:00:00Z"},
-        {"thread_id": "th_2", "user_id": None, "created_at": "2026-01-02T00:00:00Z"},
+        {
+            "thread_id": "th_1",
+            "user_id": "usr_1",
+            "email": "a@sabbi.com",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+        {
+            "thread_id": "th_2",
+            "user_id": "usr_2",
+            "email": "b@sabbi.com",
+            "created_at": "2026-01-02T00:00:00Z",
+        },
     ]
+    app.state.user_repo.list_active_threads.assert_awaited_once()
 
 
-def test_admin_views_specific_thread_messages(app_client, monkeypatch):
+def test_admin_views_specific_thread_messages(app_client):
     app, client = app_client
-
-    fake_client = AsyncMock()
-    fake_client.threads.get_state.return_value = {
-        "values": {"messages": [{"type": "human", "content": "hola"}]}
-    }
-
-    import api.admin_routes as admin_routes_module
-
-    monkeypatch.setattr(admin_routes_module, "_get_langgraph_client", lambda: fake_client)
+    app.state.chat_graph = FakeChatGraph(
+        final_messages=[HumanMessage(content="hola", id="msg_1")]
+    )
     client.cookies.set("sabbi_access", _admin_token())
 
     response = client.get("/admin/threads/th_1")
 
     assert response.status_code == 200
-    assert response.json() == {"messages": [{"type": "human", "content": "hola"}]}
-    fake_client.threads.get_state.assert_awaited_once_with("th_1")
+    body = response.json()
+    assert body["messages"][0]["id"] == "msg_1"
+    assert body["messages"][0]["type"] == "human"
+    assert body["messages"][0]["content"] == "hola"
+    assert app.state.chat_graph.aget_state_calls[0]["configurable"]["thread_id"] == "th_1"
+
+
+def test_admin_view_thread_graph_not_initialized_returns_503(app_client):
+    app, client = app_client
+    app.state.chat_graph = None
+    client.cookies.set("sabbi_access", _admin_token())
+
+    response = client.get("/admin/threads/th_1")
+
+    assert response.status_code == 503

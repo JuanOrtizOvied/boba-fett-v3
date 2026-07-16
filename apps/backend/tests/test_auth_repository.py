@@ -134,8 +134,26 @@ def test_get_refresh_token_returns_matching_row():
 
     assert row["user_id"] == "usr_1"
     pool.fetchrow.assert_awaited_once_with(
-        "SELECT * FROM refresh_tokens WHERE token_hash = $1", "hash123"
+        "SELECT * FROM refresh_tokens WHERE token_hash = $1 AND expires_at > now()", "hash123"
     )
+
+
+def test_list_active_threads_returns_users_with_threads_ordered_by_activity():
+    from auth.repository import UserRepository
+
+    pool = AsyncMock()
+    pool.fetch.return_value = [
+        _fake_user_row(id="usr_1", active_thread_id="th_1"),
+        _fake_user_row(id="usr_2", active_thread_id="th_2"),
+    ]
+
+    repo = UserRepository(pool)
+    rows = asyncio.run(repo.list_active_threads())
+
+    assert len(rows) == 2
+    query = pool.fetch.call_args.args[0]
+    assert "WHERE active_thread_id IS NOT NULL AND active_thread_id <> ''" in query
+    assert "ORDER BY updated_at DESC, created_at DESC" in query
 
 
 def test_get_refresh_token_returns_none_when_missing():
@@ -160,6 +178,21 @@ def test_delete_refresh_token_executes_delete_by_hash():
 
     pool.execute.assert_awaited_once_with(
         "DELETE FROM refresh_tokens WHERE token_hash = $1", "hash123"
+    )
+
+
+def test_set_active_thread_id_updates_timestamp():
+    from auth.repository import UserRepository
+
+    pool = AsyncMock()
+
+    repo = UserRepository(pool)
+    asyncio.run(repo.set_active_thread_id("usr_1", "th_1"))
+
+    pool.execute.assert_awaited_once_with(
+        "UPDATE users SET active_thread_id = $1, updated_at = now() WHERE id = $2",
+        "th_1",
+        "usr_1",
     )
 
 

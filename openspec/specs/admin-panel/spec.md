@@ -32,19 +32,19 @@ Admins MUST be able to view, read-only, any user's portfolio.
 
 ### Requirement: Admin Chat History Viewing
 
-Admins MUST be able to view, read-only, any user's LangGraph chat threads.
+Admins MUST be able to view, read-only, users' FastAPI-backed chat threads.
 
 #### Scenario: Admin views a user's chat thread
 
 - GIVEN an authenticated admin
-- WHEN they request a specific user's thread via the LangGraph thread API
+- WHEN they request a specific user's thread via the admin chat-history API
 - THEN the message history MUST be returned without allowing the admin to post as that user
 
 #### Scenario: Admin browses a user's thread list
 
 - GIVEN an authenticated admin
-- WHEN they GET the thread list for a given `userId`
-- THEN they receive that user's threads, ordered by most recent activity
+- WHEN they GET the admin thread list
+- THEN they receive users' active chat threads, ordered by most recent activity available to the system
 
 ### Requirement: Admin Panel Route Protection
 

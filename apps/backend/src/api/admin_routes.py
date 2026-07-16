@@ -9,11 +9,9 @@ before this router is exercised — see `api/routes.py`.
 
 from __future__ import annotations
 
-import os
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from api.chat_routes import _graph_config, _serialize_message, _state_messages
 from auth.dependencies import require_admin
 from auth.models import UserCreate
 from auth.passwords import hash_password
@@ -22,8 +20,6 @@ from db.repository import ProductRepository
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
-LANGGRAPH_API_URL = os.environ.get("LANGGRAPH_API_URL", "http://localhost:2024")
-
 
 def _user_repo(request: Request) -> UserRepository:
     return request.app.state.user_repo
@@ -31,15 +27,6 @@ def _user_repo(request: Request) -> UserRepository:
 
 def _product_repo(request: Request) -> ProductRepository:
     return request.app.state.repo
-
-
-def _get_langgraph_client():
-    """Resolve the LangGraph SDK client. Extracted as a module-level
-    function (not a dependency) so tests can monkeypatch it directly —
-    `langgraph_sdk.get_client` has no request-scoped state to inject."""
-    from langgraph_sdk import get_client
-
-    return get_client(url=LANGGRAPH_API_URL)
 
 
 def _strip_password_hash(row: dict) -> dict:
@@ -110,30 +97,37 @@ async def view_portfolio(
 
 
 @router.get("/threads")
-async def list_threads() -> list[dict]:
-    """List all LangGraph threads across users (`admin-panel/spec.md` —
-    "Admin browses a user's thread list"). Threads created before auth was
-    added may lack `metadata.owner_user_id` — those are surfaced with
-    `user_id: null` rather than raising."""
-    client = _get_langgraph_client()
-    threads: list[Any] = await client.threads.search(limit=100)
+async def list_threads(repo: UserRepository = Depends(_user_repo)) -> list[dict]:
+    """List active FastAPI chat threads across users (`admin-panel/spec.md`
+    — "Admin browses a user's thread list"). The current SABBI runtime stores
+    one active thread ID per user, so this directory intentionally lists those
+    persisted thread IDs instead of querying a separate LangGraph Platform API."""
+    threads = await repo.list_active_threads()
     return [
         {
-            "thread_id": t["thread_id"],
-            "user_id": (t.get("metadata") or {}).get("owner_user_id"),
-            "created_at": t.get("created_at"),
+            "thread_id": t["active_thread_id"],
+            "user_id": str(t["id"]),
+            "email": t["email"],
+            "created_at": t.get("updated_at") if isinstance(t, dict) else t["updated_at"],
         }
         for t in threads
     ]
 
 
 @router.get("/threads/{thread_id}")
-async def view_thread(thread_id: str) -> dict:
+async def view_thread(thread_id: str, request: Request) -> dict:
     """View a specific thread's message history, read-only
-    (`admin-panel/spec.md` — "Admin views a user's chat thread"). Reads
-    state via the LangGraph SDK — this endpoint never posts messages, so
-    the admin cannot act as the thread's owner."""
-    client = _get_langgraph_client()
-    state = await client.threads.get_state(thread_id)
-    messages = (state.get("values") or {}).get("messages", [])
-    return {"messages": messages}
+    (`admin-panel/spec.md` — "Admin views a user's chat thread"). Reads from
+    the same FastAPI-compiled chat graph used by the user-facing chat routes;
+    this endpoint never posts messages, so the admin cannot act as the thread's
+    owner."""
+    graph = request.app.state.chat_graph
+    if graph is None:
+        raise HTTPException(status_code=503, detail="Chat graph not initialized")
+
+    try:
+        state = await graph.aget_state(config=_graph_config(thread_id))
+    except Exception:
+        return {"messages": []}
+
+    return {"messages": [_serialize_message(m) for m in _state_messages(state)]}

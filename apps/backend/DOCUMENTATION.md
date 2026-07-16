@@ -473,14 +473,14 @@ View a specific user's portfolio, read-only. Admins cannot edit another user's p
 
 #### `GET /admin/threads`
 
-List all LangGraph threads across users (via LangGraph SDK client).
+List users' current FastAPI chat threads from the `users.active_thread_id` column.
 
-- **Response:** `[{thread_id, user_id, created_at}]`
-- **Note:** Threads created before auth may lack `metadata.owner_user_id` — surfaced as `user_id: null`
+- **Response:** `[{thread_id, user_id, email, created_at}]` where `created_at` is the user's active-thread assignment timestamp.
+- **Note:** The current runtime stores one active thread per user. This endpoint intentionally does not query LangGraph Platform.
 
 #### `GET /admin/threads/{thread_id}`
 
-View a specific thread's message history, read-only.
+View a specific thread's message history, read-only, using the same `app.state.chat_graph` source as the user-facing chat API.
 
 - **Response:** `{"messages": [...]}`
 
@@ -927,7 +927,6 @@ This runtime serves the FastAPI routes documented above (`/auth`, `/portfolio`, 
 | `LANGSMITH_API_KEY` | No | — | LangSmith API key for tracing |
 | `LANGSMITH_TRACING` | No | — | Set to `true` to enable LangSmith tracing |
 | `LANGSMITH_PROJECT` | No | — | LangSmith project name |
-| `LANGGRAPH_API_URL` | No | `http://localhost:2024` | LangGraph SDK endpoint used by admin thread routes. It must resolve to the same thread/checkpoint backend if admins are expected to inspect current FastAPI chat threads. |
 | `NODE_ENV` or `ENV` | No | — | Set to `production` to enable `Secure` flag on auth cookies |
 
 ### Dev Scripts

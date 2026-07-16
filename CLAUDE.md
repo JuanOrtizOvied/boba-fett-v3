@@ -967,7 +967,6 @@ jobs:
               -e ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }} \
               -e ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }} \
               -e TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }} \
-              -e LANGGRAPH_API_URL=${{ secrets.LANGGRAPH_API_URL }} \
               ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
 ```
 

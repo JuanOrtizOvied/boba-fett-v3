@@ -162,12 +162,18 @@ def test_refresh_revoked_token_not_in_db_returns_401(app_client):
 def test_me_returns_current_user_from_access_cookie(app_client):
     app, client = app_client
     token = create_access_token(user_id="usr_abc123", email="investor@sabbi.com", role="user")
+    app.state.user_repo.get_active_thread_id.return_value = "thread_abc"
     client.cookies.set("sabbi_access", token)
 
     response = client.get("/auth/me")
 
     assert response.status_code == 200
-    assert response.json() == {"id": "usr_abc123", "email": "investor@sabbi.com", "role": "user"}
+    assert response.json() == {
+        "id": "usr_abc123",
+        "email": "investor@sabbi.com",
+        "role": "user",
+        "active_thread_id": "thread_abc",
+    }
 
 
 def test_me_without_cookie_returns_401(app_client):
