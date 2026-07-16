@@ -418,9 +418,9 @@ LANGSMITH_PROJECT=sabbi-portfolio-agent
 
 ```bash
 cd apps/backend
-pip install -e . "langgraph-cli[inmem]"
+pip install -e ".[dev]"
 # — or with uv —
-uv pip install -e . "langgraph-cli[inmem]"
+uv pip install -e ".[dev]"
 ```
 
 ### 8. Backend `package.json` scripts
@@ -814,7 +814,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e . "langgraph-cli[inmem]" ruff pytest
+        run: pip install -e ".[dev]"
 
       - name: Lint
         run: ruff check src/

@@ -2,7 +2,7 @@
 
 install:
 	yarn install
-	cd apps/backend && pip install -e . "langgraph-cli[inmem]"
+	cd apps/backend && pip install -e ".[dev]"
 
 dev:
 	yarn dev

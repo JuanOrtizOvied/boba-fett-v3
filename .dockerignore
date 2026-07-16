@@ -6,6 +6,8 @@ node_modules
 **/.turbo
 .venv
 **/.venv
+uv.lock
+**/uv.lock
 .git
 .gitignore
 .yarn/cache
