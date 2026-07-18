@@ -85,3 +85,48 @@ export interface EnrichedProposedProduct extends ProposedProduct {
   provenance?: ProvenanceMap;
   reliability_tag?: string;
 }
+
+/**
+ * Mirrors `db.models.CatalogProduct` — a `product_catalog` row as returned by
+ * `GET /admin/catalog/entries` (`sdd/product-catalog-approval/spec` ->
+ * "Catalog Listing"). `approved_from_product_id`/`approved_at` are only set
+ * when the entry was created via the admin approval flow.
+ */
+export interface CatalogProduct {
+  id: number;
+  name: string;
+  geographic_focus: string;
+  asset_class: string;
+  underlying: string;
+  commission: string;
+  currency: string;
+  administrator: string;
+  manager: string;
+  liquidity: string;
+  return_rate: string;
+  category: string;
+  subcategory: string;
+  approved_from_product_id: string | null;
+  approved_at: string | null;
+}
+
+/**
+ * Mirrors `db.models.CatalogProductCreate` — the admin-submitted payload for
+ * `POST /admin/catalog/approve`. `name` and `category` are required; the
+ * rest are optional enrichment fields.
+ */
+export interface CatalogProductCreate {
+  name: string;
+  category: string;
+  subcategory?: string;
+  asset_class?: string;
+  geographic_focus?: string;
+  underlying?: string;
+  commission?: string;
+  currency?: string;
+  administrator?: string;
+  manager?: string;
+  liquidity?: string;
+  return_rate?: string;
+  approved_from_product_id?: string | null;
+}

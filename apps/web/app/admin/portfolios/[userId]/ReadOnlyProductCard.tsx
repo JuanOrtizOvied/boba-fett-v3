@@ -1,0 +1,398 @@
+"use client";
+
+import { useEffect, useState, type FC, type ReactNode } from "react";
+import { CheckIcon, XIcon } from "@/components/icons/Icons";
+import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
+import { compositionColor } from "@/lib/compositionPalette";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { formatUsd } from "@/lib/format";
+import type { Category, Product } from "@/lib/portfolio-types";
+
+/**
+ * Not a Next.js route file (no `page`/`layout`/`route` export constraints
+ * apply here) — a sibling module in the same route segment so these
+ * components stay page-scoped without violating the App Router's rule that
+ * `page.tsx` may only export `default`/`metadata`/etc.
+ *
+ * Visually mirrors `ProductCard`'s "view" state but drops the edit/delete
+ * affordances entirely, adding a single "Aprobar" affordance instead
+ * (`admin-panel/spec.md` -> "Approve to Catalog Affordance on Portfolio
+ * View"). Implemented as a local, page-scoped component rather than adding
+ * an optional read-only prop to the shared `ProductCard` (used by the
+ * mutable portfolio-builder flow) — keeps that component's contract
+ * unchanged for its existing consumers.
+ */
+export function ReadOnlyProductCard({
+  product,
+  onApprove,
+}: {
+  product: Product;
+  onApprove: (product: Product) => void;
+}) {
+  const meta = CATEGORY_META[product.category];
+
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-background">
+      <div className="flex flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="break-words text-sm font-semibold text-sabbi-neutral-900">
+              {product.name}
+            </p>
+            {product.provider && (
+              <p className="break-words text-xs text-sabbi-neutral-600">
+                {product.provider}
+              </p>
+            )}
+          </div>
+          <span
+            className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium text-white"
+            style={{ backgroundColor: `var(${meta.cssVar})` }}
+          >
+            {meta.shortLabel}
+          </span>
+        </div>
+
+        <p className="font-display text-xl font-semibold text-sabbi-neutral-900">
+          {formatUsd(product.amount)}
+        </p>
+
+        {product.subcategory && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-sabbi-neutral-500">Subcategoría:</span>
+            <span className="text-xs font-medium text-sabbi-neutral-700">
+              {product.subcategory}
+            </span>
+          </div>
+        )}
+
+        {product.composition.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex h-2 overflow-hidden rounded-full bg-sabbi-neutral-100">
+              {product.composition.map((asset, index) => (
+                <div
+                  key={`${asset.name}-${index}`}
+                  style={{
+                    width: `${asset.percentage}%`,
+                    backgroundColor: compositionColor(index),
+                  }}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              {product.composition.map((asset, index) => (
+                <span
+                  key={`${asset.name}-${index}`}
+                  className="flex items-center gap-1 text-[10px] text-sabbi-neutral-600"
+                >
+                  <span
+                    className="inline-block size-1.5 rounded-full"
+                    style={{ backgroundColor: compositionColor(index) }}
+                  />
+                  {asset.name} ({asset.percentage}%)
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onApprove(product)}
+        className="flex w-full items-center justify-center gap-2 border-t border-sabbi-neutral-200 py-2.5 text-sm font-semibold transition-colors hover:opacity-90"
+        style={{ backgroundColor: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
+      >
+        <CheckIcon size={16} />
+        Aprobar al catálogo
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Enrichment fields the backend accepts on `POST /admin/catalog/approve`
+ * beyond the product's own identifying fields, per
+ * `apps/backend/src/db/models.py::CatalogProductCreate`.
+ */
+interface EnrichmentFields {
+  assetClass: string;
+  geographicFocus: string;
+  underlying: string;
+  commission: string;
+  currency: string;
+  administrator: string;
+  manager: string;
+  liquidity: string;
+  returnRate: string;
+}
+
+const EMPTY_ENRICHMENT: EnrichmentFields = {
+  assetClass: "",
+  geographicFocus: "",
+  underlying: "",
+  commission: "",
+  currency: "",
+  administrator: "",
+  manager: "",
+  liquidity: "",
+  returnRate: "",
+};
+
+export interface ApproveProductModalProps {
+  /** `null` closes the modal. */
+  product: Product | null;
+  onClose: () => void;
+}
+
+/**
+ * "Approve to catalog" modal (`admin-panel/spec.md` -> "Approve to Catalog
+ * Affordance on Portfolio View"). Pre-fills `name`/`category`/`subcategory`
+ * from the source product and leaves every enrichment field empty for the
+ * admin to fill in. Cancel closes with no side effects. Confirm posts to
+ * `POST /api/admin/catalog/approve` and shows the result (success or the
+ * `409` duplicate rejection) inline instead of closing silently.
+ */
+export const ApproveProductModal: FC<ApproveProductModalProps> = ({ product, onClose }) => {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<Category>("directas");
+  const [subcategory, setSubcategory] = useState("");
+  const [enrichment, setEnrichment] = useState<EnrichmentFields>(EMPTY_ENRICHMENT);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!product) return;
+    setName(product.name);
+    setCategory(product.category);
+    setSubcategory(product.subcategory);
+    setEnrichment(EMPTY_ENRICHMENT);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  }, [product]);
+
+  useEffect(() => {
+    if (!product) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [product, onClose]);
+
+  if (!product) return null;
+
+  const updateEnrichment = (patch: Partial<EnrichmentFields>) =>
+    setEnrichment((prev) => ({ ...prev, ...patch }));
+
+  const handleApprove = async () => {
+    setErrorMessage(null);
+    setIsSubmitting(true);
+    try {
+      const res = await fetchWithAuth("/api/admin/catalog/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          category,
+          subcategory: subcategory.trim(),
+          asset_class: enrichment.assetClass.trim(),
+          geographic_focus: enrichment.geographicFocus.trim(),
+          underlying: enrichment.underlying.trim(),
+          commission: enrichment.commission.trim(),
+          currency: enrichment.currency.trim(),
+          administrator: enrichment.administrator.trim(),
+          manager: enrichment.manager.trim(),
+          liquidity: enrichment.liquidity.trim(),
+          return_rate: enrichment.returnRate.trim(),
+          approved_from_product_id: product.id,
+        }),
+      });
+
+      if (res.status === 409) {
+        setErrorMessage("Ya existe un producto igual en el catálogo.");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`No se pudo aprobar (status ${res.status})`);
+      }
+      setSuccessMessage("Producto agregado al catálogo.");
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "No se pudo aprobar el producto",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="animate-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="animate-modal-panel flex max-h-[90vh] w-full max-w-[92vw] flex-col overflow-hidden rounded-2xl bg-background shadow-xl sm:max-w-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-sabbi-neutral-200 px-5 py-4">
+          <h2 className="text-base font-semibold text-sabbi-neutral-900">
+            Aprobar al catálogo
+          </h2>
+          <button
+            type="button"
+            aria-label="Cerrar"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-md text-sabbi-neutral-600 hover:bg-sabbi-neutral-100"
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
+
+        <div className="grid flex-1 gap-6 overflow-y-auto p-5 sm:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold tracking-wide text-sabbi-neutral-600 uppercase">
+              Datos del producto
+            </p>
+            <ModalField label="Nombre">
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Categoría">
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value as Category)}
+                className={modalInputClass}
+              >
+                {CATEGORY_ORDER.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {CATEGORY_META[cat].label}
+                  </option>
+                ))}
+              </select>
+            </ModalField>
+            <ModalField label="Subcategoría">
+              <input
+                value={subcategory}
+                onChange={(event) => setSubcategory(event.target.value)}
+                className={modalInputClass}
+              />
+            </ModalField>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold tracking-wide text-sabbi-neutral-600 uppercase">
+              Datos de enriquecimiento
+            </p>
+            <ModalField label="Clase de activo">
+              <input
+                value={enrichment.assetClass}
+                onChange={(event) => updateEnrichment({ assetClass: event.target.value })}
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Foco geográfico">
+              <input
+                value={enrichment.geographicFocus}
+                onChange={(event) =>
+                  updateEnrichment({ geographicFocus: event.target.value })
+                }
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Subyacente">
+              <input
+                value={enrichment.underlying}
+                onChange={(event) => updateEnrichment({ underlying: event.target.value })}
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Comisión">
+              <input
+                value={enrichment.commission}
+                onChange={(event) => updateEnrichment({ commission: event.target.value })}
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Moneda">
+              <input
+                value={enrichment.currency}
+                onChange={(event) => updateEnrichment({ currency: event.target.value })}
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Administradora">
+              <input
+                value={enrichment.administrator}
+                onChange={(event) =>
+                  updateEnrichment({ administrator: event.target.value })
+                }
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Gestor">
+              <input
+                value={enrichment.manager}
+                onChange={(event) => updateEnrichment({ manager: event.target.value })}
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Liquidez">
+              <input
+                value={enrichment.liquidity}
+                onChange={(event) => updateEnrichment({ liquidity: event.target.value })}
+                className={modalInputClass}
+              />
+            </ModalField>
+            <ModalField label="Rentabilidad">
+              <input
+                value={enrichment.returnRate}
+                onChange={(event) => updateEnrichment({ returnRate: event.target.value })}
+                className={modalInputClass}
+              />
+            </ModalField>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">
+          <p
+            className={`min-h-4 text-sm ${successMessage ? "text-emerald-600" : "text-red-600"}`}
+          >
+            {successMessage ?? errorMessage}
+          </p>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 hover:bg-sabbi-neutral-50"
+            >
+              {successMessage ? "Cerrar" : "Cancelar"}
+            </button>
+            <button
+              type="button"
+              disabled={isSubmitting || Boolean(successMessage)}
+              onClick={() => void handleApprove()}
+              className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
+            >
+              Aprobar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const modalInputClass =
+  "rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
+
+const ModalField: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+  <label className="flex flex-col gap-1 text-sm">
+    <span className="text-xs font-medium text-sabbi-neutral-700">{label}</span>
+    {children}
+  </label>
+);

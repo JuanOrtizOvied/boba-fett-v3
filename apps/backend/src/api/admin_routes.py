@@ -16,6 +16,8 @@ from auth.dependencies import require_admin
 from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
+from db.catalog_repository import CatalogRepository
+from db.models import CatalogProductCreate
 from db.repository import ProductRepository
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -27,6 +29,10 @@ def _user_repo(request: Request) -> UserRepository:
 
 def _product_repo(request: Request) -> ProductRepository:
     return request.app.state.repo
+
+
+def _catalog_repo(request: Request) -> CatalogRepository:
+    return request.app.state.catalog_repo
 
 
 def _strip_password_hash(row: dict) -> dict:
@@ -94,6 +100,66 @@ async def view_portfolio(
     on purpose — admins cannot edit another user's products."""
     products = await product_repo.list_by_user(user_id)
     return {"products": [p.model_dump() for p in products]}
+
+
+@router.get("/products")
+async def list_all_products(
+    user_repo: UserRepository = Depends(_user_repo),
+    product_repo: ProductRepository = Depends(_product_repo),
+) -> list[dict]:
+    """Cross-list every product across every user with `user_email`
+    attached (`sdd/product-catalog-approval/design` — "Admin portfolio
+    cross-list"). A flat list avoids N+1 calls from the frontend for the
+    catalog approval flow."""
+    users = await user_repo.list_all()
+    result: list[dict] = []
+    for user in users:
+        products = await product_repo.list_by_user(user["id"])
+        for product in products:
+            result.append({**product.model_dump(), "user_email": user["email"]})
+    return result
+
+
+@router.get("/catalog/entries")
+async def list_catalog_entries(
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> list[dict]:
+    """List all `product_catalog` entries
+    (`sdd/product-catalog-approval/spec` — "Catalog Listing")."""
+    entries = await catalog_repo.list_all()
+    return [e.model_dump() for e in entries]
+
+
+@router.post("/catalog/approve", status_code=201)
+async def approve_to_catalog(
+    data: CatalogProductCreate,
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> dict:
+    """Approve a portfolio product into `product_catalog`
+    (`sdd/product-catalog-approval/spec` — "Approve Portfolio Product to
+    Catalog", "Duplicate Detection Before Catalog Insertion"). Returns 409
+    when a normalized match already exists instead of inserting a
+    duplicate."""
+    entry = await catalog_repo.insert_if_not_duplicate(data)
+    if entry is None:
+        raise HTTPException(
+            status_code=409, detail="A matching catalog entry already exists"
+        )
+    return entry.model_dump()
+
+
+@router.delete("/catalog/entries/{catalog_id}", status_code=204)
+async def delete_catalog_entry(
+    catalog_id: int, catalog_repo: CatalogRepository = Depends(_catalog_repo)
+) -> None:
+    """Delete a catalog entry (`sdd/product-catalog-approval/spec` —
+    "Catalog Entry Deletion"). Catalog entries are not inline-editable —
+    deletion is the only supported mutation after approval."""
+    deleted = await catalog_repo.delete(catalog_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404, detail=f"Catalog entry {catalog_id} not found"
+        )
 
 
 @router.get("/threads")

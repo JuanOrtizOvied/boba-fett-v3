@@ -54,6 +54,29 @@ class CatalogProduct(BaseModel):
     return_rate: str = ""
     category: str = ""
     subcategory: str = ""
+    approved_from_product_id: str | None = None
+    approved_at: str | None = None
+
+
+class CatalogProductCreate(BaseModel):
+    """Admin-submitted payload to approve a portfolio product into
+    `product_catalog` (`sdd/product-catalog-approval/spec` — "Approve
+    Portfolio Product to Catalog"). `name` and `category` are required;
+    every other field is optional enrichment."""
+
+    name: str
+    category: str
+    subcategory: str = ""
+    asset_class: str = ""
+    geographic_focus: str = ""
+    underlying: str = ""
+    commission: str = ""
+    currency: str = ""
+    administrator: str = ""
+    manager: str = ""
+    liquidity: str = ""
+    return_rate: str = ""
+    approved_from_product_id: str | None = None
 
 
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]

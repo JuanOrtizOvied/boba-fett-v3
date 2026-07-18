@@ -36,6 +36,7 @@ from api.auth_routes import router as auth_router
 from api.chat_routes import router as chat_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
+from db.catalog_repository import CatalogRepository
 from db.connection import close_pool, get_pool
 from db.excel import build_portfolio_workbook, export_filename
 from db.models import ProductCreate, ProductUpdate
@@ -75,6 +76,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await get_pool()
     app.state.repo = ProductRepository(pool)
     app.state.user_repo = UserRepository(pool)
+    app.state.catalog_repo = CatalogRepository(pool)
 
     async with AsyncExitStack() as stack:
         await _init_chat_graph(app, stack)

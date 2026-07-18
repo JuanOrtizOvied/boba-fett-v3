@@ -12,6 +12,7 @@ directly to a `ProductRepository` bound to the test pool, and
 
 from __future__ import annotations
 
+import uuid
 from typing import Any, AsyncIterator
 
 import asyncpg
@@ -19,6 +20,8 @@ import httpx
 import pytest_asyncio
 
 from auth.dependencies import get_current_user
+from auth.repository import UserRepository
+from db.catalog_repository import CatalogRepository
 from db.repository import ProductRepository
 from tests.conftest import FakePool
 
@@ -54,6 +57,35 @@ async def api_client(
 
     app.state.repo = ProductRepository(test_pool)
     app.dependency_overrides[get_current_user] = lambda: fake_user(test_user_id)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield app, client
+
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest_asyncio.fixture
+async def admin_api_client(test_pool: FakePool) -> AsyncIterator[tuple[Any, httpx.AsyncClient]]:
+    """`httpx.AsyncClient` bound to the real `api.routes.app` (which mounts
+    `api.admin_routes.router`), authenticated as an admin. Binds
+    `app.state.repo`, `app.state.user_repo`, and `app.state.catalog_repo`
+    to the savepoint-isolated test pool so `/admin/*` routes exercise real
+    repository code against Postgres (`sdd/product-catalog-approval/spec`)."""
+    from api.routes import app
+
+    app.state.repo = ProductRepository(test_pool)
+    app.state.user_repo = UserRepository(test_pool)
+    app.state.catalog_repo = CatalogRepository(test_pool)
+    admin_id = str(uuid.uuid4())
+    await test_pool.execute(
+        "INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)",
+        admin_id,
+        f"{admin_id}@sabbi.test",
+        "not-a-real-hash",
+        "admin",
+    )
+    app.dependency_overrides[get_current_user] = lambda: fake_user(admin_id, role="admin")
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

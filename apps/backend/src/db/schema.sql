@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS product_catalog (
 
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '';
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS subcategory TEXT DEFAULT '';
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS approved_from_product_id TEXT;
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_catalog_name_trgm
     ON product_catalog USING gin (name gin_trgm_ops);
