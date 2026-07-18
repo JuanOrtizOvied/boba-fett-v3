@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import type { LangChainMessage } from "@assistant-ui/react-langgraph";
+
+type MessageContentBlock = {
+  type?: string;
+  text?: string;
+};
+
+type AdminThreadMessage = {
+  id?: string;
+  type: string;
+  content: string | MessageContentBlock[] | null;
+};
 
 /**
  * Flattens LangChain message content to a plain string for display. Content
@@ -10,14 +20,15 @@ import type { LangChainMessage } from "@assistant-ui/react-langgraph";
  * tool_use/etc) — non-text blocks are summarized by their `type` since this
  * viewer is read-only and doesn't need to render rich attachments.
  */
-function extractText(content: LangChainMessage["content"]): string {
+function extractText(content: AdminThreadMessage["content"]): string {
   if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
   return content
-    .map((block) => ("text" in block && block.text ? block.text : `[${block.type}]`))
+    .map((block) => (block.text ? block.text : `[${block.type ?? "content"}]`))
     .join(" ");
 }
 
-const ROLE_LABEL: Record<LangChainMessage["type"], string> = {
+const ROLE_LABEL: Record<string, string> = {
   human: "Usuario",
   ai: "Asistente",
   tool: "Herramienta",
@@ -32,7 +43,7 @@ const ROLE_LABEL: Record<LangChainMessage["type"], string> = {
 export default function AdminThreadViewPage() {
   const params = useParams<{ threadId: string }>();
   const threadId = params.threadId;
-  const [messages, setMessages] = useState<LangChainMessage[] | null>(null);
+  const [messages, setMessages] = useState<AdminThreadMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,7 +55,7 @@ export default function AdminThreadViewPage() {
             `No se pudo cargar la conversación (status ${res.status})`,
           );
         }
-        const data: { messages: LangChainMessage[] } = await res.json();
+        const data: { messages: AdminThreadMessage[] } = await res.json();
         setMessages(data.messages);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error desconocido");

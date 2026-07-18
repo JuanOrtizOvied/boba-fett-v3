@@ -205,7 +205,7 @@ The middleware checks cookie existence only (it does not decode the JWT). The ad
 
 **Files:** `app/assistant.tsx`, `components/chat/ChatPanel.tsx`, `components/assistant-ui/thread.tsx`, `components/chat/ThinkingPanel.tsx`
 
-The chat system uses a custom `useExternalStoreRuntime` from `@assistant-ui/react` instead of the built-in `useLangGraphRuntime`. This gives full control over SSE streaming, message conversion, and the thinking/progress UI.
+The chat system uses a custom `useExternalStoreRuntime` from `@assistant-ui/react` instead of a direct LangGraph SDK runtime adapter. This gives full control over SSE streaming, message conversion, and the thinking/progress UI.
 
 ```
 MyAssistant (app/assistant.tsx)

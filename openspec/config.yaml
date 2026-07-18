@@ -9,8 +9,8 @@ context: |
   Detected stack: Next.js 15 + React 19 + Tailwind CSS + assistant-ui (frontend),
     LangGraph Python + langchain-anthropic (backend), Yarn workspaces + Turborepo (monorepo).
   Current repo contents: CLAUDE.md, opencode.json, .mcp.json, .atl/, and openspec/.
-  Architecture: SDD monorepo with apps/web (Next.js) and apps/backend (LangGraph Python).
-    Frontend uses @assistant-ui/react-langgraph runtime. Backend uses ChatAnthropic exclusively.
+  Architecture: SDD monorepo with apps/web (Next.js) and apps/backend (FastAPI + LangGraph Python).
+    Frontend uses @assistant-ui/react with a custom FastAPI SSE runtime. Backend uses ChatAnthropic exclusively.
   Testing: no runnable test, lint, typecheck, or build tooling is detectable from the current files.
   Style: technical artifacts default to English; use neutral/professional Spanish only when
     explicitly requested for artifact text. User-facing UI text is in Spanish.
@@ -20,7 +20,7 @@ version: 0.1.0
 stack:
   frontend: Next.js 15 + React 19 + Tailwind CSS + assistant-ui
   backend: LangGraph (Python) + langchain-anthropic (Claude)
-  runtime: "@assistant-ui/react-langgraph"
+  runtime: "@assistant-ui/react custom external-store runtime"
   monorepo: Yarn workspaces + Turborepo
   ci_cd: GitHub Actions → Docker → ECR → EC2
   llm_provider: Anthropic (claude-sonnet-4-20250514)

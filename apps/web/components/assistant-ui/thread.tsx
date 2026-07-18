@@ -110,7 +110,7 @@ class Base64DocumentAttachmentAdapter implements AttachmentAdapter {
 /**
  * Shared attachment adapter — images go through the base64 `SimpleImage`
  * adapter, PDFs/documents through `Base64DocumentAttachmentAdapter`. Exported
- * so `assistant.tsx` can wire it into `useLangGraphRuntime`'s `adapters`.
+ * so `assistant.tsx` can wire it into the custom assistant-ui runtime.
  */
 export const attachmentAdapter = new Base64DocumentAttachmentAdapter();
 
@@ -132,7 +132,7 @@ function fileExtension(name: string): string {
 }
 
 /**
- * Chat thread UI wired to the LangGraph runtime, styled for SABBI:
+ * Chat thread UI wired to the custom FastAPI-backed assistant runtime, styled for SABBI:
  * - User messages: indigo accent background, file attachments as chips
  *   inside the same bubble (never separate messages).
  * - Assistant messages: neutral background, recoverable error UI.
@@ -406,7 +406,7 @@ const PortfolioConfirmTable: FC<{ products: ParsedProduct[]; header: string }> =
 );
 
 const UserTextPart: FC<TextMessagePartProps> = ({ text }) => {
-  const bulkMatch = text.match(/^(Sí, agregar todos al portafolio):\n(.+)/s);
+  const bulkMatch = text.match(/^(Sí, agregar todos al portafolio):\n([\s\S]+)/);
   if (bulkMatch) {
     const products = bulkMatch[2].split("\n").map(parseProductLine).filter(Boolean) as ParsedProduct[];
     if (products.length > 0) return <PortfolioConfirmTable products={products} header={bulkMatch[1]} />;

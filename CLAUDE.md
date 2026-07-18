@@ -73,10 +73,10 @@ boilerplate-template/
 │   │   ├── app/
 │   │   │   ├── layout.tsx
 │   │   │   ├── page.tsx
-│   │   │   ├── assistant.tsx   # LangGraph runtime wiring
+│   │   │   ├── assistant.tsx   # Custom FastAPI SSE assistant runtime
 │   │   │   └── api/
 │   │   │       └── [...path]/
-│   │   │           └── route.ts  # Proxy to LangGraph backend
+│   │   │           └── route.ts  # Proxy to FastAPI/LangGraph upstreams
 │   │   ├── components/
 │   │   │   └── assistant-ui/
 │   │   │       ├── thread.tsx
@@ -234,7 +234,7 @@ This scaffolds a Next.js app pre-configured with assistant-ui and the LangGraph 
 cd apps
 yarn create next-app@latest web --typescript --tailwind --eslint --app --src-dir=false
 cd web
-yarn add @assistant-ui/react @assistant-ui/react-langgraph @langchain/langgraph-sdk
+yarn add @assistant-ui/react @assistant-ui/react-markdown @langchain/langgraph-sdk
 npx assistant-ui@latest init
 ```
 
@@ -1047,7 +1047,7 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 | Layer          | Technology                                       |
 |----------------|--------------------------------------------------|
 | Frontend       | Next.js 15, React 19, Tailwind CSS, assistant-ui |
-| Runtime        | `@assistant-ui/react-langgraph`                  |
+| Runtime        | `@assistant-ui/react` custom external-store runtime |
 | Agent Backend  | LangGraph (Python), LangChain, Anthropic Claude (`claude-sonnet-4-20250514`) |
 | REST API       | FastAPI (`src/api/routes.py`) — direct portfolio CRUD, no LLM call |
 | Database       | PostgreSQL (`asyncpg`) — portfolio `products` table, shared by agent tools and REST API |
