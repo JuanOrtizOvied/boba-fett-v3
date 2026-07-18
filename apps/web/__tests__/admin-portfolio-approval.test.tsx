@@ -43,6 +43,19 @@ describe("ReadOnlyProductCard approval affordance", () => {
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onApprove).toHaveBeenCalledWith(PRODUCT);
   });
+
+  test("shows the approved state and disables the approval button", () => {
+    render(
+      <ReadOnlyProductCard
+        product={PRODUCT}
+        onApprove={vi.fn()}
+        isApproved
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Aprobado" });
+    expect(button).toBeDisabled();
+  });
 });
 
 describe("ApproveProductModal pre-fill", () => {
@@ -84,15 +97,23 @@ describe("ApproveProductModal confirm", () => {
     vi.mocked(fetchWithAuth).mockReset();
   });
 
-  test("Confirm posts enrichment fields to the approve endpoint and shows success", async () => {
+  test("Confirm posts enrichment fields, marks approved and closes the modal", async () => {
     const user = userEvent.setup();
+    const onApproved = vi.fn();
+    const onClose = vi.fn();
     vi.mocked(fetchWithAuth).mockResolvedValue({
       ok: true,
       status: 201,
       json: async () => ({}),
     } as Response);
 
-    render(<ApproveProductModal product={PRODUCT} onClose={vi.fn()} />);
+    render(
+      <ApproveProductModal
+        product={PRODUCT}
+        onClose={onClose}
+        onApproved={onApproved}
+      />,
+    );
 
     await user.type(screen.getByLabelText("Clase de activo"), "Renta Fija");
     await user.click(screen.getByRole("button", { name: "Aprobar" }));
@@ -111,7 +132,10 @@ describe("ApproveProductModal confirm", () => {
       approved_from_product_id: "prod-1",
     });
 
-    expect(await screen.findByText(/agregado al catálogo/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(onApproved).toHaveBeenCalledWith("prod-1");
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   test("shows the duplicate message inline on a 409 response", async () => {

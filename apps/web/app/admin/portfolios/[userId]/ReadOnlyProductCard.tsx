@@ -25,14 +25,22 @@ import type { Category, Product } from "@/lib/portfolio-types";
 export function ReadOnlyProductCard({
   product,
   onApprove,
+  isApproved = false,
 }: {
   product: Product;
   onApprove: (product: Product) => void;
+  isApproved?: boolean;
 }) {
   const meta = CATEGORY_META[product.category];
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-background">
+    <div
+      className={`flex flex-col overflow-hidden rounded-xl border bg-background transition-colors ${
+        isApproved
+          ? "animate-product-added border-emerald-400"
+          : "border-sabbi-neutral-200"
+      }`}
+    >
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -99,12 +107,16 @@ export function ReadOnlyProductCard({
 
       <button
         type="button"
+        disabled={isApproved}
         onClick={() => onApprove(product)}
-        className="flex w-full items-center justify-center gap-2 border-t border-sabbi-neutral-200 py-2.5 text-sm font-semibold transition-colors hover:opacity-90"
-        style={{ backgroundColor: "var(--sabbi-lime)", color: "var(--sabbi-green)" }}
+        className="flex w-full items-center justify-center gap-2 border-t border-sabbi-neutral-200 py-2.5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:hover:opacity-100"
+        style={{
+          backgroundColor: isApproved ? "#dcfce7" : "var(--sabbi-lime)",
+          color: isApproved ? "#166534" : "var(--sabbi-green)",
+        }}
       >
         <CheckIcon size={16} />
-        Aprobar al catálogo
+        {isApproved ? "Aprobado" : "Aprobar al catálogo"}
       </button>
     </div>
   );
@@ -143,6 +155,7 @@ export interface ApproveProductModalProps {
   /** `null` closes the modal. */
   product: Product | null;
   onClose: () => void;
+  onApproved?: (productId: string) => void;
 }
 
 /**
@@ -150,16 +163,19 @@ export interface ApproveProductModalProps {
  * Affordance on Portfolio View"). Pre-fills `name`/`category`/`subcategory`
  * from the source product and leaves every enrichment field empty for the
  * admin to fill in. Cancel closes with no side effects. Confirm posts to
- * `POST /api/admin/catalog/approve` and shows the result (success or the
- * `409` duplicate rejection) inline instead of closing silently.
+ * `POST /api/admin/catalog/approve`; successful approval notifies the parent
+ * and closes the modal, while duplicate/error responses stay inline.
  */
-export const ApproveProductModal: FC<ApproveProductModalProps> = ({ product, onClose }) => {
+export const ApproveProductModal: FC<ApproveProductModalProps> = ({
+  product,
+  onClose,
+  onApproved,
+}) => {
   const [name, setName] = useState("");
   const [category, setCategory] = useState<Category>("directas");
   const [subcategory, setSubcategory] = useState("");
   const [enrichment, setEnrichment] = useState<EnrichmentFields>(EMPTY_ENRICHMENT);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -179,7 +195,6 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({ product, onC
       returnRate: product.return_rate || "",
     });
     setErrorMessage(null);
-    setSuccessMessage(null);
   }, [product]);
 
   useEffect(() => {
@@ -227,7 +242,8 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({ product, onC
       if (!res.ok) {
         throw new Error(`No se pudo aprobar (status ${res.status})`);
       }
-      setSuccessMessage("Producto agregado al catálogo.");
+      onApproved?.(product.id);
+      onClose();
     } catch (err) {
       setErrorMessage(
         err instanceof Error ? err.message : "No se pudo aprobar el producto",
@@ -370,9 +386,9 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({ product, onC
 
         <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">
           <p
-            className={`min-h-4 text-sm ${successMessage ? "text-emerald-600" : "text-red-600"}`}
+            className="min-h-4 text-sm text-red-600"
           >
-            {successMessage ?? errorMessage}
+            {errorMessage}
           </p>
           <div className="flex shrink-0 gap-2">
             <button
@@ -380,11 +396,11 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({ product, onC
               onClick={onClose}
               className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 hover:bg-sabbi-neutral-50"
             >
-              {successMessage ? "Cerrar" : "Cancelar"}
+              Cancelar
             </button>
             <button
               type="button"
-              disabled={isSubmitting || Boolean(successMessage)}
+              disabled={isSubmitting}
               onClick={() => void handleApprove()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
             >

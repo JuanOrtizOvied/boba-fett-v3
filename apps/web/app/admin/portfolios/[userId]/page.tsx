@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
-import type { Product } from "@/lib/portfolio-types";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import type { CatalogProduct, Product } from "@/lib/portfolio-types";
 import { ApproveProductModal, ReadOnlyProductCard } from "./ReadOnlyProductCard";
 
 interface UserInfo {
@@ -21,13 +22,15 @@ export default function AdminPortfolioViewPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [approvingProduct, setApprovingProduct] = useState<Product | null>(null);
+  const [approvedProductIds, setApprovedProductIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     void (async () => {
       try {
-        const [portfolioRes, usersRes] = await Promise.all([
+        const [portfolioRes, usersRes, catalogRes] = await Promise.all([
           fetch(`/api/admin/portfolios/${userId}`),
           fetch("/api/admin/users"),
+          fetchWithAuth("/api/admin/catalog/entries"),
         ]);
         if (!portfolioRes.ok) {
           throw new Error(
@@ -41,6 +44,16 @@ export default function AdminPortfolioViewPage() {
           const users: UserInfo[] = await usersRes.json();
           const match = users.find((u) => u.id === userId);
           if (match) setUserInfo(match);
+        }
+
+        if (catalogRes.ok) {
+          const entries: CatalogProduct[] = await catalogRes.json();
+          const ids = new Set(
+            entries
+              .map((e) => e.approved_from_product_id)
+              .filter((id): id is string => id != null),
+          );
+          setApprovedProductIds(ids);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error desconocido");
@@ -126,6 +139,7 @@ export default function AdminPortfolioViewPage() {
                     key={product.id}
                     product={product}
                     onApprove={setApprovingProduct}
+                    isApproved={approvedProductIds.has(product.id)}
                   />
                 ))}
               </div>
@@ -137,6 +151,9 @@ export default function AdminPortfolioViewPage() {
       <ApproveProductModal
         product={approvingProduct}
         onClose={() => setApprovingProduct(null)}
+        onApproved={(productId) =>
+          setApprovedProductIds((prev) => new Set(prev).add(productId))
+        }
       />
     </div>
   );

@@ -35,6 +35,15 @@ _NODE_LABELS: dict[str, str] = {
     "tools": "Ejecutando herramientas",
 }
 
+_TOOL_LABELS: dict[str, str] = {
+    "search_product": "Buscando producto",
+    "propose_product": "Preparando propuesta",
+    "add_product": "Agregando producto",
+    "update_product": "Actualizando producto",
+    "delete_product": "Eliminando producto",
+    "get_portfolio_summary": "Consultando portafolio",
+}
+
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(min_length=1)
@@ -147,7 +156,8 @@ def _stream_event_progress(event: Any) -> dict[str, str] | None:
     if ev_type == "on_chain_start" and name in _NODE_LABELS:
         return {"step": name, "label": _NODE_LABELS[name]}
     if ev_type == "on_tool_start" and name:
-        return {"step": f"tool_{name}", "label": f"Ejecutando: {name}"}
+        label = _TOOL_LABELS.get(name, f"Ejecutando herramienta")
+        return {"step": f"tool_{name}", "label": label}
     return None
 
 
