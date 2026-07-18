@@ -387,6 +387,17 @@ body {
   animation: row-fade-out 350ms ease-out forwards;
 }
 
+@keyframes card-highlight-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(132, 204, 22, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(132, 204, 22, 0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(132, 204, 22, 0); }
+}
+
+.propose-card-highlight {
+  box-shadow: 0 0 0 2px #84cc16;
+  animation: card-highlight-pulse 1.5s ease-in-out 2;
+}
+
 .tool-badge {
   flex-shrink: 0;
   font-size: 0.7rem;

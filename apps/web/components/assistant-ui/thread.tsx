@@ -935,8 +935,16 @@ export function ProposeProductCard({
 
   const editable = responded === null;
 
+  const pendingCount = batch
+    ? Array.from(batch.entries.values()).filter((e) => e.responded === null).length
+    : 0;
+  const isSoloCard = pendingCount === 1 && responded === null;
+
   return (
-    <div className="my-2 overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white shadow-sm">
+    <div
+      data-propose-card={cardId}
+      className={`my-2 overflow-hidden rounded-xl border bg-white shadow-sm ${isSoloCard ? "propose-card-highlight border-lime-400" : "border-sabbi-neutral-200"}`}
+    >
       <div className="flex items-center justify-between gap-2 border-b border-sabbi-neutral-200 bg-[var(--bg-panel)] px-4 py-2.5 text-xs font-semibold text-sabbi-neutral-700">
         <div className="flex items-center gap-2">
           <span
@@ -1126,13 +1134,27 @@ export function BulkAcceptBar() {
     runtime.append({ role: "user", content: [{ type: "text", text }] });
   };
 
+  const scrollToFirstCard = () => {
+    const first = document.querySelector("[data-propose-card]");
+    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white shadow-sm">
       <div className="px-4 py-3">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-semibold text-sabbi-neutral-800">
-            {ready.length} de {pending.length} productos listos
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-sabbi-neutral-800">
+              {ready.length} de {pending.length} productos listos
+            </span>
+            <button
+              type="button"
+              onClick={scrollToFirstCard}
+              className="rounded-lg border border-sabbi-neutral-300 px-3 py-1 text-xs font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50"
+            >
+              Ver productos ↑
+            </button>
+          </div>
           <button
             type="button"
             onClick={handleBulkAccept}

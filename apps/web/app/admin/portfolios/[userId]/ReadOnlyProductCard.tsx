@@ -109,7 +109,7 @@ export function ReadOnlyProductCard({
         type="button"
         disabled={isApproved}
         onClick={() => onApprove(product)}
-        className="flex w-full items-center justify-center gap-2 border-t border-sabbi-neutral-200 py-2.5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:hover:opacity-100"
+        className="mt-auto flex w-full items-center justify-center gap-2 border-t border-sabbi-neutral-200 py-2.5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:hover:opacity-100"
         style={{
           backgroundColor: isApproved ? "#dcfce7" : "var(--sabbi-lime)",
           color: isApproved ? "#166534" : "var(--sabbi-green)",
