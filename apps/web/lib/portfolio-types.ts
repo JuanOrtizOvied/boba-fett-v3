@@ -115,6 +115,7 @@ export interface CatalogProduct {
   return_rate: string;
   category: string;
   subcategory: string;
+  alternative_names: string[];
   approved_from_product_id: string | null;
   approved_at: string | null;
 }

@@ -43,8 +43,9 @@ class CatalogRepository:
             INSERT INTO product_catalog
                 (name, category, subcategory, asset_class, geographic_focus,
                  underlying, commission, currency, administrator, manager,
-                 liquidity, return_rate, approved_from_product_id, approved_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
+                 liquidity, return_rate, approved_from_product_id,
+                 alternative_names, approved_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
             RETURNING *
             """,
             data.name,
@@ -60,6 +61,7 @@ class CatalogRepository:
             data.liquidity,
             data.return_rate,
             data.approved_from_product_id,
+            data.alternative_names,
         )
         return self._row_to_catalog_product(row)
 
@@ -89,19 +91,28 @@ class CatalogRepository:
     async def search(self, query: str, limit: int = 5) -> list[CatalogProduct]:
         rows = await self.pool.fetch(
             """
-            SELECT *,
+            SELECT pc.*,
                 GREATEST(
                     similarity(name, $1),
                     similarity(COALESCE(underlying, ''), $1),
-                    similarity(COALESCE(administrator, ''), $1)
+                    similarity(COALESCE(administrator, ''), $1),
+                    COALESCE((
+                        SELECT MAX(similarity(alt, $1))
+                        FROM unnest(alternative_names) AS alt
+                    ), 0)
                 ) AS sim
-            FROM product_catalog
+            FROM product_catalog pc
             WHERE
                 similarity(name, $1) > 0.1
                 OR similarity(COALESCE(underlying, ''), $1) > 0.1
                 OR name ILIKE '%' || $1 || '%'
                 OR COALESCE(underlying, '') ILIKE '%' || $1 || '%'
                 OR COALESCE(asset_class, '') ILIKE '%' || $1 || '%'
+                OR EXISTS (
+                    SELECT 1 FROM unnest(alternative_names) AS alt
+                    WHERE similarity(alt, $1) > 0.1
+                       OR alt ILIKE '%' || $1 || '%'
+                )
             ORDER BY sim DESC
             LIMIT $2
             """,
@@ -125,6 +136,7 @@ class CatalogRepository:
             return_rate=row["return_rate"] or "",
             category=row["category"] or "",
             subcategory=row["subcategory"] or "",
+            alternative_names=list(row["alternative_names"] or []),
             approved_from_product_id=row["approved_from_product_id"],
             approved_at=(
                 row["approved_at"].isoformat() if row["approved_at"] is not None else None

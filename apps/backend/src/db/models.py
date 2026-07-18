@@ -81,6 +81,7 @@ class CatalogProduct(BaseModel):
     return_rate: str = ""
     category: str = ""
     subcategory: str = ""
+    alternative_names: list[str] = Field(default_factory=list)
     approved_from_product_id: str | None = None
     approved_at: str | None = None
 
@@ -103,6 +104,7 @@ class CatalogProductCreate(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    alternative_names: list[str] = Field(default_factory=list)
     approved_from_product_id: str | None = None
 
 
@@ -119,6 +121,7 @@ class CatalogProductUpdate(BaseModel):
     manager: str | None = None
     liquidity: str | None = None
     return_rate: str | None = None
+    alternative_names: list[str] | None = None
 
 
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]

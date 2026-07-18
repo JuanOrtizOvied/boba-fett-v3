@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "category", label: "Categoría" },
   { key: "subcategory", label: "Subcategoría" },
+  { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
   { key: "underlying", label: "Subyacente" },
@@ -120,14 +121,18 @@ export default function AdminCatalogPage() {
                       >
                         {entry.name || "—"}
                       </td>
-                      {CATALOG_COLUMNS.map((column) => (
-                        <td
-                          key={column.key}
-                          className="px-4 py-2 whitespace-nowrap text-sabbi-neutral-900"
-                        >
-                          {entry[column.key] || "—"}
-                        </td>
-                      ))}
+                      {CATALOG_COLUMNS.map((column) => {
+                        const val = entry[column.key];
+                        const display = Array.isArray(val) ? val.join(", ") : val;
+                        return (
+                          <td
+                            key={column.key}
+                            className="px-4 py-2 whitespace-nowrap text-sabbi-neutral-900"
+                          >
+                            {display || "—"}
+                          </td>
+                        );
+                      })}
                       <td
                         className={`sticky right-0 z-10 px-4 py-2 whitespace-nowrap before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-sabbi-neutral-200 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
                       >
@@ -231,6 +236,7 @@ const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: "name", label: "Nombre" },
   { key: "category", label: "Categoría" },
   { key: "subcategory", label: "Subcategoría" },
+  { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
   { key: "underlying", label: "Subyacente" },
@@ -259,7 +265,8 @@ function EditCatalogModal({
     if (!entry) return;
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
-      initial[field.key] = String(entry[field.key as keyof CatalogProduct] ?? "");
+      const val = entry[field.key as keyof CatalogProduct];
+      initial[field.key] = Array.isArray(val) ? val.join("\n") : String(val ?? "");
     }
     setForm(initial);
     setErrorMessage(null);
@@ -280,12 +287,23 @@ function EditCatalogModal({
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      const patch: Record<string, string> = {};
+      const patch: Record<string, string | string[]> = {};
       for (const field of EDITABLE_FIELDS) {
-        const current = form[field.key]?.trim() ?? "";
-        const original = String(entry[field.key as keyof CatalogProduct] ?? "");
-        if (current !== original) {
-          patch[field.key] = current;
+        if (field.key === "alternative_names") {
+          const current = (form[field.key] ?? "")
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          const original = (entry.alternative_names ?? []) as string[];
+          if (JSON.stringify(current) !== JSON.stringify(original)) {
+            patch[field.key] = current;
+          }
+        } else {
+          const current = form[field.key]?.trim() ?? "";
+          const original = String(entry[field.key as keyof CatalogProduct] ?? "");
+          if (current !== original) {
+            patch[field.key] = current;
+          }
         }
       }
       if (Object.keys(patch).length === 0) {
@@ -353,6 +371,16 @@ function EditCatalogModal({
                     </option>
                   ))}
                 </select>
+              </ModalField>
+            ) : field.key === "alternative_names" ? (
+              <ModalField key={field.key} label={field.label}>
+                <textarea
+                  rows={3}
+                  placeholder="One name per line"
+                  value={form[field.key] ?? ""}
+                  onChange={(e) => updateField(field.key, e.target.value)}
+                  className={modalInputClass + " resize-y"}
+                />
               </ModalField>
             ) : (
               <ModalField key={field.key} label={field.label}>
