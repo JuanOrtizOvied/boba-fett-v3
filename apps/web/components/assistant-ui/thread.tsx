@@ -1044,7 +1044,7 @@ export function ProposeProductCard({
                     const val = leaf === group ? leaf : `${group} ${leaf}`;
                     return (
                       <option key={leaf} value={val}>
-                        {leaf}
+                        {val}
                       </option>
                     );
                   })}

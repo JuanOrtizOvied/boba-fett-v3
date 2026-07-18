@@ -184,6 +184,34 @@ async def _search_tavily(query: str) -> dict[str, str]:
     )
 
 
+def _is_valid_category(value: str) -> bool:
+    return value.strip().lower() in {k.lower() for k in CATEGORIES}
+
+
+def _is_valid_subcategory(value: str) -> bool:
+    """Check whether a subcategory string matches a canonical taxonomy leaf."""
+    v = value.strip().lower()
+    for info in CATEGORIES.values():
+        for group_name, leaves in info["groups"].items():
+            for leaf in leaves:
+                canonical = leaf if leaf == group_name else f"{group_name} {leaf}"
+                if canonical.lower() == v:
+                    return True
+    return False
+
+
+def _sanitize_taxonomy(result: SearchResult) -> None:
+    """Clear category/subcategory values that don't match the SABBI taxonomy.
+    Invalid values (e.g. "Diversificado" from a catalog entry) are wiped so
+    _classify can re-attempt auto-classification or the agent asks the user."""
+    if result.category and not _is_valid_category(result.category):
+        result.category = ""
+        result.provenance.pop("category", None)
+    if result.subcategory and not _is_valid_subcategory(result.subcategory):
+        result.subcategory = ""
+        result.provenance.pop("subcategory", None)
+
+
 def _classify(result: SearchResult) -> None:
     """Auto-classify into category/subcategory from `CATEGORIES` when the
     already-known fields confidently match exactly one taxonomy leaf. Leaves
@@ -193,7 +221,7 @@ def _classify(result: SearchResult) -> None:
         return
 
     haystack = " ".join(
-        filter(None, [result.name, result.asset_class, result.geographic_focus, result.underlying])
+        filter(None, [result.name, result.asset_class, result.geographic_focus, result.underlying, result.subcategory])
     ).lower()
     if not haystack:
         return
@@ -229,8 +257,8 @@ async def cascade_search(query: str, pool: asyncpg.Pool) -> SearchResult | None:
         if tavily_data:
             _merge_fields(result, tavily_data, "web_search")
 
-    if not (result.category and result.subcategory):
-        _classify(result)
+    _sanitize_taxonomy(result)
+    _classify(result)
 
     if not _has_any_data(result):
         return None
