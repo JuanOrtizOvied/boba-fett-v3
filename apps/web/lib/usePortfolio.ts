@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
+import { resolveCategoryKey } from "@/lib/categories";
 import type { Category, Product } from "@/lib/portfolio-types";
 
 export type CategoryFilter = Category | "todos";
@@ -96,7 +97,12 @@ export function usePortfolio(): UsePortfolioResult {
       }
       if (!res.ok) throw new Error(`Failed to load portfolio (${res.status})`);
       const data: { products: Product[] } = await res.json();
-      setProducts(data.products ?? []);
+      setProducts(
+        (data.products ?? []).map((p) => ({
+          ...p,
+          category: resolveCategoryKey(p.category),
+        })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {

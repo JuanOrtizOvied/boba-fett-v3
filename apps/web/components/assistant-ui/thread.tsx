@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Component,
   createContext,
   useCallback,
   useContext,
@@ -9,6 +10,7 @@ import {
   useRef,
   useState,
   type FC,
+  type ReactNode,
 } from "react";
 import { ThinkingPanel } from "@/components/chat/ThinkingPanel";
 import type {
@@ -48,6 +50,7 @@ import {
   CATEGORY_SUBCATEGORIES,
   categoryBgVar,
   categoryTextVar,
+  resolveCategoryKey,
 } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
 import type { Category, EnrichedProposedProduct, FieldSource } from "@/lib/portfolio-types";
@@ -523,7 +526,8 @@ function ToolResultItem({
   }
 
   const { product } = result;
-  const meta = CATEGORY_META[product.category];
+  const catKey = resolveCategoryKey(product.category);
+  const meta = CATEGORY_META[catKey];
   if (!meta) return null;
 
   return (
@@ -531,8 +535,8 @@ function ToolResultItem({
       <span
         className="tool-badge"
         style={{
-          background: categoryBgVar(product.category),
-          color: categoryTextVar(product.category),
+          background: categoryBgVar(catKey),
+          color: categoryTextVar(catKey),
         }}
       >
         {meta.shortLabel}
@@ -849,7 +853,7 @@ export function ProposeProductCard({
   const [name, setName] = useState(product?.name ?? "");
   const [provider, setProvider] = useState(product?.provider ?? "");
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
-  const [category, setCategory] = useState<Category>(product?.category ?? "cash");
+  const [category, setCategory] = useState<Category>(resolveCategoryKey(product?.category ?? "cash"));
   const [subcategory, setSubcategory] = useState(product?.subcategory ?? "");
 
   const parsedAmount = parseFloat(amount);
@@ -866,10 +870,11 @@ export function ProposeProductCard({
     _globalRespondedIds.add(cardId);
     _globalResponses.set(cardId, "yes");
     batchRef.current?.respondedIds.add(cardId);
+    const categoryLabel = CATEGORY_META[category]?.label ?? category;
     const parts: string[] = [
       `nombre: ${name}`,
       `monto: ${amt}`,
-      `categoría: ${category}`,
+      `categoría: ${categoryLabel}`,
       `subcategory: ${subcategory}`,
     ];
     if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
@@ -910,7 +915,8 @@ export function ProposeProductCard({
     batchRef.current.setConfirmFn(cardId, {
       markDone: () => setLocalResponded("yes"),
       getText: () => {
-        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${category}`, `subcategory: ${subcategory}`];
+        const catLabel = CATEGORY_META[category]?.label ?? category;
+        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${catLabel}`, `subcategory: ${subcategory}`];
         if (provider.trim()) p.push(`proveedor: ${provider.trim()}`);
         return p.join(", ");
       },
@@ -1180,8 +1186,16 @@ export function BulkAcceptBar() {
   );
 }
 
+class PartErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() { return this.state.hasError ? null : this.props.children; }
+}
+
 const MarkdownText: FC = () => (
-  <MarkdownTextPrimitive className="assistant-markdown" remarkPlugins={[remarkGfm]} />
+  <PartErrorBoundary>
+    <MarkdownTextPrimitive className="assistant-markdown" remarkPlugins={[remarkGfm]} />
+  </PartErrorBoundary>
 );
 
 const ThinkingIndicator: FC<EmptyMessagePartProps> = ({ status }) => {

@@ -291,6 +291,42 @@ def test_propose_product_tag_unverified_when_provenance_empty():
     assert result["product"]["provenance"] == {}
 
 
+def test_propose_product_normalizes_category_key_to_label():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {"name": "Fondo XYZ", "amount": 1000, "category": "privados"}
+        )
+    )
+
+    assert result["product"]["category"] == "Mercados Privados"
+
+
+def test_propose_product_preserves_category_label():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {"name": "Fondo XYZ", "amount": 1000, "category": "Mercados Privados"}
+        )
+    )
+
+    assert result["product"]["category"] == "Mercados Privados"
+
+
+def test_category_to_label_all_keys():
+    from agent.tools import _category_to_label
+
+    assert _category_to_label("directas") == "Real Estate Directo"
+    assert _category_to_label("privados") == "Mercados Privados"
+    assert _category_to_label("club") == "Club Deals"
+    assert _category_to_label("publicos") == "Mercados Públicos"
+    assert _category_to_label("otros") == "Otros"
+    assert _category_to_label("cash") == "Cash y Equivalentes"
+    assert _category_to_label("unknown") == "unknown"
+
+
 def test_derive_card_tag_directly():
     from agent.tools import _derive_card_tag
 

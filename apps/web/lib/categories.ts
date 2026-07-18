@@ -128,6 +128,15 @@ export const CATEGORY_SUBCATEGORIES: Record<Category, SubcategoryGroup[]> = {
   cash: [{ group: "Cash", leaves: ["Depósitos a plazo", "Fondos de Money Market"] }],
 };
 
+const LABEL_TO_KEY: Record<string, Category> = Object.fromEntries(
+  Object.entries(CATEGORY_META).map(([key, meta]) => [meta.label.toLowerCase(), key as Category]),
+);
+
+export function resolveCategoryKey(value: string): Category {
+  if (value in CATEGORY_META) return value as Category;
+  return LABEL_TO_KEY[value.toLowerCase()] ?? "otros";
+}
+
 export function categoryColorVar(category: Category): string {
   return `var(${CATEGORY_META[category].cssVar})`;
 }

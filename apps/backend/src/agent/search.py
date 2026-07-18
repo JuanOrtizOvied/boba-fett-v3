@@ -185,7 +185,11 @@ async def _search_tavily(query: str) -> dict[str, str]:
 
 
 def _is_valid_category(value: str) -> bool:
-    return value.strip().lower() in {k.lower() for k in CATEGORIES}
+    v = value.strip().lower()
+    for key, info in CATEGORIES.items():
+        if v == key.lower() or v == str(info["label"]).lower():
+            return True
+    return False
 
 
 def _is_valid_subcategory(value: str) -> bool:

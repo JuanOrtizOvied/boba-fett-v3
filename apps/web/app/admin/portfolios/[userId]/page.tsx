@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
+import { CATEGORY_META, CATEGORY_ORDER, resolveCategoryKey } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { CatalogProduct, Product } from "@/lib/portfolio-types";
@@ -38,7 +38,12 @@ export default function AdminPortfolioViewPage() {
           );
         }
         const data: { products: Product[] } = await portfolioRes.json();
-        setProducts(data.products);
+        setProducts(
+          data.products.map((p) => ({
+            ...p,
+            category: resolveCategoryKey(p.category),
+          })),
+        );
 
         if (usersRes.ok) {
           const users: UserInfo[] = await usersRes.json();
