@@ -29,6 +29,7 @@ class Product(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    catalog_product_id: int | None = None
 
 
 class ProductCreate(BaseModel):
@@ -47,6 +48,7 @@ class ProductCreate(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    catalog_product_id: int | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -65,6 +67,7 @@ class ProductUpdate(BaseModel):
     manager: str | None = None
     liquidity: str | None = None
     return_rate: str | None = None
+    catalog_product_id: int | None = None
 
 
 class CatalogProduct(BaseModel):
@@ -106,6 +109,7 @@ class CatalogProductCreate(BaseModel):
     return_rate: str = ""
     alternative_names: list[str] = Field(default_factory=list)
     approved_from_product_id: str | None = None
+    catalog_product_id: int | None = None
 
 
 class CatalogProductUpdate(BaseModel):
@@ -143,5 +147,6 @@ class SearchResult(BaseModel):
     return_rate: str = ""
     category: str = ""
     subcategory: str = ""
+    catalog_product_id: int | None = None
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)

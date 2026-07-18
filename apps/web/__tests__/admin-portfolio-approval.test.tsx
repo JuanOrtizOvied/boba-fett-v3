@@ -30,6 +30,26 @@ const PRODUCT: Product = {
   manager: "",
   liquidity: "",
   return_rate: "",
+  catalog_product_id: null,
+};
+
+const CATALOG_ENTRY = {
+  id: 77,
+  name: "Bono Soberano Catálogo",
+  geographic_focus: "LatAm",
+  asset_class: "Renta Fija",
+  underlying: "Bonos",
+  commission: "1.5%",
+  currency: "USD",
+  administrator: "Admin Co",
+  manager: "Manager Co",
+  liquidity: "T+2",
+  return_rate: "8%",
+  category: "publicos",
+  subcategory: "Renta Fija US Treasuries",
+  alternative_names: [],
+  approved_from_product_id: null,
+  approved_at: null,
 };
 
 describe("ReadOnlyProductCard approval affordance", () => {
@@ -76,6 +96,20 @@ describe("ApproveProductModal pre-fill", () => {
       <ApproveProductModal product={null} onClose={vi.fn()} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  test("shows current catalog values beside proposed values", () => {
+    render(
+      <ApproveProductModal
+        product={{ ...PRODUCT, catalog_product_id: 77, commission: "2.0%" }}
+        catalogEntry={CATALOG_ENTRY}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/valores actuales/i)).toBeInTheDocument();
+    expect(screen.getByText("Bono Soberano Catálogo")).toBeInTheDocument();
+    expect(screen.getByText("2.0%")).toBeInTheDocument();
   });
 });
 
@@ -128,9 +162,10 @@ describe("ApproveProductModal confirm", () => {
       name: "Bono Soberano",
       category: "publicos",
       subcategory: "Renta Fija US Treasuries",
-      asset_class: "Renta Fija",
-      approved_from_product_id: "prod-1",
-    });
+        asset_class: "Renta Fija",
+        approved_from_product_id: "prod-1",
+        catalog_product_id: null,
+      });
 
     await waitFor(() => {
       expect(onApproved).toHaveBeenCalledWith("prod-1");
@@ -151,5 +186,32 @@ describe("ApproveProductModal confirm", () => {
     await user.click(screen.getByRole("button", { name: "Aprobar" }));
 
     expect(await screen.findByText(/ya existe/i)).toBeInTheDocument();
+  });
+
+  test("includes catalog_product_id when approving a catalog-sourced product", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    } as Response);
+
+    render(
+      <ApproveProductModal
+        product={{ ...PRODUCT, catalog_product_id: 77 }}
+        catalogEntry={CATALOG_ENTRY}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Aprobar" }));
+
+    await waitFor(() => {
+      expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+    });
+    const [, init] = vi.mocked(fetchWithAuth).mock.calls[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.catalog_product_id).toBe(77);
+    expect(body.approved_from_product_id).toBe("prod-1");
   });
 });

@@ -45,8 +45,10 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS administrator TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS manager TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS liquidity TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS return_rate TEXT DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_product_id INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
+CREATE INDEX IF NOT EXISTS idx_products_catalog_product_id ON products (catalog_product_id);
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 

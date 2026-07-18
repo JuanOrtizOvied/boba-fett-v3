@@ -23,6 +23,7 @@ export default function AdminPortfolioViewPage() {
   const [error, setError] = useState<string | null>(null);
   const [approvingProduct, setApprovingProduct] = useState<Product | null>(null);
   const [approvedProductIds, setApprovedProductIds] = useState<Set<string>>(() => new Set());
+  const [catalogEntries, setCatalogEntries] = useState<CatalogProduct[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -53,6 +54,7 @@ export default function AdminPortfolioViewPage() {
 
         if (catalogRes.ok) {
           const entries: CatalogProduct[] = await catalogRes.json();
+          setCatalogEntries(entries);
           const ids = new Set(
             entries
               .map((e) => e.approved_from_product_id)
@@ -67,6 +69,10 @@ export default function AdminPortfolioViewPage() {
   }, [userId]);
 
   const total = (products ?? []).reduce((sum, p) => sum + p.amount, 0);
+  const approvingCatalogEntry =
+    approvingProduct?.catalog_product_id == null
+      ? null
+      : catalogEntries.find((entry) => entry.id === approvingProduct.catalog_product_id) ?? null;
   const categoriesUsed = new Set((products ?? []).map((p) => p.category));
   const isComplete = CATEGORY_ORDER.every((cat) => categoriesUsed.has(cat));
   const lastUpdated = userInfo?.updated_at
@@ -155,6 +161,7 @@ export default function AdminPortfolioViewPage() {
 
       <ApproveProductModal
         product={approvingProduct}
+        catalogEntry={approvingCatalogEntry}
         onClose={() => setApprovingProduct(null)}
         onApproved={(productId) =>
           setApprovedProductIds((prev) => new Set(prev).add(productId))

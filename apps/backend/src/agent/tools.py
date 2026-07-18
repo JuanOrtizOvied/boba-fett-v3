@@ -95,6 +95,7 @@ async def propose_product(
     return_rate: str = "",
     geographic_focus: str = "",
     subcategory: str = "",
+    catalog_product_id: int | None = None,
     primary_source: FieldSource = "catalog",
     provenance: dict[str, FieldSource] | None = None,
     *,
@@ -114,7 +115,9 @@ async def propose_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Full category label, one of: Real Estate Directo, Mercados Privados, Club Deals, Mercados Públicos, Otros, Cash y Equivalentes.
+        category: Full category label, one of: Real Estate Directo,
+            Mercados Privados, Club Deals, Mercados Públicos, Otros,
+            Cash y Equivalentes.
         provider: Provider or fund manager name.
         composition: List of {name, percentage} asset class allocations.
         asset_class: Asset class, from search_product if available.
@@ -126,6 +129,8 @@ async def propose_product(
         return_rate: Historical return rate, from search_product if available.
         geographic_focus: Geographic focus, from search_product if available.
         subcategory: Taxonomy leaf subcategory (auto-classified or user-picked).
+        catalog_product_id: Source `product_catalog.id` when search_product found
+            the product in the SABBI catalog. Forward it unchanged.
         primary_source: Weakest data source used across all fields
             ('catalog', 'claude_knowledge', or 'web_search'), forwarded
             from search_product's result.
@@ -152,6 +157,7 @@ async def propose_product(
             "return_rate": return_rate,
             "geographic_focus": geographic_focus,
             "subcategory": subcategory,
+            "catalog_product_id": catalog_product_id,
             "primary_source": primary_source,
             "provenance": resolved_provenance,
             "reliability_tag": _derive_card_tag(resolved_provenance),
@@ -176,6 +182,7 @@ async def add_product(
     return_rate: str = "",
     geographic_focus: str = "",
     underlying: str = "",
+    catalog_product_id: int | None = None,
     *,
     config: RunnableConfig,
 ) -> dict:
@@ -184,7 +191,9 @@ async def add_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Full category label, one of: Real Estate Directo, Mercados Privados, Club Deals, Mercados Públicos, Otros, Cash y Equivalentes.
+        category: Full category label, one of: Real Estate Directo,
+            Mercados Privados, Club Deals, Mercados Públicos, Otros,
+            Cash y Equivalentes.
         provider: Provider or fund manager name.
         composition: List of {name, percentage} asset class allocations. When
             omitted, the product is treated as 100% allocated to itself.
@@ -198,6 +207,8 @@ async def add_product(
         return_rate: Historical return rate, from search_product if available.
         geographic_focus: Geographic focus, from search_product if available.
         underlying: Underlying asset, from search_product if available.
+        catalog_product_id: Source `product_catalog.id` when the product came
+            from the SABBI catalog. Keep it so admin approval can replace that row.
     """
     repo = await _repository()
     user_id = _user_id(config)
@@ -220,6 +231,7 @@ async def add_product(
             manager=manager,
             liquidity=liquidity,
             return_rate=return_rate,
+            catalog_product_id=catalog_product_id,
         ),
     )
     return {"status": "added", "product": product.model_dump()}

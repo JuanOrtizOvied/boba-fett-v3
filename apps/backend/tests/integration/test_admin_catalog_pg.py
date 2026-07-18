@@ -116,6 +116,36 @@ async def test_approve_full_flow_create_then_repeat_rejected(admin_api_client, t
     assert repeat.status_code == 409
 
 
+async def test_approve_replaces_existing_catalog_entry_when_product_has_catalog_id(
+    admin_api_client, test_pool
+):
+    _app, client = admin_api_client
+    created = await client.post(
+        "/admin/catalog/approve",
+        json=_approve_payload(name="Catalog Fund", commission="1.5%"),
+    )
+    catalog_id = created.json()["id"]
+
+    response = await client.post(
+        "/admin/catalog/approve",
+        json=_approve_payload(
+            name="Catalog Fund Updated",
+            commission="2.0%",
+            catalog_product_id=catalog_id,
+            approved_from_product_id="prod_catalog_source",
+        ),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == catalog_id
+    assert body["name"] == "Catalog Fund Updated"
+    assert body["commission"] == "2.0%"
+    assert body["approved_from_product_id"] == "prod_catalog_source"
+    count = await test_pool.fetchval("SELECT count(*) FROM product_catalog")
+    assert count == 1
+
+
 async def test_approve_without_admin_role_returns_403(admin_api_client):
     app, client = admin_api_client
     non_admin_id = str(uuid.uuid4())

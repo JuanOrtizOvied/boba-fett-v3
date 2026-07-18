@@ -39,6 +39,7 @@ def test_add_product_schema():
     assert "category" in args
     assert "provider" in args
     assert "composition" in args
+    assert "catalog_product_id" in args
     # `config` is an injected RunnableConfig — must not leak into the LLM schema
     assert "config" not in args
 
@@ -175,6 +176,7 @@ def test_propose_product_schema_exposes_enrichment_fields():
         "return_rate",
         "geographic_focus",
         "subcategory",
+        "catalog_product_id",
         "primary_source",
         "provenance",
     ):
@@ -193,6 +195,7 @@ def test_propose_product_forwards_enrichment_and_provenance():
                 "category": "publicos",
                 "commission": "0.45%",
                 "administrator": "BlackRock",
+                "catalog_product_id": 42,
                 "primary_source": "web_search",
                 "provenance": {"name": "catalog", "commission": "web_search"},
             }
@@ -203,6 +206,7 @@ def test_propose_product_forwards_enrichment_and_provenance():
     assert result["status"] == "proposed"
     assert product["commission"] == "0.45%"
     assert product["administrator"] == "BlackRock"
+    assert product["catalog_product_id"] == 42
     assert product["primary_source"] == "web_search"
     assert product["provenance"] == {"name": "catalog", "commission": "web_search"}
     # currency, liquidity, etc. left empty rather than invented (never-invent guardrail)

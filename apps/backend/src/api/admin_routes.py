@@ -9,7 +9,7 @@ before this router is exercised — see `api/routes.py`.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from api.chat_routes import _graph_config, _serialize_message, _state_messages
 from auth.dependencies import require_admin
@@ -133,6 +133,7 @@ async def list_catalog_entries(
 @router.post("/catalog/approve", status_code=201)
 async def approve_to_catalog(
     data: CatalogProductCreate,
+    response: Response,
     catalog_repo: CatalogRepository = Depends(_catalog_repo),
 ) -> dict:
     """Approve a portfolio product into `product_catalog`
@@ -140,6 +141,16 @@ async def approve_to_catalog(
     Catalog", "Duplicate Detection Before Catalog Insertion"). Returns 409
     when a normalized match already exists instead of inserting a
     duplicate."""
+    if data.catalog_product_id is not None:
+        entry = await catalog_repo.replace_from_approval(data.catalog_product_id, data)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Catalog entry {data.catalog_product_id} not found",
+            )
+        response.status_code = 200
+        return entry.model_dump()
+
     entry = await catalog_repo.insert_if_not_duplicate(data)
     if entry is None:
         raise HTTPException(

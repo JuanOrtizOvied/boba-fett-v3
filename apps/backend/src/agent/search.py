@@ -57,11 +57,16 @@ _SOURCE_RANK: dict[FieldSource, int] = {
 # LLM (which is bound to tools and would recurse) per design.md.
 EXTRACTION_MODEL_NAME = "claude-haiku-4-5"
 
-_EXTRACTION_SYSTEM_PROMPT = """You are a financial product data extraction assistant for SABBI, an investment portfolio platform.
+_EXTRACTION_SYSTEM_PROMPT = """You are a financial product data extraction assistant for SABBI,
+an investment portfolio platform.
 
-Extract these fields for the requested product: name, asset_class, geographic_focus, underlying, commission, currency, administrator, manager, liquidity, return_rate, category, subcategory.
+Extract these fields for the requested product: name, asset_class,
+geographic_focus, underlying, commission, currency, administrator, manager,
+liquidity, return_rate, category, subcategory.
 
-CRITICAL RULE: if you are not confident about a field, or the information was not given to you, leave that field as an empty string. NEVER invent, guess, or fabricate a value you cannot verify."""
+CRITICAL RULE: if you are not confident about a field, or the information was
+not given to you, leave that field as an empty string. NEVER invent, guess, or
+fabricate a value you cannot verify."""
 
 
 class ExtractedProduct(BaseModel):
@@ -118,7 +123,9 @@ async def _search_catalog(query: str, pool: asyncpg.Pool) -> SearchResult:
     result = SearchResult()
     if not matches:
         return result
-    catalog_data = {field: getattr(matches[0], field) for field in FIELD_NAMES}
+    match = matches[0]
+    result.catalog_product_id = match.id
+    catalog_data = {field: getattr(match, field) for field in FIELD_NAMES}
     return _merge_fields(result, catalog_data, "catalog")
 
 
@@ -225,7 +232,16 @@ def _classify(result: SearchResult) -> None:
         return
 
     haystack = " ".join(
-        filter(None, [result.name, result.asset_class, result.geographic_focus, result.underlying, result.subcategory])
+        filter(
+            None,
+            [
+                result.name,
+                result.asset_class,
+                result.geographic_focus,
+                result.underlying,
+                result.subcategory,
+            ],
+        )
     ).lower()
     if not haystack:
         return

@@ -35,6 +35,7 @@ export interface Product {
   manager: string;
   liquidity: string;
   return_rate: string;
+  catalog_product_id: number | null;
 }
 
 export interface ProductCreateInput {
@@ -90,6 +91,7 @@ export interface EnrichedProposedProduct extends ProposedProduct {
   return_rate?: string;
   geographic_focus?: string;
   subcategory?: string;
+  catalog_product_id?: number | null;
   primary_source?: FieldSource;
   provenance?: ProvenanceMap;
   reliability_tag?: string;
@@ -139,4 +141,5 @@ export interface CatalogProductCreate {
   liquidity?: string;
   return_rate?: string;
   approved_from_product_id?: string | null;
+  catalog_product_id?: number | null;
 }

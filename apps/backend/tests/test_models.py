@@ -45,6 +45,7 @@ def test_product_valid_generates_default_id():
     assert product.name == "BlackRock Private Credit Fund"
     assert product.provider == ""
     assert product.composition == []
+    assert product.catalog_product_id is None
 
 
 def test_product_accepts_explicit_composition():
@@ -88,6 +89,7 @@ def test_product_create_valid():
     assert data.name == "Fund A"
     assert data.provider == ""
     assert data.composition == []
+    assert data.catalog_product_id is None
 
 
 @pytest.mark.parametrize("amount", [0, -50])
@@ -179,6 +181,7 @@ def test_search_result_defaults_are_all_empty():
     assert result.return_rate == ""
     assert result.category == ""
     assert result.subcategory == ""
+    assert result.catalog_product_id is None
     assert result.primary_source == "catalog"
     assert result.provenance == {}
 

@@ -71,7 +71,7 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
         asset_class="Renta Variable",
         commission="0.07%",
         category="publicos",
-        subcategory="Developed ex-US",
+        subcategory="Renta Variable Developed ex-US",
     )
 
     class _FakeCatalogRepository:
@@ -88,6 +88,7 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
     assert result.name == "Vanguard Total World Stock ETF"
     assert result.commission == "0.07%"
     assert result.category == "publicos"
+    assert result.catalog_product_id == 1
     assert result.provenance["name"] == "catalog"
     assert result.provenance["commission"] == "catalog"
     assert result.primary_source == "catalog"
@@ -277,7 +278,7 @@ def test_cascade_search_stops_after_l1_when_catalog_result_is_complete(monkeypat
         liquidity="Diaria",
         return_rate="7%",
         category="publicos",
-        subcategory="Developed ex-US",
+        subcategory="Renta Variable Developed ex-US",
         primary_source="catalog",
         provenance={field: "catalog" for field in search_module.FIELD_NAMES},
     )

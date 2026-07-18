@@ -65,6 +65,51 @@ class CatalogRepository:
         )
         return self._row_to_catalog_product(row)
 
+    async def replace_from_approval(
+        self, catalog_id: int, data: CatalogProductCreate
+    ) -> CatalogProduct | None:
+        row = await self.pool.fetchrow(
+            """
+            UPDATE product_catalog
+            SET name = $2,
+                category = $3,
+                subcategory = $4,
+                asset_class = $5,
+                geographic_focus = $6,
+                underlying = $7,
+                commission = $8,
+                currency = $9,
+                administrator = $10,
+                manager = $11,
+                liquidity = $12,
+                return_rate = $13,
+                approved_from_product_id = $14,
+                alternative_names = CASE
+                    WHEN cardinality($15::text[]) > 0 THEN $15
+                    ELSE alternative_names
+                END,
+                approved_at = now()
+            WHERE id = $1
+            RETURNING *
+            """,
+            catalog_id,
+            data.name,
+            data.category,
+            data.subcategory,
+            data.asset_class,
+            data.geographic_focus,
+            data.underlying,
+            data.commission,
+            data.currency,
+            data.administrator,
+            data.manager,
+            data.liquidity,
+            data.return_rate,
+            data.approved_from_product_id,
+            data.alternative_names,
+        )
+        return self._row_to_catalog_product(row) if row else None
+
     async def update(
         self, catalog_id: int, data: CatalogProductUpdate
     ) -> CatalogProduct | None:

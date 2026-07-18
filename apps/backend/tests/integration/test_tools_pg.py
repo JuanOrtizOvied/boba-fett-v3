@@ -31,6 +31,27 @@ async def test_add_product_persists_valid_product(patch_get_pool, tool_config, t
     assert float(row["amount"]) == 1000
 
 
+async def test_add_product_persists_source_catalog_product_id(
+    patch_get_pool, tool_config, test_pool
+):
+    result = await add_product.ainvoke(
+        {
+            "name": "Catalog Fund",
+            "amount": 1000,
+            "category": "publicos",
+            "catalog_product_id": 123,
+        },
+        config=tool_config,
+    )
+
+    product_id = result["product"]["id"]
+    row = await test_pool.fetchrow(
+        "SELECT catalog_product_id FROM products WHERE id = $1", product_id
+    )
+    assert row["catalog_product_id"] == 123
+    assert result["product"]["catalog_product_id"] == 123
+
+
 async def test_add_product_rejects_non_positive_amount(patch_get_pool, tool_config, test_pool):
     """`db/schema.sql` enforces `amount > 0` via a CHECK constraint; the
     `ProductCreate` pydantic model (`Field(gt=0)`) rejects it even earlier,

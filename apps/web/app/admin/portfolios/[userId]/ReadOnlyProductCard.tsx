@@ -6,7 +6,7 @@ import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
 import { compositionColor } from "@/lib/compositionPalette";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { formatUsd } from "@/lib/format";
-import type { Category, Product } from "@/lib/portfolio-types";
+import type { CatalogProduct, Category, Product } from "@/lib/portfolio-types";
 
 /**
  * Not a Next.js route file (no `page`/`layout`/`route` export constraints
@@ -151,9 +151,27 @@ const EMPTY_ENRICHMENT: EnrichmentFields = {
   returnRate: "",
 };
 
+const CATALOG_COMPARISON_FIELDS = [
+  { key: "name", label: "Nombre" },
+  { key: "category", label: "Categoría" },
+  { key: "subcategory", label: "Subcategoría" },
+  { key: "asset_class", label: "Clase de activo" },
+  { key: "geographic_focus", label: "Foco geográfico" },
+  { key: "underlying", label: "Subyacente" },
+  { key: "commission", label: "Comisión" },
+  { key: "currency", label: "Moneda" },
+  { key: "administrator", label: "Administradora" },
+  { key: "manager", label: "Gestor" },
+  { key: "liquidity", label: "Liquidez" },
+  { key: "return_rate", label: "Rentabilidad" },
+] as const;
+
+type CatalogComparisonKey = (typeof CATALOG_COMPARISON_FIELDS)[number]["key"];
+
 export interface ApproveProductModalProps {
   /** `null` closes the modal. */
   product: Product | null;
+  catalogEntry?: CatalogProduct | null;
   onClose: () => void;
   onApproved?: (productId: string) => void;
 }
@@ -168,6 +186,7 @@ export interface ApproveProductModalProps {
  */
 export const ApproveProductModal: FC<ApproveProductModalProps> = ({
   product,
+  catalogEntry = null,
   onClose,
   onApproved,
 }) => {
@@ -232,6 +251,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
           liquidity: enrichment.liquidity.trim(),
           return_rate: enrichment.returnRate.trim(),
           approved_from_product_id: product.id,
+          catalog_product_id: product.catalog_product_id,
         }),
       });
 
@@ -253,13 +273,31 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
     }
   };
 
+  const nextCatalogValues: Record<CatalogComparisonKey, string> = {
+    name: name.trim(),
+    category,
+    subcategory: subcategory.trim(),
+    asset_class: enrichment.assetClass.trim(),
+    geographic_focus: enrichment.geographicFocus.trim(),
+    underlying: enrichment.underlying.trim(),
+    commission: enrichment.commission.trim(),
+    currency: enrichment.currency.trim(),
+    administrator: enrichment.administrator.trim(),
+    manager: enrichment.manager.trim(),
+    liquidity: enrichment.liquidity.trim(),
+    return_rate: enrichment.returnRate.trim(),
+  };
+
+  const formatComparisonValue = (value: string | null | undefined) =>
+    value && value.trim() ? value : "—";
+
   return (
     <div
       className="animate-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
       <div
-        className="animate-modal-panel flex max-h-[90vh] w-full max-w-[92vw] flex-col overflow-hidden rounded-2xl bg-background shadow-xl sm:max-w-2xl"
+        className="animate-modal-panel flex max-h-[90vh] w-full max-w-[92vw] flex-col overflow-hidden rounded-2xl bg-background shadow-xl sm:max-w-4xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-sabbi-neutral-200 px-5 py-4">
@@ -276,7 +314,34 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
           </button>
         </div>
 
-        <div className="grid flex-1 gap-6 overflow-y-auto p-5 sm:grid-cols-2">
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
+          {catalogEntry ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">
+                Este producto ya existe en el catálogo. Revisa los valores actuales y los nuevos antes de aprobar.
+              </p>
+              <div className="mt-3 overflow-x-auto">
+                <div className="grid min-w-[640px] grid-cols-[160px_1fr_1fr] gap-x-3 gap-y-2 text-xs">
+                  <span className="font-semibold text-sabbi-neutral-500">Campo</span>
+                  <span className="font-semibold text-sabbi-neutral-500">Valor actual</span>
+                  <span className="font-semibold text-sabbi-neutral-500">Nuevo valor</span>
+                  {CATALOG_COMPARISON_FIELDS.map(({ key, label }) => (
+                    <div key={key} className="contents">
+                      <span className="font-medium text-sabbi-neutral-700">{label}</span>
+                      <span className="break-words text-sabbi-neutral-700">
+                        {formatComparisonValue(catalogEntry[key])}
+                      </span>
+                      <span className="break-words font-medium text-sabbi-neutral-900">
+                        {formatComparisonValue(nextCatalogValues[key])}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid gap-6 sm:grid-cols-2">
           <div className="flex flex-col gap-3">
             <p className="text-xs font-semibold tracking-wide text-sabbi-neutral-600 uppercase">
               Datos del producto
@@ -381,6 +446,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                 className={modalInputClass}
               />
             </ModalField>
+          </div>
           </div>
         </div>
 

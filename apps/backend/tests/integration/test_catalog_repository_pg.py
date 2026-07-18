@@ -79,6 +79,25 @@ async def test_insert_if_not_duplicate_persists_provenance_fields(test_pool):
     assert created.approved_at is not None
 
 
+async def test_replace_from_approval_updates_existing_entry(test_pool):
+    repo = CatalogRepository(test_pool)
+    created = await repo.insert_if_not_duplicate(
+        _entry(commission="1.5%", alternative_names=["Bono Alias"])
+    )
+
+    replaced = await repo.replace_from_approval(
+        created.id,
+        _entry(commission="2.0%", approved_from_product_id="prod_updated"),
+    )
+
+    assert replaced is not None
+    assert replaced.id == created.id
+    assert replaced.commission == "2.0%"
+    assert replaced.alternative_names == ["Bono Alias"]
+    assert replaced.approved_from_product_id == "prod_updated"
+    assert replaced.approved_at is not None
+
+
 # ---------------------------------------------------------------------------
 # list_all
 # ---------------------------------------------------------------------------

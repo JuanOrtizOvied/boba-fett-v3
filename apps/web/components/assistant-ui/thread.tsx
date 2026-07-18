@@ -855,6 +855,7 @@ export function ProposeProductCard({
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
   const [category, setCategory] = useState<Category>(resolveCategoryKey(product?.category ?? "cash"));
   const [subcategory, setSubcategory] = useState(product?.subcategory ?? "");
+  const catalogProductId = product?.catalog_product_id;
 
   const parsedAmount = parseFloat(amount);
   const missingFields: string[] = [];
@@ -878,11 +879,12 @@ export function ProposeProductCard({
       `subcategory: ${subcategory}`,
     ];
     if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
+    if (catalogProductId != null) parts.push(`catalog_product_id: ${catalogProductId}`);
     runtime.append({
       role: "user",
       content: [{ type: "text", text: `Sí, agregar al portafolio con: ${parts.join(", ")}.` }],
     });
-  }, [name, amount, category, subcategory, provider, runtime, cardId]);
+  }, [name, amount, category, subcategory, provider, catalogProductId, runtime, cardId]);
 
   const handleReject = () => {
     setLocalResponded("no");
@@ -918,11 +920,12 @@ export function ProposeProductCard({
         const catLabel = CATEGORY_META[category]?.label ?? category;
         const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${catLabel}`, `subcategory: ${subcategory}`];
         if (provider.trim()) p.push(`proveedor: ${provider.trim()}`);
+        if (catalogProductId != null) p.push(`catalog_product_id: ${catalogProductId}`);
         return p.join(", ");
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, product, name, parsedAmount, category, subcategory, provider, isValid, responded]);
+  }, [cardId, product, name, parsedAmount, category, subcategory, provider, catalogProductId, isValid, responded]);
 
   if (!product) return null;
 
