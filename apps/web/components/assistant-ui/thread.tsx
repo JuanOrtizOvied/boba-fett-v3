@@ -459,13 +459,34 @@ const UserMessage: FC = () => {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
         </ActionBarPrimitive.Copy>
-        <ActionBarPrimitive.Reload asChild>
-          <button type="button" className={messageActionBtn} title="Reintentar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          </button>
-        </ActionBarPrimitive.Reload>
+        <UserReloadButton />
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
+  );
+};
+
+const UserReloadButton: FC = () => {
+  const threadRuntime = useThreadRuntime();
+  const messageId = useAuiState((s) => s.message.id);
+  const disabled = useAuiState(
+    (s) => s.thread.isRunning || s.thread.isDisabled,
+  );
+
+  const handleReload = useCallback(() => {
+    if (disabled) return;
+    threadRuntime.startRun({ parentId: messageId });
+  }, [threadRuntime, messageId, disabled]);
+
+  return (
+    <button
+      type="button"
+      className={messageActionBtn}
+      title="Reintentar"
+      onClick={handleReload}
+      disabled={disabled}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    </button>
   );
 };
 

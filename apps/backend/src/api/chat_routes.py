@@ -21,9 +21,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import AnyMessage, HumanMessage
+from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage
 from pydantic import BaseModel, Field
 
+from agent.file_utils import spreadsheet_to_text
 from auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -46,8 +47,9 @@ _TOOL_LABELS: dict[str, str] = {
 
 
 class ChatMessageRequest(BaseModel):
-    message: str = Field(min_length=1)
+    message: str = ""
     attachments: list[dict[str, Any]] | None = None
+    retry: bool = False
 
 
 class ApiMessage(BaseModel):
@@ -164,21 +166,34 @@ def _stream_event_progress(event: Any) -> dict[str, str] | None:
 def _normalize_attachment(att: dict[str, Any]) -> dict[str, Any]:
     """Convert frontend ``{type: "file"}`` blocks to Anthropic API format.
 
-    The API expects ``type: "image"`` for images and ``type: "document"``
-    for everything else (PDFs, spreadsheets, etc.), each with a nested
-    ``source`` object carrying the base64 payload.
+    Images → ``type: "image"``; PDFs → ``type: "document"``; spreadsheets
+    are parsed server-side into text (Claude only accepts PDF for documents).
     """
     if att.get("type") != "file":
         return att
     mime = att.get("mime_type", "application/octet-stream")
     data = att.get("data", "")
-    block_type = "image" if mime.startswith("image/") else "document"
+
+    spreadsheet_text = spreadsheet_to_text(data, mime)
+    if spreadsheet_text is not None:
+        filename = ""
+        metadata = att.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("filename"):
+            filename = f" ({metadata['filename']})"
+        return {"type": "text", "text": f"{spreadsheet_text}{filename}"}
+
+    if mime.startswith("image/"):
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": mime, "data": data},
+        }
+
     result: dict[str, Any] = {
-        "type": block_type,
+        "type": "document",
         "source": {"type": "base64", "media_type": mime, "data": data},
     }
     metadata = att.get("metadata")
-    if block_type == "document" and isinstance(metadata, dict) and metadata.get("filename"):
+    if isinstance(metadata, dict) and metadata.get("filename"):
         result["title"] = metadata["filename"]
     return result
 
@@ -222,23 +237,40 @@ async def stream_message(
         raise HTTPException(status_code=503, detail="Chat graph not initialized")
 
     user_id = user["id"]
-    message_text = body.message.strip()
-    if not message_text:
-        raise HTTPException(status_code=422, detail="message is required")
-
-    if body.attachments:
-        content: list[dict[str, Any]] = [{"type": "text", "text": message_text}]
-        content.extend(_normalize_attachment(a) for a in body.attachments)
-        input_message = HumanMessage(content=content)
-    else:
-        input_message = HumanMessage(content=message_text)
-
-    input_data = {"messages": [input_message]}
     config = _graph_config(thread_id)
     config["configurable"]["user_id"] = user_id
 
+    if body.retry:
+        state = await graph.aget_state(config=_graph_config(thread_id))
+        msgs = _state_messages(state)
+        last_human_idx = -1
+        for i in range(len(msgs) - 1, -1, -1):
+            if getattr(msgs[i], "type", "") == "human":
+                last_human_idx = i
+                break
+        if last_human_idx == -1:
+            raise HTTPException(status_code=400, detail="No message to retry")
+        to_remove = msgs[last_human_idx + 1 :]
+        if to_remove:
+            await graph.aupdate_state(
+                _graph_config(thread_id),
+                {"messages": [RemoveMessage(id=m.id) for m in to_remove if getattr(m, "id", None)]},
+            )
+        input_data: dict[str, Any] = {"messages": []}
+    else:
+        message_text = body.message.strip()
+        if not message_text:
+            raise HTTPException(status_code=422, detail="message is required")
+        if body.attachments:
+            content: list[dict[str, Any]] = [{"type": "text", "text": message_text}]
+            content.extend(_normalize_attachment(a) for a in body.attachments)
+            input_message = HumanMessage(content=content)
+        else:
+            input_message = HumanMessage(content=message_text)
+        input_data = {"messages": [input_message]}
+
     async def events() -> AsyncIterator[str]:
-        yield _sse_event("progress", {"step": "loading_context", "label": "Cargando contexto"})
+        yield _sse_event("progress", {"step": "loading_context", "label": "Reintentando" if body.retry else "Cargando contexto"})
         has_emitted_text = False
         try:
             if hasattr(graph, "astream_events"):

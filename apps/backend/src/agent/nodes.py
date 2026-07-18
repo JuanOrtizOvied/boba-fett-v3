@@ -11,6 +11,7 @@ from __future__ import annotations
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 
+from agent.file_utils import SPREADSHEET_MIMES, spreadsheet_to_text
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import AgentState
 from agent.tools import portfolio_tools
@@ -103,7 +104,11 @@ def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
         return msg
     needs_fix = any(
         isinstance(b, dict)
-        and (b.get("type") == "file" or (b.get("type") == "image" and "title" in b))
+        and (
+            b.get("type") == "file"
+            or (b.get("type") == "image" and "title" in b)
+            or (b.get("type") == "document" and b.get("source", {}).get("media_type", "") in SPREADSHEET_MIMES)
+        )
         for b in content
     )
     if not needs_fix:
@@ -115,11 +120,27 @@ def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
         elif block.get("type") == "file":
             mime = block.get("mime_type", "application/octet-stream")
             data = block.get("data", "")
-            block_type = "image" if mime.startswith("image/") else "document"
-            fixed.append({
-                "type": block_type,
-                "source": {"type": "base64", "media_type": mime, "data": data},
-            })
+            spreadsheet_text = spreadsheet_to_text(data, mime)
+            if spreadsheet_text is not None:
+                fixed.append({"type": "text", "text": spreadsheet_text})
+            elif mime.startswith("image/"):
+                fixed.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": mime, "data": data},
+                })
+            else:
+                fixed.append({
+                    "type": "document",
+                    "source": {"type": "base64", "media_type": mime, "data": data},
+                })
+        elif block.get("type") == "document":
+            source = block.get("source", {})
+            mime = source.get("media_type", "")
+            if mime in SPREADSHEET_MIMES:
+                text = spreadsheet_to_text(source.get("data", ""), mime)
+                fixed.append({"type": "text", "text": text or "[Archivo vacío]"})
+            else:
+                fixed.append(block)
         elif block.get("type") == "image" and "title" in block:
             fixed.append({k: v for k, v in block.items() if k != "title"})
         else:

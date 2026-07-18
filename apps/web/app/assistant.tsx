@@ -265,6 +265,7 @@ function AssistantInner() {
       attachments?: Record<string, unknown>[];
       prependMessages?: ThreadMessageLike[];
       userMsg?: ThreadMessageLike;
+      retry?: boolean;
     }) => {
       if (!threadId) return;
 
@@ -290,10 +291,14 @@ function AssistantInner() {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              message: text,
-              attachments: opts?.attachments?.length ? opts.attachments : undefined,
-            }),
+            body: JSON.stringify(
+              opts?.retry
+                ? { retry: true }
+                : {
+                    message: text,
+                    attachments: opts?.attachments?.length ? opts.attachments : undefined,
+                  },
+            ),
           },
         );
 
@@ -465,7 +470,7 @@ function AssistantInner() {
       if (!textContent) return;
 
       const kept = current.slice(0, userMsgIdx + 1);
-      await streamMessage(textContent, { prependMessages: kept });
+      await streamMessage(textContent, { prependMessages: kept, retry: true });
     },
     [threadId, isRunning, streamMessage],
   );
