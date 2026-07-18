@@ -28,6 +28,7 @@ import {
   ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAuiState,
   useThreadRuntime,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
@@ -553,6 +554,9 @@ type ProposeToolResult =
 // Module-level set — survives provider remounts caused by assistant-ui
 // re-rendering message components after runtime.append().
 const _globalRespondedIds = new Set<string>();
+const _globalResponses = new Map<string, ProposalResponse>();
+
+type ProposalResponse = "yes" | "no";
 
 export interface ProposalEntry {
   name: string;
@@ -585,6 +589,97 @@ interface ProposalBatchCtx {
  * state directly — see `__tests__/propose-product-card.test.tsx`.
  */
 export const ProposalBatchContext = createContext<ProposalBatchCtx | null>(null);
+
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const text = (part as { text?: unknown }).text;
+      return typeof text === "string" ? text : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function addedProductFromPart(part: unknown): ToolResultProduct | null {
+  if (!part || typeof part !== "object") return null;
+  const toolPart = part as {
+    type?: string;
+    toolName?: string;
+    result?: unknown;
+  };
+  if (toolPart.type !== "tool-call" || toolPart.toolName !== "add_product") {
+    return null;
+  }
+  const result = parseToolResult<PortfolioToolResult>(toolPart.result);
+  return result?.status === "added" ? result.product : null;
+}
+
+function normalizeMatchText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function amountsMatch(a: number | undefined, b: number | undefined): boolean {
+  if (typeof a !== "number" || typeof b !== "number") return false;
+  return Math.abs(a - b) < 1;
+}
+
+function productsMatch(a: ProposedProduct, b: ToolResultProduct): boolean {
+  const aName = normalizeMatchText(a.name);
+  const bName = normalizeMatchText(b.name);
+  const sameName = aName === bName || aName.includes(bName) || bName.includes(aName);
+  return sameName && (a.category === b.category || amountsMatch(a.amount, b.amount));
+}
+
+function responseForProduct(text: string, product: ProposedProduct): ProposalResponse | null {
+  const normalizedText = normalizeMatchText(text);
+  const normalizedName = normalizeMatchText(product.name);
+  const mentionsProduct = normalizedText.includes(normalizedName);
+  if (!mentionsProduct) return null;
+  if (normalizedText.includes("no agregar") || normalizedText.includes("no, no")) {
+    return "no";
+  }
+  if (
+    normalizedText.includes("si, agregar") ||
+    normalizedText.includes("agregar todos") ||
+    normalizedText.includes("se agrego") ||
+    normalizedText.includes("se agregaron")
+  ) {
+    return "yes";
+  }
+  return null;
+}
+
+export function deriveResponseForProductFromThread(
+  product: ProposedProduct,
+  messages: readonly unknown[],
+): ProposalResponse | null {
+  let textResponse: ProposalResponse | null = null;
+
+  for (const message of messages) {
+    if (!message || typeof message !== "object") continue;
+    const content = (message as { content?: unknown }).content;
+
+    if ((message as { role?: unknown }).role === "user") {
+      const response = responseForProduct(contentText(content), product);
+      if (response) textResponse = response;
+    }
+
+    if (!Array.isArray(content)) continue;
+    if (content.map(addedProductFromPart).some((added) => added && productsMatch(product, added))) {
+      return "yes";
+    }
+  }
+
+  return textResponse;
+}
 
 export function ProposalBatchProvider({ children }: { children: React.ReactNode }) {
   const entriesRef = useRef(new Map<string, ProposalEntry>());
@@ -635,6 +730,7 @@ export function ProposalBatchProvider({ children }: { children: React.ReactNode 
         fns.markDone();
         respondedIdsRef.current.add(id);
         _globalRespondedIds.add(id);
+        _globalResponses.set(id, "yes");
         const entry = entriesRef.current.get(id);
         if (entry) entriesRef.current.set(id, { ...entry, responded: "yes" });
       }
@@ -731,15 +827,24 @@ export function ProposeProductCard({
   toolCallId,
 }: ToolCallMessagePartProps<Record<string, unknown>, ProposeToolResult>) {
   const runtime = useThreadRuntime();
+  const messages = useAuiState((s) => s.thread.messages);
   const batch = useContext(ProposalBatchContext);
   const batchRef = useRef(batch);
   batchRef.current = batch;
   const cardId = toolCallId;
   const [localResponded, setLocalResponded] = useState<"yes" | "no" | null>(null);
-  const responded = localResponded ?? (_globalRespondedIds.has(toolCallId) ? "yes" : null);
 
   const parsed = parseToolResult<ProposeToolResult>(result);
   const product = parsed?.status === "proposed" ? parsed.product : null;
+  const threadResponded = useMemo(
+    () => (product ? deriveResponseForProductFromThread(product, messages) : null),
+    [product, messages],
+  );
+  const responded =
+    localResponded ??
+    _globalResponses.get(cardId) ??
+    threadResponded ??
+    (_globalRespondedIds.has(cardId) ? "yes" : null);
 
   const [name, setName] = useState(product?.name ?? "");
   const [provider, setProvider] = useState(product?.provider ?? "");
@@ -759,6 +864,7 @@ export function ProposeProductCard({
     if (!name.trim() || isNaN(amt) || amt <= 0 || !subcategory.trim()) return;
     setLocalResponded("yes");
     _globalRespondedIds.add(cardId);
+    _globalResponses.set(cardId, "yes");
     batchRef.current?.respondedIds.add(cardId);
     const parts: string[] = [
       `nombre: ${name}`,
@@ -776,6 +882,7 @@ export function ProposeProductCard({
   const handleReject = () => {
     setLocalResponded("no");
     _globalRespondedIds.add(cardId);
+    _globalResponses.set(cardId, "no");
     batchRef.current?.respondedIds.add(cardId);
     runtime.append({
       role: "user",

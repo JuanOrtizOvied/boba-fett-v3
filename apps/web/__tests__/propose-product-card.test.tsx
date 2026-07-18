@@ -3,8 +3,9 @@ import { useContext, useEffect } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useThreadRuntime } from "@assistant-ui/react";
+import { useAuiState, useThreadRuntime } from "@assistant-ui/react";
 import {
+  deriveResponseForProductFromThread,
   ProposalBatchContext,
   ProposalBatchProvider,
   ProposeProductCard,
@@ -14,6 +15,7 @@ import {
 vi.mock("@assistant-ui/react", () => {
   const stub = () => new Proxy({}, { get: () => "div" });
   return {
+    useAuiState: vi.fn((selector) => selector({ thread: { messages: [] }, message: { id: undefined } })),
     useThreadRuntime: vi.fn(() => ({ append: vi.fn() })),
     MessagePrimitive: stub(),
     ActionBarPrimitive: stub(),
@@ -34,10 +36,10 @@ type ProductInput = {
 
 let cardCounter = 0;
 
-function cardProps(product: ProductInput) {
+function cardProps(product: ProductInput, toolCallId = `tc_${++cardCounter}`) {
   return {
     result: { status: "proposed", product },
-    toolCallId: `tc_${++cardCounter}`,
+    toolCallId,
   } as unknown as ComponentProps<typeof ProposeProductCard>;
 }
 
@@ -69,6 +71,9 @@ let appendMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   appendMock = vi.fn();
+  vi.mocked(useAuiState).mockImplementation((selector) =>
+    selector({ thread: { messages: [] }, message: { id: undefined } } as never),
+  );
   vi.mocked(useThreadRuntime).mockReturnValue({ append: appendMock } as unknown as ReturnType<
     typeof useThreadRuntime
   >);
@@ -271,5 +276,178 @@ describe("ProposeProductCard registration in ProposalBatchProvider", () => {
     );
 
     await waitFor(() => expect(latest?.size).toBe(0));
+  });
+});
+
+describe("ProposeProductCard persisted response state", () => {
+  test("derives confirmations from user messages anywhere in the thread", () => {
+    const response = deriveResponseForProductFromThread(
+      {
+        name: "Fund B",
+        amount: 800,
+        category: "cash",
+        subcategory: "Fondos de Money Market",
+      },
+      [
+        {
+          id: "user_1",
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Sí, agregar todos al portafolio:\nnombre: Fund B, monto: 800, categoría: cash, subcategory: Fondos de Money Market",
+            },
+          ],
+        },
+      ],
+    );
+
+    expect(response).toBe("yes");
+  });
+
+  test("derives confirmation from later successful add_product tool results", () => {
+    const response = deriveResponseForProductFromThread(
+      {
+        name: "Fondo Visión Largo Plazo Global B",
+        amount: 125000.4,
+        category: "privados",
+        subcategory: "Deuda Privada",
+      },
+      [
+        {
+          id: "user_1",
+          role: "user",
+          content: [{ type: "text", text: "Sí, agregalo." }],
+        },
+        {
+          id: "assistant_2",
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolName: "add_product",
+              toolCallId: "tc_add_product",
+              result: {
+                status: "added",
+                product: {
+                  name: "Fondo Vision Largo Plazo Global B",
+                  amount: 125000,
+                  category: "privados",
+                },
+              },
+            },
+          ],
+        },
+      ],
+    );
+
+    expect(response).toBe("yes");
+  });
+
+  test("derives a rejection from user messages anywhere in the thread", () => {
+    const response = deriveResponseForProductFromThread(
+      {
+        name: "Fund C",
+        amount: 900,
+        category: "cash",
+        subcategory: "Depósitos a plazo",
+      },
+      [
+        {
+          id: "user_1",
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: 'No, no agregar "Fund C".',
+            },
+          ],
+        },
+      ],
+    );
+
+    expect(response).toBe("no");
+  });
+
+  test("blocks a remounted card when the same product was already added anywhere in the thread", () => {
+    vi.mocked(useAuiState).mockImplementation((selector) =>
+      selector({
+        message: { id: "assistant_1" },
+        thread: {
+          messages: [
+            {
+              id: "assistant_2",
+              role: "assistant",
+              content: [
+                {
+                  type: "tool-call",
+                  toolName: "add_product",
+                  toolCallId: "tc_add_product",
+                  result: {
+                    status: "added",
+                    product: {
+                      name: "Fondo Edifica Core VI B",
+                      amount: 55001.56,
+                      category: "club",
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      } as never),
+    );
+
+    render(
+      <ProposeProductCard
+        {...cardProps(
+          {
+            name: "Fondo Edífica Core VI B",
+            amount: 55001.56,
+            category: "club",
+            subcategory: "Perú",
+          },
+          "tc_existing",
+        )}
+      />,
+    );
+
+    expect(screen.getByText("✓ Confirmado")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sí, agregar" })).not.toBeInTheDocument();
+  });
+
+  test("derives product response from an existing add_product result without message scoping", () => {
+    const response = deriveResponseForProductFromThread(
+      {
+        name: "Fondo Edífica Core VI B",
+        amount: 55001.56,
+        category: "club",
+        subcategory: "Perú",
+      },
+      [
+        {
+          id: "assistant_2",
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolName: "add_product",
+              toolCallId: "tc_add_product",
+              result: {
+                status: "added",
+                product: {
+                  name: "Fondo Edifica Core VI B",
+                  amount: 55002,
+                  category: "club",
+                },
+              },
+            },
+          ],
+        },
+      ],
+    );
+
+    expect(response).toBe("yes");
   });
 });
