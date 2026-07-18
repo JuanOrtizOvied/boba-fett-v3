@@ -37,16 +37,16 @@ async def _repository() -> ProductRepository:
 def _derive_card_tag(provenance: dict[str, str]) -> str:
     """Aggregate a per-field `provenance` map into one card-level reliability
     tag (`provenance-ui.spec.md` — "Provenance Data Contract"):
-    - every sourced field is `catalog` -> "verified"
+    - product identity (`name`) came from `catalog` -> "verified"
     - no field is `catalog` or `web_search` (only `claude_knowledge`/empty) -> "unverified"
-    - anything else (a mix involving `catalog` and/or `web_search`) -> "web"
+    - anything else involving `web_search` -> "web"
     """
     sources = set(provenance.values())
     if not sources:
         return "unverified"
-    if sources == {"catalog"}:
+    if provenance.get("name") == "catalog":
         return "verified"
-    if "catalog" in sources or "web_search" in sources:
+    if "web_search" in sources:
         return "web"
     return "unverified"
 

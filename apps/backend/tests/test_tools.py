@@ -227,7 +227,7 @@ def test_propose_product_tag_verified_when_all_fields_are_catalog():
     assert result["product"]["reliability_tag"] == "verified"
 
 
-def test_propose_product_tag_web_when_sources_are_mixed():
+def test_propose_product_tag_verified_when_identity_is_catalog_even_with_enrichment():
     from agent.tools import propose_product
 
     result = asyncio.run(
@@ -236,7 +236,24 @@ def test_propose_product_tag_web_when_sources_are_mixed():
                 "name": "BlackRock Global Bond Fund",
                 "amount": 1000,
                 "category": "publicos",
-                "provenance": {"name": "catalog", "liquidity": "claude_knowledge"},
+                "provenance": {"name": "catalog", "liquidity": "web_search"},
+            }
+        )
+    )
+
+    assert result["product"]["reliability_tag"] == "verified"
+
+
+def test_propose_product_tag_web_when_identity_is_not_catalog_and_web_contributed():
+    from agent.tools import propose_product
+
+    result = asyncio.run(
+        propose_product.ainvoke(
+            {
+                "name": "BlackRock Global Bond Fund",
+                "amount": 1000,
+                "category": "publicos",
+                "provenance": {"name": "claude_knowledge", "liquidity": "web_search"},
             }
         )
     )
@@ -279,7 +296,7 @@ def test_derive_card_tag_directly():
 
     assert _derive_card_tag({}) == "unverified"
     assert _derive_card_tag({"name": "catalog", "commission": "catalog"}) == "verified"
-    assert _derive_card_tag({"name": "catalog", "commission": "web_search"}) == "web"
-    assert _derive_card_tag({"name": "catalog", "commission": "claude_knowledge"}) == "web"
+    assert _derive_card_tag({"name": "catalog", "commission": "web_search"}) == "verified"
+    assert _derive_card_tag({"name": "catalog", "commission": "claude_knowledge"}) == "verified"
     assert _derive_card_tag({"name": "web_search"}) == "web"
     assert _derive_card_tag({"name": "claude_knowledge"}) == "unverified"
