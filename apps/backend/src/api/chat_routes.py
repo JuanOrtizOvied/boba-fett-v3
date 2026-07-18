@@ -63,6 +63,7 @@ class ApiMessage(BaseModel):
 class ThreadStateResponse(BaseModel):
     thread_id: str
     messages: list[ApiMessage]
+    created_at: str | None = None
 
 
 def _graph_config(thread_id: str) -> dict[str, Any]:
@@ -224,9 +225,11 @@ async def get_thread_state(
         return ThreadStateResponse(thread_id=thread_id, messages=[])
 
     messages = _state_messages(state)
+    ts = getattr(state, "created_at", None)
     return ThreadStateResponse(
         thread_id=thread_id,
         messages=[_serialize_message(m) for m in messages],
+        created_at=ts if isinstance(ts, str) else str(ts) if ts else None,
     )
 
 
@@ -307,9 +310,11 @@ async def stream_message(
 
             final_state = await graph.aget_state(config=_graph_config(thread_id))
             messages = _state_messages(final_state)
+            ts = getattr(final_state, "created_at", None)
             final = ThreadStateResponse(
                 thread_id=thread_id,
                 messages=[_serialize_message(m) for m in messages],
+                created_at=ts if isinstance(ts, str) else str(ts) if ts else None,
             )
             yield _sse_event("final", final.model_dump())
             yield _sse_event("done", "[DONE]")

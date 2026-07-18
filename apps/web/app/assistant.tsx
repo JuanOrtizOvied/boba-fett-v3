@@ -33,6 +33,7 @@ type ApiMessage = {
 type ThreadStateResponse = {
   thread_id: string;
   messages: ApiMessage[];
+  created_at?: string | null;
 };
 
 type StreamEvent =
@@ -47,7 +48,7 @@ type StreamEvent =
 
 type JSONValue = string | number | boolean | null | JSONValue[] | { [k: string]: JSONValue };
 
-function convertMessages(api: ApiMessage[]): ThreadMessageLike[] {
+function convertMessages(api: ApiMessage[], threadCreatedAt?: string | null): ThreadMessageLike[] {
   const result: ThreadMessageLike[] = [];
   const toolResults = new Map<string, JSONValue>();
 
@@ -92,7 +93,7 @@ function convertMessages(api: ApiMessage[]): ThreadMessageLike[] {
           }
         }
       }
-      if (parts.length) result.push({ role: "user", id: msg.id, content: parts });
+      if (parts.length) result.push({ role: "user", id: msg.id, content: parts, createdAt: threadCreatedAt ? new Date(threadCreatedAt) : undefined });
     } else if (msg.type === "ai") {
       type TextPart = { readonly type: "text"; readonly text: string };
       type ToolCallPart = {
@@ -124,7 +125,7 @@ function convertMessages(api: ApiMessage[]): ThreadMessageLike[] {
         }
       }
 
-      if (parts.length) result.push({ role: "assistant", id: msg.id, content: parts });
+      if (parts.length) result.push({ role: "assistant", id: msg.id, content: parts, createdAt: threadCreatedAt ? new Date(threadCreatedAt) : undefined });
     }
   }
 
@@ -249,7 +250,7 @@ function AssistantInner() {
       try {
         const state = await fetchThreadState(tid);
         if (cancelled) return;
-        updateMessages(convertMessages(state.messages));
+        updateMessages(convertMessages(state.messages, state.created_at));
       } finally {
         if (!cancelled) setIsLoadingHistory(false);
       }
@@ -341,7 +342,7 @@ function AssistantInner() {
               visible: false,
             }));
             const final = ev.data as ThreadStateResponse;
-            if (final?.messages) updateMessages(convertMessages(final.messages));
+            if (final?.messages) updateMessages(convertMessages(final.messages, final.created_at));
           }
 
           if (ev.event === "error") {
@@ -432,6 +433,7 @@ function AssistantInner() {
       const userMsg: ThreadMessageLike = {
         role: "user",
         id: `user-${Date.now()}`,
+        createdAt: new Date(),
         content: userContent,
       };
 

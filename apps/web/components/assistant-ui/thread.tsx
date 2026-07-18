@@ -425,9 +425,55 @@ const UserTextPart: FC<TextMessagePartProps> = ({ text }) => {
   return <p className="whitespace-pre-wrap">{text}</p>;
 };
 
+function formatMessageDate(d: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = today.getTime() - msgDay.getTime();
+  const oneDay = 86_400_000;
+  if (diff === 0) return "Hoy";
+  if (diff === oneDay) return "Ayer";
+  return d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+}
+
+const DateSeparator: FC = () => {
+  const showSeparator = useAuiState((s) => {
+    const { createdAt, id } = s.message;
+    if (!createdAt) return null;
+    const msgs = s.thread.messages;
+    const idx = msgs.findIndex((m) => m.id === id);
+    if (idx <= 0) return formatMessageDate(createdAt);
+    const prev = msgs[idx - 1];
+    if (!prev?.createdAt) return formatMessageDate(createdAt);
+    const prevDay = new Date(prev.createdAt.getFullYear(), prev.createdAt.getMonth(), prev.createdAt.getDate());
+    const curDay = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+    return prevDay.getTime() === curDay.getTime() ? null : formatMessageDate(createdAt);
+  });
+  if (!showSeparator) return null;
+  return (
+    <div className="flex w-full items-center gap-3 py-2">
+      <div className="h-px flex-1 bg-sabbi-neutral-200" />
+      <span className="text-[11px] font-medium text-sabbi-neutral-400">{showSeparator}</span>
+      <div className="h-px flex-1 bg-sabbi-neutral-200" />
+    </div>
+  );
+};
+
+const MessageTimestamp: FC<{ align?: "left" | "right" }> = ({ align = "left" }) => {
+  const createdAt = useAuiState((s) => s.message.createdAt);
+  if (!createdAt) return null;
+  const time = createdAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <span className={`text-[11px] text-sabbi-neutral-400 ${align === "right" ? "text-right" : ""}`}>
+      {time}
+    </span>
+  );
+};
+
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="group/msg ml-auto flex max-w-[85%] flex-col items-end gap-1">
+      <DateSeparator />
       <div className="flex flex-col gap-2 rounded-[18px_18px_4px_18px] bg-sabbi-primary px-4 py-2.5 text-white">
         <MessagePrimitive.Content
           components={{
@@ -453,14 +499,17 @@ const UserMessage: FC = () => {
           )}
         </MessagePrimitive.Attachments>
       </div>
-      <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
-        <ActionBarPrimitive.Copy asChild>
-          <button type="button" className={messageActionBtn} title="Copiar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </button>
-        </ActionBarPrimitive.Copy>
-        <UserReloadButton />
-      </ActionBarPrimitive.Root>
+      <div className="flex items-center gap-1">
+        <MessageTimestamp align="right" />
+        <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
+          <ActionBarPrimitive.Copy asChild>
+            <button type="button" className={messageActionBtn} title="Copiar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </ActionBarPrimitive.Copy>
+          <UserReloadButton />
+        </ActionBarPrimitive.Root>
+      </div>
     </MessagePrimitive.Root>
   );
 };
@@ -1267,6 +1316,7 @@ const ReasoningPart: FC<ReasoningMessagePartProps> = ({ text, status }) => {
 const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="group/msg mr-auto flex w-full min-w-0 flex-col items-start gap-1">
+      <DateSeparator />
       <div className="min-w-0 max-w-full px-0 py-2 text-sabbi-neutral-900">
         <ProposalBatchProvider>
           <MessagePrimitive.Content
@@ -1298,18 +1348,21 @@ const AssistantMessage: FC = () => {
           </ErrorPrimitive.Root>
         </MessagePrimitive.Error>
       </div>
-      <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
-        <ActionBarPrimitive.Copy asChild>
-          <button type="button" className={messageActionBtn} title="Copiar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </button>
-        </ActionBarPrimitive.Copy>
-        <ActionBarPrimitive.Reload asChild>
-          <button type="button" className={messageActionBtn} title="Reintentar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          </button>
-        </ActionBarPrimitive.Reload>
-      </ActionBarPrimitive.Root>
+      <div className="flex items-center gap-1">
+        <MessageTimestamp />
+        <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
+          <ActionBarPrimitive.Copy asChild>
+            <button type="button" className={messageActionBtn} title="Copiar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </ActionBarPrimitive.Copy>
+          <ActionBarPrimitive.Reload asChild>
+            <button type="button" className={messageActionBtn} title="Reintentar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </ActionBarPrimitive.Reload>
+        </ActionBarPrimitive.Root>
+      </div>
     </MessagePrimitive.Root>
   );
 };
