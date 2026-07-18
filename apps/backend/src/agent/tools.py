@@ -152,6 +152,15 @@ async def add_product(
     provider: str = "",
     composition: list[dict[str, Any]] | None = None,
     subcategory: str = "",
+    asset_class: str = "",
+    currency: str = "",
+    commission: str = "",
+    administrator: str = "",
+    manager: str = "",
+    liquidity: str = "",
+    return_rate: str = "",
+    geographic_focus: str = "",
+    underlying: str = "",
     *,
     config: RunnableConfig,
 ) -> dict:
@@ -165,6 +174,15 @@ async def add_product(
         composition: List of {name, percentage} asset class allocations. When
             omitted, the product is treated as 100% allocated to itself.
         subcategory: Taxonomy leaf subcategory (e.g. 'Real Estate Extranjero').
+        asset_class: Asset class, from search_product if available.
+        currency: Currency, from search_product if available.
+        commission: Commission/fee, from search_product if available.
+        administrator: Fund administrator, from search_product if available.
+        manager: Fund manager, from search_product if available.
+        liquidity: Liquidity terms, from search_product if available.
+        return_rate: Historical return rate, from search_product if available.
+        geographic_focus: Geographic focus, from search_product if available.
+        underlying: Underlying asset, from search_product if available.
     """
     repo = await _repository()
     user_id = _user_id(config)
@@ -178,6 +196,15 @@ async def add_product(
             category=category,
             subcategory=subcategory,
             composition=comp,
+            asset_class=asset_class,
+            geographic_focus=geographic_focus,
+            underlying=underlying,
+            commission=commission,
+            currency=currency,
+            administrator=administrator,
+            manager=manager,
+            liquidity=liquidity,
+            return_rate=return_rate,
         ),
     )
     return {"status": "added", "product": product.model_dump()}

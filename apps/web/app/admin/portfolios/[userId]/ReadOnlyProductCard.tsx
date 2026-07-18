@@ -167,7 +167,17 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({ product, onC
     setName(product.name);
     setCategory(product.category);
     setSubcategory(product.subcategory);
-    setEnrichment(EMPTY_ENRICHMENT);
+    setEnrichment({
+      assetClass: product.asset_class || "",
+      geographicFocus: product.geographic_focus || "",
+      underlying: product.underlying || "",
+      commission: product.commission || "",
+      currency: product.currency || "",
+      administrator: product.administrator || "",
+      manager: product.manager || "",
+      liquidity: product.liquidity || "",
+      returnRate: product.return_rate || "",
+    });
     setErrorMessage(null);
     setSuccessMessage(null);
   }, [product]);

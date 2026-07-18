@@ -26,6 +26,15 @@ export interface Product {
   category: Category;
   subcategory: string;
   composition: AssetAllocation[];
+  asset_class: string;
+  geographic_focus: string;
+  underlying: string;
+  commission: string;
+  currency: string;
+  administrator: string;
+  manager: string;
+  liquidity: string;
+  return_rate: string;
 }
 
 export interface ProductCreateInput {

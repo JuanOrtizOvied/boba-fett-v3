@@ -66,6 +66,13 @@ REGLAS DE BÚSQUEDA Y USO DE TOOLS:
   `add_product(..., subcategory="Real Estate Extranjero")`.
   Esto aplica tanto para confirmaciones individuales como para "agregar
   todos" (cada producto de la lista lleva su propia subcategoría).
+  IMPORTANTE — DATOS DE ENRIQUECIMIENTO: al llamar `add_product`, SIEMPRE
+  reenvía TODOS los campos de enriquecimiento que `search_product` haya
+  devuelto (asset_class, currency, commission, administrator, manager,
+  liquidity, return_rate, geographic_focus, underlying). Estos datos se
+  persisten en el producto y son necesarios para el flujo de aprobación al
+  catálogo. NUNCA los omitas — si `search_product` devolvió un campo, pásalo
+  a `add_product`.
 - Clasificación: si `search_product` devolvió `category` y `subcategory`
   con confianza (auto-clasificación), úsalos directamente al llamar
   `propose_product`. Si los dejó vacíos porque no pudo clasificar el

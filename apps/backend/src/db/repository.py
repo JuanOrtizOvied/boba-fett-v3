@@ -29,8 +29,11 @@ class ProductRepository:
         product_id = f"prod_{uuid.uuid4().hex[:8]}"
         await self.pool.execute(
             """INSERT INTO products
-               (id, user_id, name, provider, amount, category, subcategory, composition)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+               (id, user_id, name, provider, amount, category, subcategory,
+                composition, asset_class, geographic_focus, underlying,
+                commission, currency, administrator, manager, liquidity,
+                return_rate)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)""",
             product_id,
             user_id,
             data.name,
@@ -39,6 +42,15 @@ class ProductRepository:
             data.category,
             data.subcategory,
             json.dumps([a.model_dump() for a in data.composition]),
+            data.asset_class,
+            data.geographic_focus,
+            data.underlying,
+            data.commission,
+            data.currency,
+            data.administrator,
+            data.manager,
+            data.liquidity,
+            data.return_rate,
         )
         return Product(id=product_id, user_id=user_id, **data.model_dump())
 
@@ -106,4 +118,13 @@ class ProductRepository:
             category=row["category"],
             subcategory=row["subcategory"] or "",
             composition=[AssetAllocation(**a) for a in (comp or [])],
+            asset_class=row.get("asset_class", "") or "",
+            geographic_focus=row.get("geographic_focus", "") or "",
+            underlying=row.get("underlying", "") or "",
+            commission=row.get("commission", "") or "",
+            currency=row.get("currency", "") or "",
+            administrator=row.get("administrator", "") or "",
+            manager=row.get("manager", "") or "",
+            liquidity=row.get("liquidity", "") or "",
+            return_rate=row.get("return_rate", "") or "",
         )

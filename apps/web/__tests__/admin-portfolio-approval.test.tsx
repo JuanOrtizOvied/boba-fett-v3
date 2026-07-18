@@ -21,6 +21,15 @@ const PRODUCT: Product = {
   category: "publicos",
   subcategory: "Renta Fija US Treasuries",
   composition: [{ name: "US Treasuries", percentage: 100 }],
+  asset_class: "",
+  geographic_focus: "",
+  underlying: "",
+  commission: "",
+  currency: "",
+  administrator: "",
+  manager: "",
+  liquidity: "",
+  return_rate: "",
 };
 
 describe("ReadOnlyProductCard approval affordance", () => {

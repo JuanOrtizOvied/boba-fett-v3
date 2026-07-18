@@ -20,6 +20,15 @@ class Product(BaseModel):
     category: str = Field(description="One of: directas, privados, club, publicos, otros, cash")
     subcategory: str = ""
     composition: list[AssetAllocation] = Field(default_factory=list)
+    asset_class: str = ""
+    geographic_focus: str = ""
+    underlying: str = ""
+    commission: str = ""
+    currency: str = ""
+    administrator: str = ""
+    manager: str = ""
+    liquidity: str = ""
+    return_rate: str = ""
 
 
 class ProductCreate(BaseModel):
@@ -29,6 +38,15 @@ class ProductCreate(BaseModel):
     category: str
     subcategory: str = ""
     composition: list[AssetAllocation] = Field(default_factory=list)
+    asset_class: str = ""
+    geographic_focus: str = ""
+    underlying: str = ""
+    commission: str = ""
+    currency: str = ""
+    administrator: str = ""
+    manager: str = ""
+    liquidity: str = ""
+    return_rate: str = ""
 
 
 class ProductUpdate(BaseModel):
@@ -38,6 +56,15 @@ class ProductUpdate(BaseModel):
     category: str | None = None
     subcategory: str | None = None
     composition: list[AssetAllocation] | None = None
+    asset_class: str | None = None
+    geographic_focus: str | None = None
+    underlying: str | None = None
+    commission: str | None = None
+    currency: str | None = None
+    administrator: str | None = None
+    manager: str | None = None
+    liquidity: str | None = None
+    return_rate: str | None = None
 
 
 class CatalogProduct(BaseModel):
