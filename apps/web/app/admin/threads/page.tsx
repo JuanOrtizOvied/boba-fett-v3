@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface AdminThread {
   thread_id: string;
@@ -22,7 +23,7 @@ export default function AdminThreadsPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/admin/threads");
+        const res = await fetchWithAuth("/api/admin/threads");
         if (!res.ok) {
           throw new Error(
             `No se pudo cargar la lista de chats (status ${res.status})`,

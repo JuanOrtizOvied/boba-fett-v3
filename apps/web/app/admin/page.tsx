@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface AdminUser {
   id: string;
@@ -21,7 +22,7 @@ export default function AdminUsersPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/admin/users");
+        const res = await fetchWithAuth("/api/admin/users");
         if (!res.ok) {
           throw new Error(
             `No se pudo cargar la lista de usuarios (status ${res.status})`,

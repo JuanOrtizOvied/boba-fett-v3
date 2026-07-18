@@ -50,7 +50,6 @@ export default function AdminCatalogPage() {
     const previous = entries ?? [];
     setDeletingId(id);
     setConfirmDeleteId(null);
-    setEntries(previous.filter((entry) => entry.id !== id));
 
     try {
       const res = await fetchWithAuth(`/api/admin/catalog/entries/${id}`, {
@@ -59,8 +58,9 @@ export default function AdminCatalogPage() {
       if (!res.ok) {
         throw new Error(`No se pudo eliminar la entrada (status ${res.status})`);
       }
+      await new Promise((r) => setTimeout(r, 400));
+      setEntries(previous.filter((entry) => entry.id !== id));
     } catch (err) {
-      setEntries(previous);
       toast(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setDeletingId(null);
@@ -87,11 +87,11 @@ export default function AdminCatalogPage() {
         </p>
       ) : (
         entries && (
-          <div className="overflow-x-auto rounded-xl border border-sabbi-neutral-200">
+          <div className="max-h-[75vh] overflow-auto rounded-xl border border-sabbi-neutral-200">
             <table className="w-full text-left text-sm">
-              <thead className="bg-sabbi-neutral-50 text-xs font-medium tracking-wide text-sabbi-neutral-600 uppercase">
+              <thead className="sticky top-0 z-30 bg-sabbi-neutral-50 text-xs font-medium tracking-wide text-sabbi-neutral-600 uppercase">
                 <tr>
-                  <th className="sticky left-0 z-20 bg-sabbi-neutral-50 px-4 py-2 whitespace-nowrap after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200">
+                  <th className="sticky top-0 left-0 z-40 bg-sabbi-neutral-50 px-4 py-2 whitespace-nowrap after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200">
                     Nombre
                   </th>
                   {CATALOG_COLUMNS.map((column) => (
@@ -99,7 +99,7 @@ export default function AdminCatalogPage() {
                       {column.label}
                     </th>
                   ))}
-                  <th className="sticky right-0 z-20 bg-sabbi-neutral-50 px-4 py-2 text-center whitespace-nowrap before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-sabbi-neutral-200">
+                  <th className="sticky top-0 right-0 z-40 bg-sabbi-neutral-50 px-4 py-2 text-center whitespace-nowrap before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-sabbi-neutral-200">
                     Opciones
                   </th>
                 </tr>
@@ -109,13 +109,14 @@ export default function AdminCatalogPage() {
                   const isOdd = index % 2 === 1;
                   const rowBg = isOdd ? "bg-sabbi-neutral-50" : "bg-white";
                   const hoverBg = "group-hover:bg-[#f0fcd4]";
+                  const isDeleting = deletingId === entry.id;
                   return (
                     <tr
                       key={entry.id}
-                      className={`group transition-colors ${rowBg} ${hoverBg}`}
+                      className={`group transition-colors ${isDeleting ? "animate-row-delete" : `${rowBg} ${hoverBg}`}`}
                     >
                       <td
-                        className={`sticky left-0 z-10 px-4 py-2 font-medium whitespace-nowrap text-sabbi-neutral-900 after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200 ${rowBg} ${hoverBg}`}
+                        className={`sticky left-0 z-10 px-4 py-2 font-medium whitespace-nowrap text-sabbi-neutral-900 after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
                       >
                         {entry.name || "—"}
                       </td>
@@ -128,7 +129,7 @@ export default function AdminCatalogPage() {
                         </td>
                       ))}
                       <td
-                        className={`sticky right-0 z-10 px-4 py-2 whitespace-nowrap before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-sabbi-neutral-200 ${rowBg} ${hoverBg}`}
+                        className={`sticky right-0 z-10 px-4 py-2 whitespace-nowrap before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-sabbi-neutral-200 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
                       >
                         <div className="flex items-center justify-center gap-1">
                           <button

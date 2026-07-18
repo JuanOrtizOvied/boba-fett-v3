@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 const inputClass =
   "rounded-lg border border-sabbi-neutral-200 px-3 py-2 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
@@ -27,7 +28,7 @@ export default function CreateUserPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await fetchWithAuth("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, role }),

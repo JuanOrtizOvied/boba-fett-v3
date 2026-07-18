@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 type MessageContentBlock = {
   type?: string;
@@ -49,7 +50,7 @@ export default function AdminThreadViewPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch(`/api/admin/threads/${threadId}`);
+        const res = await fetchWithAuth(`/api/admin/threads/${threadId}`);
         if (!res.ok) {
           throw new Error(
             `No se pudo cargar la conversación (status ${res.status})`,

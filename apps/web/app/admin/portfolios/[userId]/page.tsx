@@ -28,8 +28,8 @@ export default function AdminPortfolioViewPage() {
     void (async () => {
       try {
         const [portfolioRes, usersRes, catalogRes] = await Promise.all([
-          fetch(`/api/admin/portfolios/${userId}`),
-          fetch("/api/admin/users"),
+          fetchWithAuth(`/api/admin/portfolios/${userId}`),
+          fetchWithAuth("/api/admin/users"),
           fetchWithAuth("/api/admin/catalog/entries"),
         ]);
         if (!portfolioRes.ok) {

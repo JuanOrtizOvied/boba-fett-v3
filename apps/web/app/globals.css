@@ -370,6 +370,23 @@ body {
   animation: slide-in-up 200ms ease-out;
 }
 
+@keyframes row-fade-out {
+  0% {
+    opacity: 1;
+    background-color: #fecaca;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    background-color: #fecaca;
+    transform: scale(0.97);
+  }
+}
+
+.animate-row-delete {
+  animation: row-fade-out 350ms ease-out forwards;
+}
+
 .tool-badge {
   flex-shrink: 0;
   font-size: 0.7rem;

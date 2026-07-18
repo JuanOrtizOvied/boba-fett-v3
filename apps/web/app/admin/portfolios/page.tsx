@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { formatUsd } from "@/lib/format";
 
 interface AdminPortfolioSummary {
@@ -24,7 +25,7 @@ export default function AdminPortfoliosPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/admin/portfolios");
+        const res = await fetchWithAuth("/api/admin/portfolios");
         if (!res.ok) {
           throw new Error(
             `No se pudo cargar la lista de portafolios (status ${res.status})`,
