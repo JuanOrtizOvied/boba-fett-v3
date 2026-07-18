@@ -11,7 +11,7 @@ from __future__ import annotations
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 
-from agent.file_utils import SPREADSHEET_MIMES, spreadsheet_to_text
+from agent.file_utils import PARSEABLE_MIMES, file_to_text
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import AgentState
 from agent.tools import portfolio_tools
@@ -96,9 +96,9 @@ def _strip_thinking(msg: AIMessage) -> AIMessage:
 
 
 def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
-    """Convert ``{type: "file"}`` content blocks to Anthropic's expected
-    format (``document`` or ``image``) so checkpointed messages from older
-    sessions don't cause 400 errors."""
+    """Convert non-API-safe content blocks so checkpointed messages don't
+    cause 400 errors.  Only ``application/pdf`` is valid for ``document``
+    blocks; everything else is parsed to text or converted to ``image``."""
     content = getattr(msg, "content", None)
     if not isinstance(content, list):
         return msg
@@ -107,7 +107,10 @@ def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
         and (
             b.get("type") == "file"
             or (b.get("type") == "image" and "title" in b)
-            or (b.get("type") == "document" and b.get("source", {}).get("media_type", "") in SPREADSHEET_MIMES)
+            or (
+                b.get("type") == "document"
+                and b.get("source", {}).get("media_type", "") != "application/pdf"
+            )
         )
         for b in content
     )
@@ -120,27 +123,29 @@ def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
         elif block.get("type") == "file":
             mime = block.get("mime_type", "application/octet-stream")
             data = block.get("data", "")
-            spreadsheet_text = spreadsheet_to_text(data, mime)
-            if spreadsheet_text is not None:
-                fixed.append({"type": "text", "text": spreadsheet_text})
+            parsed = file_to_text(data, mime)
+            if parsed is not None:
+                fixed.append({"type": "text", "text": parsed})
             elif mime.startswith("image/"):
                 fixed.append({
                     "type": "image",
                     "source": {"type": "base64", "media_type": mime, "data": data},
                 })
-            else:
+            elif mime == "application/pdf":
                 fixed.append({
                     "type": "document",
                     "source": {"type": "base64", "media_type": mime, "data": data},
                 })
+            else:
+                fixed.append({"type": "text", "text": "[Archivo adjunto]"})
         elif block.get("type") == "document":
             source = block.get("source", {})
             mime = source.get("media_type", "")
-            if mime in SPREADSHEET_MIMES:
-                text = spreadsheet_to_text(source.get("data", ""), mime)
-                fixed.append({"type": "text", "text": text or "[Archivo vacío]"})
-            else:
+            if mime == "application/pdf":
                 fixed.append(block)
+            else:
+                parsed = file_to_text(source.get("data", ""), mime)
+                fixed.append({"type": "text", "text": parsed or "[Archivo vacío]"})
         elif block.get("type") == "image" and "title" in block:
             fixed.append({k: v for k, v in block.items() if k != "title"})
         else:

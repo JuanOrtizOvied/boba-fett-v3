@@ -24,7 +24,7 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage
 from pydantic import BaseModel, Field
 
-from agent.file_utils import spreadsheet_to_text
+from agent.file_utils import file_to_text
 from auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -166,21 +166,23 @@ def _stream_event_progress(event: Any) -> dict[str, str] | None:
 def _normalize_attachment(att: dict[str, Any]) -> dict[str, Any]:
     """Convert frontend ``{type: "file"}`` blocks to Anthropic API format.
 
-    Images → ``type: "image"``; PDFs → ``type: "document"``; spreadsheets
-    are parsed server-side into text (Claude only accepts PDF for documents).
+    Images → ``type: "image"``; PDFs → ``type: "document"``; parseable
+    files (Excel, Word, CSV) → server-side text extraction.  Claude only
+    accepts ``application/pdf`` for document blocks.
     """
     if att.get("type") != "file":
         return att
     mime = att.get("mime_type", "application/octet-stream")
     data = att.get("data", "")
+    filename = ""
+    metadata = att.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("filename"):
+        filename = metadata["filename"]
 
-    spreadsheet_text = spreadsheet_to_text(data, mime)
-    if spreadsheet_text is not None:
-        filename = ""
-        metadata = att.get("metadata")
-        if isinstance(metadata, dict) and metadata.get("filename"):
-            filename = f" ({metadata['filename']})"
-        return {"type": "text", "text": f"{spreadsheet_text}{filename}"}
+    parsed = file_to_text(data, mime)
+    if parsed is not None:
+        suffix = f" ({filename})" if filename else ""
+        return {"type": "text", "text": f"{parsed}{suffix}"}
 
     if mime.startswith("image/"):
         return {
@@ -188,14 +190,17 @@ def _normalize_attachment(att: dict[str, Any]) -> dict[str, Any]:
             "source": {"type": "base64", "media_type": mime, "data": data},
         }
 
-    result: dict[str, Any] = {
-        "type": "document",
-        "source": {"type": "base64", "media_type": mime, "data": data},
-    }
-    metadata = att.get("metadata")
-    if isinstance(metadata, dict) and metadata.get("filename"):
-        result["title"] = metadata["filename"]
-    return result
+    if mime == "application/pdf":
+        result: dict[str, Any] = {
+            "type": "document",
+            "source": {"type": "base64", "media_type": mime, "data": data},
+        }
+        if filename:
+            result["title"] = filename
+        return result
+
+    label = filename or mime
+    return {"type": "text", "text": f"[Archivo adjunto: {label}]"}
 
 
 def _sse_event(event: str, data: Any) -> str:
