@@ -17,7 +17,7 @@ from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
 from db.catalog_repository import CatalogRepository
-from db.models import CatalogProductCreate
+from db.models import CatalogProductCreate, CatalogProductUpdate
 from db.repository import ProductRepository
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -144,6 +144,20 @@ async def approve_to_catalog(
     if entry is None:
         raise HTTPException(
             status_code=409, detail="A matching catalog entry already exists"
+        )
+    return entry.model_dump()
+
+
+@router.patch("/catalog/entries/{catalog_id}")
+async def update_catalog_entry(
+    catalog_id: int,
+    data: CatalogProductUpdate,
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> dict:
+    entry = await catalog_repo.update(catalog_id, data)
+    if entry is None:
+        raise HTTPException(
+            status_code=404, detail=f"Catalog entry {catalog_id} not found"
         )
     return entry.model_dump()
 

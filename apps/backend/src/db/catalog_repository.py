@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncpg
 
-from db.models import CatalogProduct, CatalogProductCreate
+from db.models import CatalogProduct, CatalogProductCreate, CatalogProductUpdate
 
 
 class CatalogRepository:
@@ -62,6 +62,23 @@ class CatalogRepository:
             data.approved_from_product_id,
         )
         return self._row_to_catalog_product(row)
+
+    async def update(
+        self, catalog_id: int, data: CatalogProductUpdate
+    ) -> CatalogProduct | None:
+        fields = data.model_dump(exclude_none=True)
+        if not fields:
+            row = await self.pool.fetchrow(
+                "SELECT * FROM product_catalog WHERE id = $1", catalog_id
+            )
+            return self._row_to_catalog_product(row) if row else None
+        set_clause = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(fields))
+        values = [catalog_id, *fields.values()]
+        row = await self.pool.fetchrow(
+            f"UPDATE product_catalog SET {set_clause} WHERE id = $1 RETURNING *",
+            *values,
+        )
+        return self._row_to_catalog_product(row) if row else None
 
     async def delete(self, catalog_id: int) -> bool:
         row = await self.pool.fetchrow(

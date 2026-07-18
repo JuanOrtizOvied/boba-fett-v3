@@ -106,6 +106,21 @@ class CatalogProductCreate(BaseModel):
     approved_from_product_id: str | None = None
 
 
+class CatalogProductUpdate(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    asset_class: str | None = None
+    geographic_focus: str | None = None
+    underlying: str | None = None
+    commission: str | None = None
+    currency: str | None = None
+    administrator: str | None = None
+    manager: str | None = None
+    liquidity: str | None = None
+    return_rate: str | None = None
+
+
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]
 
 
