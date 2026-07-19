@@ -49,6 +49,7 @@ def app_client():
     app.include_router(router)
     app.state.user_repo = AsyncMock()
     app.state.repo = AsyncMock()
+    app.state.versioning_repo = AsyncMock()
     app.state.chat_graph = None
     return app, TestClient(app)
 
@@ -208,6 +209,95 @@ def test_non_admin_cannot_view_admin_portfolios_list(app_client):
     response = client.get("/admin/portfolios")
 
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Portfolio versioning — read-only change log + snapshots
+# (`sdd/portfolio-versioning/tasks.md` T-018, AL-007, SNAP-010)
+# ---------------------------------------------------------------------------
+
+
+def test_admin_views_client_change_history(app_client):
+    app, client = app_client
+    app.state.versioning_repo.list_changes.return_value = {
+        "changes": [{"id": "chg_1", "operation": "create"}],
+        "total": 1,
+        "has_more": False,
+    }
+    client.cookies.set("sabbi_access", _admin_token())
+
+    response = client.get("/admin/portfolios/usr_client/changes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    app.state.versioning_repo.list_changes.assert_awaited_once_with(
+        "usr_client", limit=50, offset=0, operation=None
+    )
+
+
+def test_admin_views_client_change_history_filters_by_operation(app_client):
+    app, client = app_client
+    app.state.versioning_repo.list_changes.return_value = {
+        "changes": [],
+        "total": 0,
+        "has_more": False,
+    }
+    client.cookies.set("sabbi_access", _admin_token())
+
+    client.get("/admin/portfolios/usr_client/changes?operation=delete")
+
+    app.state.versioning_repo.list_changes.assert_awaited_once_with(
+        "usr_client", limit=50, offset=0, operation="delete"
+    )
+
+
+def test_non_admin_cannot_view_client_change_history(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.get("/admin/portfolios/usr_client/changes")
+
+    assert response.status_code == 403
+
+
+def test_admin_views_client_snapshots(app_client):
+    app, client = app_client
+    app.state.versioning_repo.list_snapshots.return_value = [
+        {"id": "snap_1", "name": "Q2 Review"}
+    ]
+    client.cookies.set("sabbi_access", _admin_token())
+
+    response = client.get("/admin/portfolios/usr_client/snapshots")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["snapshots"][0]["name"] == "Q2 Review"
+    app.state.versioning_repo.list_snapshots.assert_awaited_once_with(
+        "usr_client", limit=50, offset=0
+    )
+
+
+def test_non_admin_cannot_view_client_snapshots(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.get("/admin/portfolios/usr_client/snapshots")
+
+    assert response.status_code == 403
+
+
+def test_admin_versioning_routes_are_read_only(app_client):
+    """No admin route allows creating/mutating a snapshot or change log
+    entry for another user — only `GET` routes are registered under
+    `/admin/portfolios/{user_id}/changes` and `/admin/portfolios/{user_id}/snapshots`."""
+    app, client = app_client
+    client.cookies.set("sabbi_access", _admin_token())
+
+    response = client.post("/admin/portfolios/usr_client/snapshots", json={"name": "x"})
+
+    assert response.status_code in (404, 405)
+    app.state.versioning_repo.create_snapshot.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

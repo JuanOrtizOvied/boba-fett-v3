@@ -1,16 +1,20 @@
 "use client";
 
-import type { FC } from "react";
+import { useState, type FC } from "react";
 import { CategorySection } from "@/components/portfolio/CategorySection";
 import { CategoryTabs } from "@/components/portfolio/CategoryTabs";
 import { EditProductModal } from "@/components/portfolio/EditProductModal";
 import { MetricsRow } from "@/components/portfolio/MetricsRow";
+import { SnapshotButton } from "@/components/portfolio/SnapshotButton";
+import { VersioningBar } from "@/components/portfolio/VersioningBar";
+import { VersioningDrawer } from "@/components/portfolio/VersioningDrawer";
 import { PieIcon } from "@/components/icons/Icons";
 import { useToast } from "@/components/ui/Toast";
 import { CATEGORY_ORDER } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { Category, Product } from "@/lib/portfolio-types";
 import { usePortfolio } from "@/lib/usePortfolio";
+import { usePortfolioVersioning } from "@/lib/usePortfolioVersioning";
 
 /**
  * Right-side panel: metrics, category filter tabs, and per-category product
@@ -39,6 +43,24 @@ export const PortfolioPanel: FC = () => {
     largestPosition,
     newProductIds,
   } = usePortfolio();
+
+  const {
+    snapshots,
+    isLoadingSnapshots,
+    createSnapshot,
+    comparison,
+    isComparing,
+    compareError,
+    compareSnapshots,
+    clearComparison,
+    changes,
+    isLoadingChanges,
+    changesTotal,
+    changesHasMore,
+    fetchChanges,
+  } = usePortfolioVersioning();
+
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
 
   const productsByCategory = CATEGORY_ORDER.reduce(
     (acc, category) => {
@@ -110,17 +132,26 @@ export const PortfolioPanel: FC = () => {
           >
             Agregar producto manualmente
           </button>
+
+          {/* SNAP-009: snapshot creation is never disabled on an empty
+              portfolio, so the affordance stays reachable even here. */}
+          <SnapshotButton createSnapshot={createSnapshot} />
         </div>
       ) : (
         <>
           <div className="shrink-0 border-b border-sabbi-neutral-200 bg-sabbi-neutral-50 px-6 pt-6 pb-5">
             <div className="flex flex-col gap-5">
-              <MetricsRow
-                totalAmount={totalAmount}
-                productCount={productCount}
-                largestPosition={largestPosition}
-                categoriesUsedCount={categoriesUsedCount}
-              />
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <MetricsRow
+                    totalAmount={totalAmount}
+                    productCount={productCount}
+                    largestPosition={largestPosition}
+                    categoriesUsedCount={categoriesUsedCount}
+                  />
+                </div>
+                <SnapshotButton createSnapshot={createSnapshot} />
+              </div>
 
               <CategoryTabs
                 activeCategory={activeCategory}
@@ -130,6 +161,13 @@ export const PortfolioPanel: FC = () => {
               />
             </div>
           </div>
+
+          <VersioningBar
+            snapshots={snapshots}
+            isLoadingSnapshots={isLoadingSnapshots}
+            changes={changes}
+            onOpenDrawer={() => setIsHistoryDrawerOpen(true)}
+          />
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {error && (
@@ -168,6 +206,23 @@ export const PortfolioPanel: FC = () => {
         defaultCategory={createCategory}
         onClose={closeModal}
         onSaved={refetch}
+      />
+
+      <VersioningDrawer
+        isOpen={isHistoryDrawerOpen}
+        onClose={() => setIsHistoryDrawerOpen(false)}
+        snapshots={snapshots}
+        isLoadingSnapshots={isLoadingSnapshots}
+        changes={changes}
+        isLoadingChanges={isLoadingChanges}
+        changesTotal={changesTotal}
+        changesHasMore={changesHasMore}
+        onLoadMoreChanges={() => void fetchChanges({ offset: changes.length })}
+        comparison={comparison}
+        isComparing={isComparing}
+        compareError={compareError}
+        onCompare={compareSnapshots}
+        onClearComparison={clearComparison}
       />
     </div>
   );

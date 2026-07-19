@@ -10,7 +10,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agent.tools import add_product, delete_product, get_portfolio_summary, update_product
+from agent.tools import (
+    add_product,
+    create_snapshot,
+    delete_product,
+    get_portfolio_summary,
+    update_product,
+)
 
 # ---------------------------------------------------------------------------
 # add_product
@@ -50,6 +56,31 @@ async def test_add_product_persists_source_catalog_product_id(
     )
     assert row["catalog_product_id"] == 123
     assert result["product"]["catalog_product_id"] == 123
+
+
+async def test_add_product_logs_change_with_agent_source(
+    patch_get_pool, tool_config, test_pool
+):
+    """AL-005 — agent tool calls are attributed with `source='agent'` and a
+    `metadata.tool` marker so the audit trail can tell them apart from REST
+    API and admin mutations (`tasks.md` T-012)."""
+    result = await add_product.ainvoke(
+        {"name": "Agent-Sourced Fund", "amount": 1000, "category": "publicos"},
+        config=tool_config,
+    )
+
+    product_id = result["product"]["id"]
+    row = await test_pool.fetchrow(
+        "SELECT source, metadata FROM portfolio_changes WHERE product_id = $1", product_id
+    )
+    assert row is not None
+    assert row["source"] == "agent"
+    metadata = row["metadata"]
+    if isinstance(metadata, str):
+        import json
+
+        metadata = json.loads(metadata)
+    assert metadata == {"tool": "add_product"}
 
 
 async def test_add_product_rejects_non_positive_amount(patch_get_pool, tool_config, test_pool):
@@ -154,3 +185,42 @@ async def test_get_portfolio_summary_on_populated_portfolio(patch_get_pool, tool
     assert set(result["categories_used"]) == {"directas", "cash"}
     assert result["largest_position"]["name"] == "Fund A"
     assert result["largest_position"]["percentage"] == 70.0
+
+
+# ---------------------------------------------------------------------------
+# create_snapshot
+# ---------------------------------------------------------------------------
+
+
+async def test_create_snapshot_persists_row_for_calling_user(
+    patch_get_pool, tool_config, test_pool, test_user_id
+):
+    await add_product.ainvoke(
+        {"name": "Fund A", "amount": 1000, "category": "cash"}, config=tool_config
+    )
+
+    result = await create_snapshot.ainvoke(
+        {"name": "Pre-Q3 Review", "description": "Before rebalancing"},
+        config=tool_config,
+    )
+
+    assert result["status"] == "created"
+    snapshot = result["snapshot"]
+    assert snapshot["name"] == "Pre-Q3 Review"
+    assert snapshot["product_count"] == 1
+    row = await test_pool.fetchrow(
+        "SELECT * FROM portfolio_snapshots WHERE id = $1", snapshot["id"]
+    )
+    assert row is not None
+    assert str(row["user_id"]) == test_user_id
+    assert row["name"] == "Pre-Q3 Review"
+    assert row["description"] == "Before rebalancing"
+
+
+async def test_create_snapshot_on_empty_portfolio_succeeds(patch_get_pool, tool_config):
+    """SNAP-009 — an empty portfolio is a valid snapshot, not an error."""
+    result = await create_snapshot.ainvoke({"name": "Empty Snapshot"}, config=tool_config)
+
+    assert result["status"] == "created"
+    assert result["snapshot"]["product_count"] == 0
+    assert result["snapshot"]["total_amount"] == 0

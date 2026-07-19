@@ -13,10 +13,10 @@ import asyncio
 from unittest.mock import AsyncMock
 
 
-def test_portfolio_tools_exports_six_tools():
+def test_portfolio_tools_exports_seven_tools():
     from agent.tools import portfolio_tools
 
-    assert len(portfolio_tools) == 6
+    assert len(portfolio_tools) == 7
     names = {t.name for t in portfolio_tools}
     assert names == {
         "search_product",
@@ -25,6 +25,7 @@ def test_portfolio_tools_exports_six_tools():
         "update_product",
         "delete_product",
         "get_portfolio_summary",
+        "create_snapshot",
     }
 
 
@@ -75,6 +76,18 @@ def test_get_portfolio_summary_schema():
     assert get_portfolio_summary.name == "get_portfolio_summary"
     assert get_portfolio_summary.description
     args = get_portfolio_summary.args
+    assert "config" not in args
+
+
+def test_create_snapshot_schema():
+    from agent.tools import create_snapshot
+
+    assert create_snapshot.name == "create_snapshot"
+    assert create_snapshot.description
+    args = create_snapshot.args
+    assert "name" in args
+    assert "description" in args
+    assert args["description"].get("default") == ""
     assert "config" not in args
 
 

@@ -22,6 +22,7 @@ alongside it or run as a separate container in production.
 from __future__ import annotations
 
 import os
+import uuid
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import AsyncIterator
 
@@ -39,8 +40,9 @@ from auth.repository import UserRepository
 from db.catalog_repository import CatalogRepository
 from db.connection import close_pool, get_pool
 from db.excel import build_portfolio_workbook, export_filename
-from db.models import ProductCreate, ProductUpdate
+from db.models import ProductCreate, ProductUpdate, SnapshotCreate
 from db.repository import ProductRepository
+from db.versioning import SnapshotAccessError, SnapshotNotFoundError, VersioningRepository
 
 
 async def _init_chat_graph(app: FastAPI, stack: AsyncExitStack) -> None:
@@ -75,6 +77,7 @@ async def _init_chat_graph(app: FastAPI, stack: AsyncExitStack) -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await get_pool()
     app.state.repo = ProductRepository(pool)
+    app.state.versioning_repo = VersioningRepository(pool)
     app.state.user_repo = UserRepository(pool)
     app.state.catalog_repo = CatalogRepository(pool)
 
@@ -156,4 +159,97 @@ async def export_portfolio(user: dict = Depends(get_current_user)) -> StreamingR
             ".spreadsheetml.sheet"
         ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Portfolio Versioning — snapshots, comparison, change log
+# (`sdd/portfolio-versioning/design.md`)
+# ---------------------------------------------------------------------------
+
+
+def _validate_uuid(value: str, *, field_name: str) -> None:
+    """Raise `422` when a query-param snapshot id is not a syntactically
+    valid UUID (CMP-005 "Malformed snapshot id") instead of letting an
+    invalid value reach `asyncpg` and surface as an unhandled `500`.
+    """
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail=f"'{field_name}' is not a valid snapshot id"
+        )
+
+
+@app.post("/portfolio/me/snapshots", status_code=201)
+async def create_snapshot(
+    data: SnapshotCreate, user: dict = Depends(get_current_user)
+) -> dict:
+    """Create a named, immutable point-in-time snapshot of the current
+    portfolio (SNAP-001). Empty portfolios are valid snapshots (SNAP-009)
+    — `VersioningRepository.create_snapshot` never raises for that case."""
+    return await app.state.versioning_repo.create_snapshot(
+        user["id"], data.name, data.description
+    )
+
+
+@app.get("/portfolio/me/snapshots")
+async def list_snapshots(
+    limit: int = 50, offset: int = 0, user: dict = Depends(get_current_user)
+) -> dict:
+    """List the authenticated user's snapshots, summary view, newest first
+    (SNAP-003)."""
+    snapshots = await app.state.versioning_repo.list_snapshots(
+        user["id"], limit=limit, offset=offset
+    )
+    return {"snapshots": snapshots}
+
+
+@app.get("/portfolio/me/snapshots/{snapshot_id}")
+async def get_snapshot(snapshot_id: str, user: dict = Depends(get_current_user)) -> dict:
+    """Get a single snapshot with its full materialized product list
+    (SNAP-004). Returns `404` both for a missing id and for a snapshot
+    owned by another user (SNAP-010 — non-disclosing, `get_snapshot`
+    collapses both cases into `None`).
+
+    No `PATCH`/`PUT` route is registered for this path — snapshots are
+    immutable (SNAP-005), enforced by omission."""
+    snapshot = await app.state.versioning_repo.get_snapshot(snapshot_id, user["id"])
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
+    return snapshot
+
+
+@app.get("/portfolio/me/compare")
+async def compare_snapshots(a: str, b: str, user: dict = Depends(get_current_user)) -> dict:
+    """Compare two snapshots owned by the current user (CMP-001). `a` is
+    always the baseline for `before`/`after` labeling, `b` the comparison
+    (CMP-007), regardless of query-param order.
+
+    Registered at `/portfolio/me/compare` — not
+    `/portfolio/me/snapshots/compare` — to avoid a FastAPI path conflict
+    with the parametric `/portfolio/me/snapshots/{snapshot_id}` route
+    (design.md — "Route ordering note")."""
+    _validate_uuid(a, field_name="a")
+    _validate_uuid(b, field_name="b")
+    try:
+        return await app.state.versioning_repo.compare_snapshots(a, b, user["id"])
+    except SnapshotNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except SnapshotAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+
+@app.get("/portfolio/me/changes")
+async def list_changes(
+    limit: int = 50,
+    offset: int = 0,
+    operation: str | None = None,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Paginated change log for the current user's own portfolio (AL-006),
+    scoped entirely to the authenticated user via `WHERE user_id = $1`
+    inside `list_changes` (AL-007)."""
+    return await app.state.versioning_repo.list_changes(
+        user["id"], limit=limit, offset=offset, operation=operation
     )

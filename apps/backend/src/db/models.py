@@ -70,6 +70,18 @@ class ProductUpdate(BaseModel):
     catalog_product_id: int | None = None
 
 
+class SnapshotCreate(BaseModel):
+    """Request body for `POST /portfolio/me/snapshots`
+    (`sdd/portfolio-versioning/design.md` — "Request/response models").
+
+    `min_length=1` on `name` makes SNAP-001's "Snapshot creation rejects an
+    empty name" scenario a `422` via Pydantic validation alone — no
+    handler-level check needed."""
+
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+
+
 class CatalogProduct(BaseModel):
     id: int
     name: str

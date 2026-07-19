@@ -77,3 +77,55 @@ ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS alternative_names TEXT[] DE
 
 CREATE INDEX IF NOT EXISTS idx_catalog_name_trgm
     ON product_catalog USING gin (name gin_trgm_ops);
+
+-- Portfolio Versioning: Snapshots
+CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    product_count INTEGER NOT NULL DEFAULT 0,
+    total_amount NUMERIC NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_user_created
+    ON portfolio_snapshots (user_id, created_at DESC);
+
+-- Portfolio Versioning: Snapshot Products (materialized state)
+CREATE TABLE IF NOT EXISTS snapshot_products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    snapshot_id UUID NOT NULL REFERENCES portfolio_snapshots(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    product_data JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshot_products_snapshot
+    ON snapshot_products (snapshot_id);
+
+CREATE INDEX IF NOT EXISTS idx_snapshot_products_product_id
+    ON snapshot_products (product_id);
+
+-- Portfolio Versioning: Change Log (audit trail)
+CREATE TABLE IF NOT EXISTS portfolio_changes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id TEXT,
+    operation TEXT NOT NULL CHECK (operation IN ('create', 'update', 'delete')),
+    before_state JSONB,
+    after_state JSONB,
+    source TEXT NOT NULL DEFAULT 'api' CHECK (source IN ('agent', 'api', 'admin')),
+    snapshot_id UUID REFERENCES portfolio_snapshots(id) ON DELETE SET NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_changes_user_created
+    ON portfolio_changes (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_changes_product
+    ON portfolio_changes (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_changes_snapshot
+    ON portfolio_changes (snapshot_id)
+    WHERE snapshot_id IS NOT NULL;

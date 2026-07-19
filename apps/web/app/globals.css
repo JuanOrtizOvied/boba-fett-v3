@@ -318,6 +318,20 @@ body {
   animation: modal-panel-in 200ms ease-out;
 }
 
+/* VersioningDrawer — right-side slide-over (PR7, T-025). */
+@keyframes drawer-panel-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-drawer-panel {
+  animation: drawer-panel-in 220ms ease-out;
+}
+
 /* Chat inline tool-result cards (T-008 — chat-refinement.spec.md ->
    "Grouped inline tool result cards"). assistant-ui renders each
    `add_product`/`update_product`/`delete_product` tool call as an

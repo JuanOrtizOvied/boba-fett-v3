@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -138,6 +139,28 @@ def test_has_file_attachment_ignores_list_content_without_attachment_blocks():
 # ---------------------------------------------------------------------------
 
 
+def _pool_with_conn(conn: AsyncMock) -> AsyncMock:
+    """Build a mock `asyncpg.Pool` whose `.acquire()` yields `conn` as an
+    async context manager and whose `conn.transaction()` is a no-op async
+    context manager — matches the shape `ProductRepository`'s transactional
+    `create`/`update`/`delete` methods expect
+    (`sdd/portfolio-versioning/design.md` ADR-1)."""
+    pool = AsyncMock()
+
+    @asynccontextmanager
+    async def _acquire():
+        yield conn
+
+    pool.acquire = MagicMock(side_effect=lambda: _acquire())
+
+    @asynccontextmanager
+    async def _transaction():
+        yield None
+
+    conn.transaction = MagicMock(side_effect=lambda: _transaction())
+    return pool
+
+
 def _fake_row(**overrides) -> dict:
     row = {
         "id": "prod_abc12345",
@@ -173,8 +196,9 @@ def test_repository_create_inserts_and_returns_product():
     from db.models import ProductCreate
     from db.repository import ProductRepository
 
-    pool = AsyncMock()
-    pool.execute.return_value = "INSERT 0 1"
+    conn = AsyncMock()
+    conn.execute.return_value = "INSERT 0 1"
+    pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
     data = ProductCreate(name="New Fund", amount=5000, category="cash")
@@ -183,75 +207,105 @@ def test_repository_create_inserts_and_returns_product():
     assert product.name == "New Fund"
     assert product.user_id == "usr_test"
     assert product.id.startswith("prod_")
-    pool.execute.assert_awaited_once()
+    # One INSERT for the product row, one INSERT for the `portfolio_changes`
+    # audit row — both inside the same transaction (AL-001/AL-004).
+    assert conn.execute.await_count == 2
 
 
 def test_repository_update_returns_updated_product():
     from db.models import ProductUpdate
     from db.repository import ProductRepository
 
-    pool = AsyncMock()
-    pool.fetchrow.return_value = _fake_row(amount=99999.0)
+    conn = AsyncMock()
+    conn.fetchrow.return_value = _fake_row(amount=99999.0)
+    pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
     product = asyncio.run(repo.update("prod_abc12345", ProductUpdate(amount=99999)))
 
     assert product is not None
     assert product.amount == 99999.0
-    pool.fetchrow.assert_awaited_once()
+    # Once for the pre-update `SELECT ... FOR UPDATE` (before_state), once
+    # for `UPDATE ... RETURNING` (after_state) — AL-002.
+    assert conn.fetchrow.await_count == 2
+    conn.execute.assert_awaited_once()  # the `portfolio_changes` audit INSERT
 
 
 def test_repository_update_returns_none_when_product_missing():
     from db.models import ProductUpdate
     from db.repository import ProductRepository
 
-    pool = AsyncMock()
-    pool.fetchrow.return_value = None
+    conn = AsyncMock()
+    conn.fetchrow.return_value = None
+    pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
     product = asyncio.run(repo.update("does_not_exist", ProductUpdate(amount=1)))
 
     assert product is None
+    conn.execute.assert_not_awaited()  # AL-002 "No-op update" — nothing logged
 
 
-def test_repository_update_with_no_fields_falls_back_to_get():
+def test_repository_update_with_no_fields_returns_current_state_without_logging():
     from db.models import ProductUpdate
     from db.repository import ProductRepository
 
-    pool = AsyncMock()
-    pool.fetchrow.return_value = _fake_row()
+    conn = AsyncMock()
+    conn.fetchrow.return_value = _fake_row()
+    pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
     product = asyncio.run(repo.update("prod_abc12345", ProductUpdate()))
 
     assert product is not None
-    pool.fetchrow.assert_awaited_once_with(
-        "SELECT * FROM products WHERE id = $1", "prod_abc12345"
+    conn.fetchrow.assert_awaited_once_with(
+        "SELECT * FROM products WHERE id = $1 FOR UPDATE", "prod_abc12345"
     )
+    conn.execute.assert_not_awaited()  # no fields changed — no audit entry
 
 
 def test_repository_delete_returns_true_on_success():
     from db.repository import ProductRepository
 
-    pool = AsyncMock()
-    pool.execute.return_value = "DELETE 1"
+    conn = AsyncMock()
+    conn.fetchrow.return_value = _fake_row(id="prod_abc12345")
+    conn.execute.return_value = "DELETE 1"
+    pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
     deleted = asyncio.run(repo.delete("prod_abc12345"))
 
     assert deleted is True
+    # DELETE statement + the `portfolio_changes` audit INSERT (AL-003).
+    assert conn.execute.await_count == 2
 
 
 def test_repository_delete_returns_false_when_no_rows_affected():
     from db.repository import ProductRepository
 
-    pool = AsyncMock()
-    pool.execute.return_value = "DELETE 0"
+    conn = AsyncMock()
+    conn.fetchrow.return_value = _fake_row(id="does_not_exist")
+    conn.execute.return_value = "DELETE 0"
+    pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
     deleted = asyncio.run(repo.delete("does_not_exist"))
 
     assert deleted is False
+
+
+def test_repository_delete_returns_false_and_does_not_log_when_product_missing():
+    from db.repository import ProductRepository
+
+    conn = AsyncMock()
+    conn.fetchrow.return_value = None
+    pool = _pool_with_conn(conn)
+
+    repo = ProductRepository(pool)
+    deleted = asyncio.run(repo.delete("does_not_exist"))
+
+    assert deleted is False
+    conn.execute.assert_not_awaited()  # AL-003 "Deleting a non-existent product"
 
 
 def test_repository_get_summary_computes_totals_and_largest_position():

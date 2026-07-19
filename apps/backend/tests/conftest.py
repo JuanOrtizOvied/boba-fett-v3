@@ -40,15 +40,39 @@ def require_test_database_url() -> str:
     return TEST_DATABASE_URL
 
 
+class _FakeAcquireContext:
+    """Async context manager mimicking `asyncpg.Pool.acquire()`'s shape.
+
+    Since `_session_conn` (and, inside `tests/integration/`, the per-test
+    SAVEPOINT wrapping it via the autouse `_rollback` fixture) is already a
+    single connection shared for the whole test, `acquire()` just hands back
+    that same connection — no separate locking/pooling logic is needed
+    (`tasks.md` — T-001)."""
+
+    def __init__(self, conn: asyncpg.Connection):
+        self._conn = conn
+
+    async def __aenter__(self) -> asyncpg.Connection:
+        return self._conn
+
+    async def __aexit__(self, *exc_info: Any) -> None:
+        return None
+
+
 class FakePool:
     """Minimal `asyncpg.Pool`-shaped wrapper around a single connection.
 
-    `ProductRepository` and `UserRepository` only ever call `fetch`,
-    `fetchrow`, `fetchval`, and `execute` on the pool they receive — never
-    `acquire()` — so forwarding those four methods to one connection held
+    `ProductRepository` and `UserRepository` call `fetch`, `fetchrow`,
+    `fetchval`, and `execute` directly on the pool they receive, and
+    transactional repository code (`sdd/portfolio-versioning/design.md` —
+    ADR-1) calls `acquire()` to get a connection it can wrap in
+    `conn.transaction()`. Forwarding all of these to one connection held
     inside a per-test SAVEPOINT is enough to drive real repository code
     against Postgres without a real connection pool (design.md —
-    "Test DB isolation via savepoints").
+    "Test DB isolation via savepoints"). Nested `conn.transaction()` calls
+    on top of the outer session transaction / per-test savepoint are safe —
+    asyncpg creates a further SAVEPOINT for each nested transaction rather
+    than raising.
     """
 
     def __init__(self, conn: asyncpg.Connection):
@@ -65,6 +89,9 @@ class FakePool:
 
     async def execute(self, query: str, *args: Any) -> str:
         return await self._conn.execute(query, *args)
+
+    def acquire(self) -> _FakeAcquireContext:
+        return _FakeAcquireContext(self._conn)
 
 
 @pytest_asyncio.fixture(scope="session")

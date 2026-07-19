@@ -2,9 +2,10 @@
 viewing, read-only thread listing. Every route requires `require_admin`
 (`access-control/spec.md` — "Role-Based Route Protection").
 
-`app.state.user_repo` (`auth.repository.UserRepository`) and `app.state.repo`
-(`db.repository.ProductRepository`) must be set by the parent app's lifespan
-before this router is exercised — see `api/routes.py`.
+`app.state.user_repo` (`auth.repository.UserRepository`), `app.state.repo`
+(`db.repository.ProductRepository`), and `app.state.versioning_repo`
+(`db.versioning.VersioningRepository`) must be set by the parent app's
+lifespan before this router is exercised — see `api/routes.py`.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from auth.repository import UserRepository
 from db.catalog_repository import CatalogRepository
 from db.models import CatalogProductCreate, CatalogProductUpdate
 from db.repository import ProductRepository
+from db.versioning import VersioningRepository
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -33,6 +35,10 @@ def _product_repo(request: Request) -> ProductRepository:
 
 def _catalog_repo(request: Request) -> CatalogRepository:
     return request.app.state.catalog_repo
+
+
+def _versioning_repo(request: Request) -> VersioningRepository:
+    return request.app.state.versioning_repo
 
 
 def _strip_password_hash(row: dict) -> dict:
@@ -100,6 +106,39 @@ async def view_portfolio(
     on purpose — admins cannot edit another user's products."""
     products = await product_repo.list_by_user(user_id)
     return {"products": [p.model_dump() for p in products]}
+
+
+@router.get("/portfolios/{user_id}/changes")
+async def view_user_changes(
+    user_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    operation: str | None = None,
+    versioning_repo: VersioningRepository = Depends(_versioning_repo),
+) -> dict:
+    """Read-only change history for a specific client, admin-scoped
+    (AL-007 "Admin views a client's change history"). Reuses the same
+    `list_changes` method as `/portfolio/me/changes` (`db/versioning.py`),
+    called with the *target* client's `user_id` — never the admin's own id.
+    No route exists to mutate or delete `portfolio_changes` rows."""
+    return await versioning_repo.list_changes(
+        user_id, limit=limit, offset=offset, operation=operation
+    )
+
+
+@router.get("/portfolios/{user_id}/snapshots")
+async def view_user_snapshots(
+    user_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    versioning_repo: VersioningRepository = Depends(_versioning_repo),
+) -> dict:
+    """Read-only snapshot list for a specific client, admin-scoped
+    (SNAP-010 "Admin views a client's snapshots read-only"). No route
+    exists here to create, modify, or delete a snapshot on behalf of
+    another user."""
+    snapshots = await versioning_repo.list_snapshots(user_id, limit=limit, offset=offset)
+    return {"snapshots": snapshots}
 
 
 @router.get("/products")

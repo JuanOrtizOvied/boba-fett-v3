@@ -27,6 +27,7 @@ from agent.state import CATEGORIES
 from db.connection import get_pool, get_repository
 from db.models import AssetAllocation, FieldSource, ProductCreate, ProductUpdate
 from db.repository import ProductRepository
+from db.versioning import VersioningRepository
 
 _KEY_TO_LABEL: dict[str, str] = {k: str(v["label"]) for k, v in CATEGORIES.items()}
 _LABEL_TO_KEY: dict[str, str] = {v.lower(): k for k, v in _KEY_TO_LABEL.items()}
@@ -47,6 +48,13 @@ async def _repository() -> ProductRepository:
     """Resolve the `ProductRepository` bound to the process-wide connection pool."""
     pool = await get_pool()
     return get_repository(pool)
+
+
+async def _versioning_repository() -> VersioningRepository:
+    """Resolve the `VersioningRepository` bound to the process-wide connection
+    pool (same pool-acquisition pattern as `_repository()`)."""
+    pool = await get_pool()
+    return VersioningRepository(pool)
 
 
 def _derive_card_tag(provenance: dict[str, str]) -> str:
@@ -233,6 +241,8 @@ async def add_product(
             return_rate=return_rate,
             catalog_product_id=catalog_product_id,
         ),
+        source="agent",
+        metadata={"tool": "add_product"},
     )
     return {"status": "added", "product": product.model_dump()}
 
@@ -270,6 +280,8 @@ async def update_product(
             category=_category_to_label(category) if category else None,
             composition=comp,
         ),
+        source="agent",
+        metadata={"tool": "update_product"},
     )
     if product is None:
         return {"status": "error", "message": f"Product {product_id} not found"}
@@ -285,7 +297,9 @@ async def delete_product(product_id: str, *, config: RunnableConfig) -> dict:
     """
     del config  # unused — product_id already scopes the delete
     repo = await _repository()
-    deleted = await repo.delete(product_id)
+    deleted = await repo.delete(
+        product_id, source="agent", metadata={"tool": "delete_product"}
+    )
     if not deleted:
         return {"status": "error", "message": f"Product {product_id} not found"}
     return {"status": "deleted", "product_id": product_id}
@@ -331,6 +345,35 @@ async def search_product(query: str, *, config: RunnableConfig) -> dict:
     return {"status": "found", "query": query, "result": result.model_dump()}
 
 
+@tool
+async def create_snapshot(
+    name: str,
+    description: str = "",
+    *,
+    config: RunnableConfig,
+) -> dict:
+    """Save the current portfolio as a named, immutable snapshot.
+
+    Only call this on the user's explicit request or after they confirm a
+    suggestion you made — do NOT create a snapshot on your own initiative
+    just because it seems like a natural breakpoint (e.g. after a document
+    upload or a restructuring conversation). You may suggest saving one and
+    ask the user first; only call this tool once they say yes.
+
+    Args:
+        name: Short descriptive name for this snapshot (e.g. 'Pre-Q3 Review',
+              'After Document Upload - Jul 2026').
+        description: Optional longer description of what this snapshot represents.
+    """
+    versioning_repo = await _versioning_repository()
+    user_id = _user_id(config)
+    try:
+        snapshot = await versioning_repo.create_snapshot(user_id, name, description)
+        return {"status": "created", "snapshot": snapshot}
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+
+
 portfolio_tools = [
     search_product,
     propose_product,
@@ -338,4 +381,5 @@ portfolio_tools = [
     update_product,
     delete_product,
     get_portfolio_summary,
+    create_snapshot,
 ]
