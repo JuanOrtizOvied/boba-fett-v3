@@ -2,7 +2,8 @@
 
 import type { FC } from "react";
 import { EditIcon, RobotIcon, WarningIcon } from "@/components/icons/Icons";
-import { formatDateTime } from "@/lib/format";
+import { CATEGORY_META, categoryColorVar, resolveCategoryKey } from "@/lib/categories";
+import { formatAbbreviatedUsd, formatRelativeTime } from "@/lib/format";
 import type { ChangeLogEntry, ChangeOperation, ChangeSource } from "@/lib/usePortfolioVersioning";
 
 export interface ChangeLogProps {
@@ -73,31 +74,81 @@ export const ChangeLog: FC<ChangeLogProps> = ({
   );
 };
 
+function describeChanges(entry: ChangeLogEntry): string | null {
+  if (entry.operation !== "update" || !entry.before_state || !entry.after_state) return null;
+  const diffs: string[] = [];
+  const b = entry.before_state;
+  const a = entry.after_state;
+  if (b.amount !== a.amount)
+    diffs.push(`${formatAbbreviatedUsd(b.amount)} → ${formatAbbreviatedUsd(a.amount)}`);
+  if (b.category !== a.category) {
+    const from = CATEGORY_META[resolveCategoryKey(b.category)].shortLabel;
+    const to = CATEGORY_META[resolveCategoryKey(a.category)].shortLabel;
+    diffs.push(`${from} → ${to}`);
+  }
+  if (b.name !== a.name) diffs.push(`"${b.name}" → "${a.name}"`);
+  return diffs.length > 0 ? diffs.join(" · ") : null;
+}
+
 const ChangeLogItem: FC<{ entry: ChangeLogEntry }> = ({ entry }) => {
   const operation = OPERATION_META[entry.operation];
   const source = SOURCE_META[entry.source];
-  const productName = entry.after_state?.name ?? entry.before_state?.name ?? "Producto";
+  const product = entry.after_state ?? entry.before_state;
+  const productName = product?.name ?? "Producto";
+  const amount = product?.amount;
+  const categoryKey = product?.category ? resolveCategoryKey(product.category) : null;
+  const catMeta = categoryKey ? CATEGORY_META[categoryKey] : null;
+  const changes = describeChanges(entry);
+
+  const subcategory = product?.subcategory;
+  const provider = product?.provider;
 
   return (
-    <li className="flex items-center justify-between gap-3 rounded-lg border border-sabbi-neutral-200 px-3 py-2 text-sm">
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${operation.className}`}
-        >
-          {operation.label}
-        </span>
-        <span className="truncate font-medium text-sabbi-neutral-900">{productName}</span>
+    <li className="rounded-xl border border-sabbi-neutral-200 bg-background p-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${operation.className}`}
+            >
+              {operation.label}
+            </span>
+            <span className="truncate text-sm font-semibold text-sabbi-neutral-900">
+              {productName}
+            </span>
+          </div>
+          {(subcategory || provider) && (
+            <p className="text-xs text-sabbi-neutral-600">
+              {subcategory && provider
+                ? `${subcategory} · ${provider}`
+                : subcategory || provider}
+            </p>
+          )}
+          {changes && (
+            <p className="text-xs text-sabbi-neutral-500 italic">{changes}</p>
+          )}
+        </div>
+        {amount != null && (
+          <span className="font-display shrink-0 text-sm font-bold text-sabbi-neutral-900">
+            {formatAbbreviatedUsd(amount)}
+          </span>
+        )}
       </div>
-      <div className="flex shrink-0 items-center gap-2 text-xs text-sabbi-neutral-500">
-        <span
-          className="flex items-center gap-1"
-          title={`Origen: ${source.label}`}
-          aria-label={`Origen: ${source.label}`}
-        >
-          <source.Icon size={12} />
+
+      <div className="mt-2.5 flex items-center gap-3 text-xs text-sabbi-neutral-500">
+        {catMeta && (
+          <span
+            className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
+            style={{ backgroundColor: categoryColorVar(categoryKey!) }}
+          >
+            {catMeta.shortLabel}
+          </span>
+        )}
+        <span className="flex items-center gap-1" title={`Origen: ${source.label}`}>
+          <source.Icon size={11} />
           {source.label}
         </span>
-        <span>{formatDateTime(entry.created_at)}</span>
+        <span>{formatRelativeTime(entry.created_at)}</span>
       </div>
     </li>
   );

@@ -7,12 +7,18 @@ import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
 import type { Product } from "@/lib/portfolio-types";
 
 /** Mirrors `db.versioning.VersioningRepository.create_snapshot`/`list_snapshots`. */
+export interface SnapshotCategorySummary {
+  category: string;
+  percentage: number;
+}
+
 export interface Snapshot {
   id: string;
   name: string;
   description: string;
   product_count: number;
   total_amount: number;
+  category_summary: SnapshotCategorySummary[];
   created_at: string;
 }
 
@@ -88,6 +94,7 @@ export interface UsePortfolioVersioningResult {
   isLoadingSnapshots: boolean;
   fetchSnapshots: () => Promise<void>;
   createSnapshot: (name: string, description?: string) => Promise<Snapshot>;
+  hasChanges: boolean;
 
   // Comparison
   comparison: SnapshotDiff | null;
@@ -142,6 +149,19 @@ export function usePortfolioVersioning(): UsePortfolioVersioningResult {
   // Snapshots
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(true);
+  const [hasChanges, setHasChanges] = useState(true);
+
+  const checkForChanges = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth("/api/portfolio/me/snapshots/has-changes");
+      if (res.ok) {
+        const data: { has_changes: boolean } = await res.json();
+        setHasChanges(data.has_changes);
+      }
+    } catch {
+      setHasChanges(true);
+    }
+  }, []);
 
   const fetchSnapshots = useCallback(async () => {
     try {
@@ -160,7 +180,8 @@ export function usePortfolioVersioning(): UsePortfolioVersioningResult {
 
   useEffect(() => {
     void fetchSnapshots();
-  }, [fetchSnapshots]);
+    void checkForChanges();
+  }, [fetchSnapshots, checkForChanges]);
 
   const createSnapshot = useCallback(
     async (name: string, description = ""): Promise<Snapshot> => {
@@ -175,13 +196,11 @@ export function usePortfolioVersioning(): UsePortfolioVersioningResult {
       }
       if (!res.ok) throw new Error(`No se pudo guardar la versión (status ${res.status})`);
       const snapshot: Snapshot = await res.json();
-      // Matches `usePortfolio`'s refetch-after-mutation convention — no
-      // cross-hook event needed since snapshot creation doesn't touch
-      // product data (design.md → "State Management").
       await fetchSnapshots();
+      await checkForChanges();
       return snapshot;
     },
-    [fetchSnapshots, router],
+    [fetchSnapshots, checkForChanges, router],
   );
 
   // Comparison
@@ -269,6 +288,7 @@ export function usePortfolioVersioning(): UsePortfolioVersioningResult {
     // inventing a new one.
     const handleRefetchEvent = () => {
       void fetchChanges();
+      void checkForChanges();
     };
     window.addEventListener(PORTFOLIO_REFETCH_EVENT, handleRefetchEvent);
     return () => window.removeEventListener(PORTFOLIO_REFETCH_EVENT, handleRefetchEvent);
@@ -279,6 +299,7 @@ export function usePortfolioVersioning(): UsePortfolioVersioningResult {
     isLoadingSnapshots,
     fetchSnapshots,
     createSnapshot,
+    hasChanges,
 
     comparison,
     isComparing,

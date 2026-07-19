@@ -42,7 +42,12 @@ from db.connection import close_pool, get_pool
 from db.excel import build_portfolio_workbook, export_filename
 from db.models import ProductCreate, ProductUpdate, SnapshotCreate
 from db.repository import ProductRepository
-from db.versioning import SnapshotAccessError, SnapshotNotFoundError, VersioningRepository
+from db.versioning import (
+    SnapshotAccessError,
+    SnapshotNotFoundError,
+    SnapshotUnchangedError,
+    VersioningRepository,
+)
 
 
 async def _init_chat_graph(app: FastAPI, stack: AsyncExitStack) -> None:
@@ -187,10 +192,14 @@ async def create_snapshot(
 ) -> dict:
     """Create a named, immutable point-in-time snapshot of the current
     portfolio (SNAP-001). Empty portfolios are valid snapshots (SNAP-009)
-    — `VersioningRepository.create_snapshot` never raises for that case."""
-    return await app.state.versioning_repo.create_snapshot(
-        user["id"], data.name, data.description
-    )
+    — `VersioningRepository.create_snapshot` never raises for that case.
+    Returns 409 when the portfolio is identical to the latest snapshot."""
+    try:
+        return await app.state.versioning_repo.create_snapshot(
+            user["id"], data.name, data.description
+        )
+    except SnapshotUnchangedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @app.get("/portfolio/me/snapshots")
@@ -203,6 +212,13 @@ async def list_snapshots(
         user["id"], limit=limit, offset=offset
     )
     return {"snapshots": snapshots}
+
+
+@app.get("/portfolio/me/snapshots/has-changes")
+async def has_portfolio_changes(user: dict = Depends(get_current_user)) -> dict:
+    """Return whether the current portfolio differs from the latest snapshot."""
+    has_changes = await app.state.versioning_repo.has_changes_since_latest(user["id"])
+    return {"has_changes": has_changes}
 
 
 @app.get("/portfolio/me/snapshots/{snapshot_id}")

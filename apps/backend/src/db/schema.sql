@@ -47,6 +47,12 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS liquidity TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS return_rate TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_product_id INTEGER;
 
+UPDATE products SET category = 'directas' WHERE lower(category) = 'real estate directo';
+UPDATE products SET category = 'privados' WHERE lower(category) IN ('mercados privados', 'mercados privado');
+UPDATE products SET category = 'club' WHERE lower(category) = 'club deals';
+UPDATE products SET category = 'publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos');
+UPDATE products SET category = 'cash' WHERE lower(category) = 'cash y equivalentes';
+
 CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
 CREATE INDEX IF NOT EXISTS idx_products_catalog_product_id ON products (catalog_product_id);
 
@@ -88,6 +94,30 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     total_amount NUMERIC NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE portfolio_snapshots ADD COLUMN IF NOT EXISTS category_summary JSONB DEFAULT '[]';
+
+UPDATE portfolio_snapshots ps
+SET category_summary = COALESCE(agg.summary, '[]'::jsonb)
+FROM (
+    SELECT
+        sp.snapshot_id,
+        jsonb_agg(
+            jsonb_build_object('category', cat, 'percentage', round(cat_total / NULLIF(ps2.total_amount, 0) * 100, 1))
+            ORDER BY cat_total DESC
+        ) AS summary
+    FROM (
+        SELECT snapshot_id,
+               COALESCE(product_data->>'category', 'otros') AS cat,
+               SUM((product_data->>'amount')::numeric) AS cat_total
+        FROM snapshot_products
+        GROUP BY snapshot_id, cat
+    ) sp
+    JOIN portfolio_snapshots ps2 ON ps2.id = sp.snapshot_id
+    GROUP BY sp.snapshot_id, ps2.total_amount
+) agg
+WHERE agg.snapshot_id = ps.id
+  AND (ps.category_summary IS NULL OR ps.category_summary = '[]'::jsonb);
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_user_created
     ON portfolio_snapshots (user_id, created_at DESC);

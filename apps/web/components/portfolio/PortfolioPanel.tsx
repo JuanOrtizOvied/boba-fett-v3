@@ -4,14 +4,13 @@ import { useState, type FC } from "react";
 import { CategorySection } from "@/components/portfolio/CategorySection";
 import { CategoryTabs } from "@/components/portfolio/CategoryTabs";
 import { EditProductModal } from "@/components/portfolio/EditProductModal";
-import { MetricsRow } from "@/components/portfolio/MetricsRow";
 import { SnapshotButton } from "@/components/portfolio/SnapshotButton";
-import { VersioningBar } from "@/components/portfolio/VersioningBar";
 import { VersioningDrawer } from "@/components/portfolio/VersioningDrawer";
 import { PieIcon } from "@/components/icons/Icons";
 import { useToast } from "@/components/ui/Toast";
 import { CATEGORY_ORDER } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { formatAbbreviatedUsd } from "@/lib/format";
 import type { Category, Product } from "@/lib/portfolio-types";
 import { usePortfolio } from "@/lib/usePortfolio";
 import { usePortfolioVersioning } from "@/lib/usePortfolioVersioning";
@@ -48,6 +47,7 @@ export const PortfolioPanel: FC = () => {
     snapshots,
     isLoadingSnapshots,
     createSnapshot,
+    hasChanges,
     comparison,
     isComparing,
     compareError,
@@ -77,10 +77,6 @@ export const PortfolioPanel: FC = () => {
     },
     {} as Record<Category, number>,
   );
-
-  const categoriesUsedCount = CATEGORY_ORDER.filter(
-    (category) => countsByCategory[category] > 0,
-  ).length;
 
   const visibleCategories =
     activeCategory === "todos" ? CATEGORY_ORDER : [activeCategory];
@@ -135,22 +131,49 @@ export const PortfolioPanel: FC = () => {
 
           {/* SNAP-009: snapshot creation is never disabled on an empty
               portfolio, so the affordance stays reachable even here. */}
-          <SnapshotButton createSnapshot={createSnapshot} />
+          <SnapshotButton createSnapshot={createSnapshot} disabled={!hasChanges} />
         </div>
       ) : (
         <>
           <div className="shrink-0 border-b border-sabbi-neutral-200 bg-sabbi-neutral-50 px-6 pt-6 pb-5">
-            <div className="flex flex-col gap-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <MetricsRow
-                    totalAmount={totalAmount}
-                    productCount={productCount}
-                    largestPosition={largestPosition}
-                    categoriesUsedCount={categoriesUsedCount}
-                  />
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-baseline gap-6">
+                  <div>
+                    <p className="font-display text-2xl font-bold text-sabbi-neutral-900">
+                      {formatAbbreviatedUsd(totalAmount)}
+                    </p>
+                    <p className="text-xs text-sabbi-neutral-600">
+                      {productCount} producto{productCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  {largestPosition && (
+                    <div>
+                      <p className="font-display text-lg font-semibold text-sabbi-neutral-900">
+                        {largestPosition.percentage.toFixed(1)}%
+                      </p>
+                      <p className="max-w-[10rem] truncate text-xs text-sabbi-neutral-600">
+                        {largestPosition.product.name}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <SnapshotButton createSnapshot={createSnapshot} />
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <SnapshotButton createSnapshot={createSnapshot} disabled={!hasChanges} />
+                  <button
+                    type="button"
+                    onClick={() => setIsHistoryDrawerOpen(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-sabbi-neutral-200 bg-background px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 hover:bg-sabbi-neutral-50"
+                  >
+                    Ver versiones
+                    {snapshots.length > 0 && (
+                      <span className="rounded-full bg-sabbi-neutral-200 px-1.5 text-xs font-semibold text-sabbi-neutral-700">
+                        {snapshots.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <CategoryTabs
@@ -161,13 +184,6 @@ export const PortfolioPanel: FC = () => {
               />
             </div>
           </div>
-
-          <VersioningBar
-            snapshots={snapshots}
-            isLoadingSnapshots={isLoadingSnapshots}
-            changes={changes}
-            onOpenDrawer={() => setIsHistoryDrawerOpen(true)}
-          />
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {error && (

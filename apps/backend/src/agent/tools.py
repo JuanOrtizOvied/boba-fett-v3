@@ -33,15 +33,14 @@ _KEY_TO_LABEL: dict[str, str] = {k: str(v["label"]) for k, v in CATEGORIES.items
 _LABEL_TO_KEY: dict[str, str] = {v.lower(): k for k, v in _KEY_TO_LABEL.items()}
 
 
-def _category_to_label(key_or_label: str) -> str:
-    """Normalize a category key (e.g. 'privados') to its full label
-    ('Mercados Privados'). Passes through if already a label or unknown."""
-    label = _KEY_TO_LABEL.get(key_or_label)
-    if label:
-        return label
-    if key_or_label.lower() in _LABEL_TO_KEY:
+def _normalize_category_key(key_or_label: str) -> str:
+    """Normalize a category value to its canonical key (e.g. 'Cash y
+    Equivalentes' -> 'cash', 'privados' -> 'privados'). Falls back to
+    'otros' for unknown values."""
+    if key_or_label in _KEY_TO_LABEL:
         return key_or_label
-    return key_or_label
+    resolved = _LABEL_TO_KEY.get(key_or_label.lower())
+    return resolved if resolved else "otros"
 
 
 async def _repository() -> ProductRepository:
@@ -123,9 +122,8 @@ async def propose_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Full category label, one of: Real Estate Directo,
-            Mercados Privados, Club Deals, Mercados Públicos, Otros,
-            Cash y Equivalentes.
+        category: Category key, one of: directas, privados, club,
+            publicos, otros, cash.
         provider: Provider or fund manager name.
         composition: List of {name, percentage} asset class allocations.
         asset_class: Asset class, from search_product if available.
@@ -153,7 +151,7 @@ async def propose_product(
         "product": {
             "name": name,
             "amount": amount,
-            "category": _category_to_label(category),
+            "category": _normalize_category_key(category),
             "provider": provider,
             "composition": composition or [{"name": name, "percentage": 100}],
             "asset_class": asset_class,
@@ -199,9 +197,8 @@ async def add_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Full category label, one of: Real Estate Directo,
-            Mercados Privados, Club Deals, Mercados Públicos, Otros,
-            Cash y Equivalentes.
+        category: Category key, one of: directas, privados, club,
+            publicos, otros, cash.
         provider: Provider or fund manager name.
         composition: List of {name, percentage} asset class allocations. When
             omitted, the product is treated as 100% allocated to itself.
@@ -227,7 +224,7 @@ async def add_product(
             name=name,
             provider=provider,
             amount=amount,
-            category=_category_to_label(category),
+            category=_normalize_category_key(category),
             subcategory=subcategory,
             composition=comp,
             asset_class=asset_class,
@@ -277,7 +274,7 @@ async def update_product(
             name=name,
             provider=provider,
             amount=amount,
-            category=_category_to_label(category) if category else None,
+            category=_normalize_category_key(category) if category else None,
             composition=comp,
         ),
         source="agent",

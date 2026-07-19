@@ -14,6 +14,11 @@ from db.models import AssetAllocation, Product
 _DIFF_IGNORED_FIELDS = {"id", "user_id"}
 
 
+class SnapshotUnchangedError(Exception):
+    """Raised by `create_snapshot` when the current portfolio is identical
+    to the most recent snapshot — no point saving a duplicate."""
+
+
 class SnapshotNotFoundError(Exception):
     """Raised by `compare_snapshots` when a referenced snapshot id does not
     exist at all (CMP-001 "Comparing a non-existent snapshot id").
@@ -111,19 +116,58 @@ class VersioningRepository:
                     user_id,
                 )
 
+                current_products = {
+                    str(r["id"]): self._row_to_product(r).model_dump()
+                    for r in rows
+                }
+
+                latest = await conn.fetchrow(
+                    """SELECT id FROM portfolio_snapshots
+                       WHERE user_id = $1
+                       ORDER BY created_at DESC LIMIT 1""",
+                    user_id,
+                )
+                if latest is not None:
+                    prev_rows = await conn.fetch(
+                        "SELECT product_id, product_data FROM snapshot_products WHERE snapshot_id = $1",
+                        latest["id"],
+                    )
+                    prev_products = {
+                        str(r["product_id"]): self._jsonb(r["product_data"])
+                        for r in prev_rows
+                    }
+                    if current_products == prev_products:
+                        raise SnapshotUnchangedError(
+                            "El portafolio no tiene cambios respecto a la última versión guardada"
+                        )
+
                 product_count = len(rows)
                 total_amount = sum(float(r["amount"]) for r in rows)
 
+                cat_totals: dict[str, float] = {}
+                for r in rows:
+                    cat = r["category"] or "otros"
+                    cat_totals[cat] = cat_totals.get(cat, 0) + float(r["amount"])
+                category_summary = sorted(
+                    [
+                        {"category": c, "percentage": round(a / total_amount * 100, 1) if total_amount else 0}
+                        for c, a in cat_totals.items()
+                    ],
+                    key=lambda x: x["percentage"],
+                    reverse=True,
+                )
+
                 snapshot_row = await conn.fetchrow(
                     """INSERT INTO portfolio_snapshots
-                       (user_id, name, description, product_count, total_amount)
-                       VALUES ($1, $2, $3, $4, $5)
+                       (user_id, name, description, product_count, total_amount, category_summary)
+                       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
                        RETURNING id, created_at""",
                     user_id,
                     name,
                     description,
                     product_count,
                     total_amount,
+                    json.dumps(category_summary),
                 )
                 snapshot_id = snapshot_row["id"]
 
@@ -145,6 +189,7 @@ class VersioningRepository:
                     "description": description,
                     "product_count": product_count,
                     "total_amount": float(total_amount),
+                    "category_summary": category_summary,
                     "created_at": snapshot_row["created_at"].isoformat(),
                 }
 
@@ -157,7 +202,7 @@ class VersioningRepository:
         """
         rows = await self.pool.fetch(
             """SELECT id, user_id, name, description, product_count,
-                      total_amount, created_at
+                      total_amount, category_summary, created_at
                FROM portfolio_snapshots
                WHERE user_id = $1
                ORDER BY created_at DESC
@@ -167,6 +212,37 @@ class VersioningRepository:
             offset,
         )
         return [self._row_to_snapshot_summary(r) for r in rows]
+
+    async def has_changes_since_latest(self, user_id: str) -> bool:
+        """Return True when the current portfolio differs from the latest
+        snapshot (or no snapshot exists yet)."""
+        async with self.pool.acquire() as conn:
+            latest = await conn.fetchrow(
+                """SELECT id FROM portfolio_snapshots
+                   WHERE user_id = $1
+                   ORDER BY created_at DESC LIMIT 1""",
+                user_id,
+            )
+            if latest is None:
+                return True
+
+            rows = await conn.fetch(
+                "SELECT * FROM products WHERE user_id = $1", user_id
+            )
+            current = {
+                str(r["id"]): self._row_to_product(r).model_dump()
+                for r in rows
+            }
+
+            prev_rows = await conn.fetch(
+                "SELECT product_id, product_data FROM snapshot_products WHERE snapshot_id = $1",
+                latest["id"],
+            )
+            prev = {
+                str(r["product_id"]): self._jsonb(r["product_data"])
+                for r in prev_rows
+            }
+            return current != prev
 
     async def get_snapshot(self, snapshot_id: str, user_id: str) -> dict | None:
         """Get a single snapshot with its full materialized product list.
@@ -179,7 +255,7 @@ class VersioningRepository:
         """
         snapshot_row = await self.pool.fetchrow(
             """SELECT id, user_id, name, description, product_count,
-                      total_amount, created_at
+                      total_amount, category_summary, created_at
                FROM portfolio_snapshots
                WHERE id = $1 AND user_id = $2""",
             snapshot_id,
@@ -381,6 +457,7 @@ class VersioningRepository:
             "description": row["description"],
             "product_count": row["product_count"],
             "total_amount": float(row["total_amount"]),
+            "category_summary": self._jsonb(row["category_summary"]) if row.get("category_summary") else [],
             "created_at": row["created_at"].isoformat(),
         }
 

@@ -16,6 +16,7 @@ function makeSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     description: "",
     product_count: 3,
     total_amount: 90000,
+    category_summary: [],
     created_at: "2026-06-01T00:00:00Z",
     ...overrides,
   };
