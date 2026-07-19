@@ -161,6 +161,9 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
               product.composition.length === 1 &&
               product.composition[0].percentage >= 99.9 &&
               product.composition[0].name === product.name;
+            const sorted = [...product.composition]
+              .map((a, i) => ({ ...a, origIdx: i }))
+              .sort((a, b) => b.percentage - a.percentage);
             return (
               <div className="flex flex-col gap-1.5">
                 <div className="flex h-2 overflow-hidden rounded-full bg-sabbi-neutral-100">
@@ -179,17 +182,18 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
                     {product.subcategory}
                   </span>
                 ) : (
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {product.composition.map((asset, index) => (
+                  <div className="flex flex-col gap-0.5">
+                    {sorted.map((asset) => (
                       <span
-                        key={`${asset.name}-${index}`}
-                        className="flex items-center gap-1 text-xs text-sabbi-neutral-600"
+                        key={`${asset.name}-${asset.origIdx}`}
+                        className="flex items-center gap-1.5 text-xs text-sabbi-neutral-600"
                       >
                         <span
                           className="size-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: compositionColor(index) }}
+                          style={{ backgroundColor: compositionColor(asset.origIdx) }}
                         />
-                        {asset.name} · {asset.percentage.toFixed(0)}%
+                        {asset.name}
+                        <span className="ml-auto tabular-nums">{asset.percentage.toFixed(0)}%</span>
                       </span>
                     ))}
                   </div>

@@ -120,14 +120,27 @@ export const VersioningDrawer: FC<VersioningDrawerProps> = ({
   };
 
   const handleCompareSelected = async () => {
-    const [aId, bId] = compareSelection;
-    if (!aId || !bId) return;
+    const [id1, id2] = compareSelection;
+    if (!id1 || !id2) return;
+    const s1 = snapshots.find((s) => s.id === id1);
+    const s2 = snapshots.find((s) => s.id === id2);
+    if (!s1 || !s2) return;
+    const [aId, bId] =
+      new Date(s1.created_at) <= new Date(s2.created_at)
+        ? [id1, id2]
+        : [id2, id1];
     setIsComparisonOpen(true);
     await onCompare(aId, bId);
   };
 
-  const snapshotA = snapshots.find((s) => s.id === compareSelection[0]) ?? null;
-  const snapshotB = snapshots.find((s) => s.id === compareSelection[1]) ?? null;
+  const [orderedA, orderedB] = (() => {
+    const s1 = compareSelection[0] ? snapshots.find((s) => s.id === compareSelection[0]) : null;
+    const s2 = compareSelection[1] ? snapshots.find((s) => s.id === compareSelection[1]) : null;
+    if (!s1 || !s2) return [s1 ?? null, s2 ?? null];
+    return new Date(s1.created_at) <= new Date(s2.created_at) ? [s1, s2] : [s2, s1];
+  })();
+  const snapshotA = orderedA;
+  const snapshotB = orderedB;
 
   return (
     <>
