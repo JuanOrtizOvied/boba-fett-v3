@@ -31,6 +31,8 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAuiState,
+  useComposer,
+  useComposerRuntime,
   useThreadRuntime,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
@@ -1368,25 +1370,42 @@ const AssistantMessage: FC = () => {
 };
 
 const Composer: FC = () => {
+  const composer = useComposer();
+  const composerRuntime = useComposerRuntime();
+  const [validationMsg, setValidationMsg] = useState("");
+
+  const handleSend = useCallback(() => {
+    const text = (composer.text ?? "").trim();
+    if (!text) {
+      setValidationMsg("Escribí un mensaje para enviar el documento.");
+      return;
+    }
+    setValidationMsg("");
+    composerRuntime.send();
+  }, [composer.text, composerRuntime]);
+
   return (
-    <ComposerPrimitive.Root className="flex flex-col gap-2">
-      <div className="flex flex-col gap-2 rounded-[20px] border border-sabbi-neutral-200 bg-[var(--bg-panel)] px-3 py-2 transition-colors focus-within:border-sabbi-primary focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(67,56,202,0.08)]">
+    <ComposerPrimitive.Root className="flex flex-col gap-1">
+      {validationMsg && (
+        <p className="px-3 text-xs text-red-500">{validationMsg}</p>
+      )}
+      <div className="flex flex-col rounded-[20px] border border-sabbi-neutral-200 bg-[var(--bg-panel)] px-3 py-2 transition-colors focus-within:border-sabbi-primary focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(67,56,202,0.08)]">
         <ComposerPrimitive.Attachments>
           {({ attachment }) => (
             <div
               key={attachment.id}
-              className="animate-card-enter group/att relative flex w-28 flex-col items-center gap-1 rounded-xl border border-sabbi-neutral-200 bg-white p-3 shadow-sm"
+              className="animate-card-enter group/att relative flex w-24 flex-col items-center gap-0.5 rounded-lg border border-sabbi-neutral-200 bg-white px-2 py-1.5 shadow-sm"
             >
               <AttachmentPrimitive.Remove className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-sabbi-neutral-700 text-[10px] leading-none text-white transition-opacity hover:bg-sabbi-neutral-900">
                 ✕
               </AttachmentPrimitive.Remove>
-              <div className="flex size-10 items-center justify-center rounded-lg bg-sabbi-neutral-100 text-sabbi-neutral-600">
-                <AttachmentIcon attachment={attachment} size={22} />
+              <div className="flex size-8 items-center justify-center rounded-md bg-sabbi-neutral-100 text-sabbi-neutral-600">
+                <AttachmentIcon attachment={attachment} size={18} />
               </div>
-              <span className="w-full truncate text-center text-[11px] font-medium text-sabbi-neutral-900">
+              <span className="w-full truncate text-center text-[10px] font-medium text-sabbi-neutral-900">
                 {attachment.name}
               </span>
-              <span className="text-[10px] text-sabbi-neutral-600">
+              <span className="text-[9px] text-sabbi-neutral-600">
                 {attachment.file
                   ? formatFileSize(attachment.file.size)
                   : fileExtension(attachment.name)}
@@ -1395,7 +1414,7 @@ const Composer: FC = () => {
           )}
         </ComposerPrimitive.Attachments>
 
-        <div className="flex items-end gap-2">
+        <div className="flex items-center gap-2">
           <ComposerPrimitive.AddAttachment
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-sabbi-neutral-600 transition-colors hover:bg-sabbi-neutral-100"
             aria-label="Adjuntar archivo"
@@ -1406,13 +1425,18 @@ const Composer: FC = () => {
           <ComposerPrimitive.Input
             placeholder="Contame sobre tus inversiones..."
             rows={1}
-            className="max-h-40 flex-1 resize-none bg-transparent text-sm outline-none"
+            className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent py-2 text-sm leading-5 outline-none"
+            onChange={() => validationMsg && setValidationMsg("")}
           />
 
           <ThreadPrimitive.If running={false}>
-            <ComposerPrimitive.Send className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sabbi-primary text-white disabled:opacity-40">
+            <button
+              type="button"
+              onClick={handleSend}
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sabbi-primary text-white transition-opacity hover:opacity-90"
+            >
               <SendIcon size={16} />
-            </ComposerPrimitive.Send>
+            </button>
           </ThreadPrimitive.If>
           <ThreadPrimitive.If running>
             <ComposerPrimitive.Cancel className="rounded-lg border border-sabbi-neutral-300 px-3 py-1.5 text-sm">
