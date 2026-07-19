@@ -1,16 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MyAssistant } from "./assistant";
 import { Topbar, type PortfolioView } from "@/components/layout/Topbar";
 import { PortfolioPanel } from "@/components/portfolio/PortfolioPanel";
 import { PortfolioSummary } from "@/components/portfolio/PortfolioSummary";
+import { useAuth } from "@/components/auth/AuthProvider";
 
-// Auth-protected: `middleware.ts` redirects to `/login` before this page
-// renders when the `sabbi_access` cookie is absent — no explicit auth check
-// needed here.
 export default function Home() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
   const [view, setView] = useState<PortfolioView>("builder");
+
+  useEffect(() => {
+    if (!isLoading && user?.role === "admin") {
+      router.replace("/admin");
+    }
+  }, [user, isLoading, router]);
+
+  if (isLoading || user?.role === "admin") return null;
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
