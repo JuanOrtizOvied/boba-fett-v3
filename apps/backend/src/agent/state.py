@@ -35,14 +35,14 @@ class AgentState(TypedDict):
 # leaf, so every group always exposes at least one leaf.
 CATEGORIES: dict[str, dict[str, object]] = {
     "directas": {
-        "label": "Real Estate Directo",
+        "label": "Inversiones directas",
         "groups": {
             "RE Perú": ["Residencial", "Oficinas", "Comercial/Industrial"],
             "RE Extranjero": ["RE Extranjero"],
         },
     },
     "privados": {
-        "label": "Mercados Privados",
+        "label": "Mercados privados",
         "groups": {
             "Deuda Privada": ["Deuda Privada"],
             "Private Equity": ["Private Equity"],
@@ -53,7 +53,7 @@ CATEGORIES: dict[str, dict[str, object]] = {
         },
     },
     "club": {
-        "label": "Club Deals",
+        "label": "Club deals",
         "groups": {
             "Real Estate": ["Perú", "Extranjero"],
             "Deuda Privada": ["Perú", "Extranjero"],
@@ -61,7 +61,7 @@ CATEGORIES: dict[str, dict[str, object]] = {
         },
     },
     "publicos": {
-        "label": "Mercados Públicos",
+        "label": "Mercados públicos",
         "groups": {
             "Renta Variable": [
                 "US Large Cap",
@@ -88,7 +88,7 @@ CATEGORIES: dict[str, dict[str, object]] = {
         },
     },
     "cash": {
-        "label": "Cash y Equivalentes",
+        "label": "Cash y equivalentes",
         "groups": {
             "Cash": ["Depósitos a plazo", "Fondos de Money Market"],
         },

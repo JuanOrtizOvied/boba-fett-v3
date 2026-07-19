@@ -206,7 +206,7 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
             className="w-fit rounded-full px-2 py-0.5 text-xs font-medium text-white"
             style={{ backgroundColor: color }}
           >
-            {meta.shortLabel}
+            {meta.label}
           </span>
         </div>
       )}

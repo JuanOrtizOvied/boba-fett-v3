@@ -191,12 +191,22 @@ async def _search_tavily(query: str) -> dict[str, str]:
     )
 
 
+_LEGACY_CATEGORY_LABELS: set[str] = {
+    "real estate directo",
+    "mercados privados",
+    "mercados privado",
+    "club deals",
+    "mercados públicos",
+    "cash y equivalentes",
+}
+
+
 def _is_valid_category(value: str) -> bool:
     v = value.strip().lower()
     for key, info in CATEGORIES.items():
         if v == key.lower() or v == str(info["label"]).lower():
             return True
-    return False
+    return v in _LEGACY_CATEGORY_LABELS
 
 
 def _is_valid_subcategory(value: str) -> bool:

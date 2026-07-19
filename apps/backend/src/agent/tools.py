@@ -32,6 +32,19 @@ from db.versioning import VersioningRepository
 _KEY_TO_LABEL: dict[str, str] = {k: str(v["label"]) for k, v in CATEGORIES.items()}
 _LABEL_TO_KEY: dict[str, str] = {v.lower(): k for k, v in _KEY_TO_LABEL.items()}
 
+_LEGACY_ALIASES: dict[str, str] = {
+    "real estate directo": "directas",
+    "mercados privados": "privados",
+    "club deals": "club",
+    "mercados públicos": "publicos",
+    "mercados publicos": "publicos",
+    "cash y equivalentes": "cash",
+    "inversiones directas": "directas",
+    "club deals": "club",
+    "mercados privado": "privados",
+}
+_LABEL_TO_KEY.update(_LEGACY_ALIASES)
+
 
 def _normalize_category_key(key_or_label: str) -> str:
     """Normalize a category value to its canonical key (e.g. 'Cash y
