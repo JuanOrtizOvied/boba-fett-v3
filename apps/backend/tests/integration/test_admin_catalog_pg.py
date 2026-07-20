@@ -18,7 +18,6 @@ def _approve_payload(**overrides) -> dict:
     payload = {
         "name": "Bono Soberano",
         "category": "mercados_publicos",
-        "subcategory": "renta_fija",
         "asset_class": "bonos",
         "commission": "1.5%",
     }
@@ -88,21 +87,19 @@ async def test_approve_full_flow_create_then_repeat_rejected(admin_api_client, t
     )
     product_id = "prod_test0001"
     await test_pool.execute(
-        """INSERT INTO products (id, user_id, name, amount, category, subcategory)
-           VALUES ($1, $2, $3, $4, $5, $6)""",
+        """INSERT INTO products (id, user_id, name, amount, category)
+           VALUES ($1, $2, $3, $4, $5)""",
         product_id,
         user_id,
         "Fondo Renta",
         1000,
         "mercados_publicos",
-        "renta_fija",
     )
 
     first = await client.post(
         "/admin/catalog/approve",
         json=_approve_payload(
             name="Fondo Renta",
-            subcategory="renta_fija",
             approved_from_product_id=product_id,
         ),
     )
@@ -111,7 +108,7 @@ async def test_approve_full_flow_create_then_repeat_rejected(admin_api_client, t
 
     repeat = await client.post(
         "/admin/catalog/approve",
-        json=_approve_payload(name="Fondo Renta", subcategory="renta_fija"),
+        json=_approve_payload(name="Fondo Renta"),
     )
     assert repeat.status_code == 409
 

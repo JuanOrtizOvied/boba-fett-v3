@@ -39,7 +39,7 @@ def test_add_product_schema():
     assert "amount" in args
     assert "category" in args
     assert "provider" in args
-    assert "composition" in args
+    assert "underlying" in args
     assert "catalog_product_id" in args
     # `config` is an injected RunnableConfig — must not leak into the LLM schema
     assert "config" not in args
@@ -56,7 +56,7 @@ def test_update_product_schema():
     assert "provider" in args
     assert "amount" in args
     assert "category" in args
-    assert "composition" in args
+    assert "underlying" in args
     assert "config" not in args
 
 
@@ -108,11 +108,11 @@ def test_user_id_helper_requires_configurable_user_id():
     assert _user_id({"configurable": {"user_id": "usr_abc"}}) == "usr_abc"
 
 
-def test_to_composition_helper_builds_asset_allocations():
-    from agent.tools import _to_composition
+def test_to_allocations_helper_builds_asset_allocations():
+    from agent.tools import _to_allocations
     from db.models import AssetAllocation
 
-    result = _to_composition([{"name": "Cripto", "percentage": 100}])
+    result = _to_allocations([{"name": "Cripto", "percentage": 100}])
 
     assert len(result) == 1
     assert isinstance(result[0], AssetAllocation)
@@ -179,7 +179,7 @@ def test_propose_product_schema_exposes_enrichment_fields():
         "amount",
         "category",
         "provider",
-        "composition",
+        "underlying",
         "asset_class",
         "currency",
         "commission",
@@ -188,7 +188,6 @@ def test_propose_product_schema_exposes_enrichment_fields():
         "liquidity",
         "return_rate",
         "geographic_focus",
-        "subcategory",
         "catalog_product_id",
         "primary_source",
         "provenance",

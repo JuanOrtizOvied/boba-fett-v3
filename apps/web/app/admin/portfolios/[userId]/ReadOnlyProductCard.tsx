@@ -65,19 +65,10 @@ export function ReadOnlyProductCard({
           {formatUsd(product.amount)}
         </p>
 
-        {product.subcategory && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-sabbi-neutral-500">Subcategoría:</span>
-            <span className="text-xs font-medium text-sabbi-neutral-700">
-              {product.subcategory}
-            </span>
-          </div>
-        )}
-
-        {product.composition.length > 0 && (
+        {product.underlying.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <div className="flex h-2 overflow-hidden rounded-full bg-sabbi-neutral-100">
-              {product.composition.map((asset, index) => (
+              {product.underlying.map((asset, index) => (
                 <div
                   key={`${asset.name}-${index}`}
                   style={{
@@ -88,7 +79,7 @@ export function ReadOnlyProductCard({
               ))}
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-              {product.composition.map((asset, index) => (
+              {product.underlying.map((asset, index) => (
                 <span
                   key={`${asset.name}-${index}`}
                   className="flex items-center gap-1 text-[10px] text-sabbi-neutral-600"
@@ -130,7 +121,6 @@ export function ReadOnlyProductCard({
 interface EnrichmentFields {
   assetClass: string;
   geographicFocus: string;
-  underlying: string;
   commission: string;
   currency: string;
   administrator: string;
@@ -142,7 +132,6 @@ interface EnrichmentFields {
 const EMPTY_ENRICHMENT: EnrichmentFields = {
   assetClass: "",
   geographicFocus: "",
-  underlying: "",
   commission: "",
   currency: "",
   administrator: "",
@@ -161,9 +150,9 @@ export interface ApproveProductModalProps {
 
 /**
  * "Approve to catalog" modal (`admin-panel/spec.md` -> "Approve to Catalog
- * Affordance on Portfolio View"). Pre-fills `name`/`category`/`subcategory`
- * from the source product and leaves every enrichment field empty for the
- * admin to fill in. Cancel closes with no side effects. Confirm posts to
+ * Affordance on Portfolio View"). Pre-fills `name`/`category` from the source
+ * product and leaves every enrichment field empty for the admin to fill in.
+ * Cancel closes with no side effects. Confirm posts to
  * `POST /api/admin/catalog/approve`; successful approval notifies the parent
  * and closes the modal, while duplicate/error responses stay inline.
  */
@@ -175,7 +164,6 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
 }) => {
   const [name, setName] = useState("");
   const [category, setCategory] = useState<Category>("inversiones_directas");
-  const [subcategory, setSubcategory] = useState("");
   const [enrichment, setEnrichment] = useState<EnrichmentFields>(EMPTY_ENRICHMENT);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -184,11 +172,9 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
     if (!product) return;
     setName(product.name);
     setCategory(product.category);
-    setSubcategory(product.subcategory);
     setEnrichment({
       assetClass: product.asset_class || "",
       geographicFocus: product.geographic_focus || "",
-      underlying: product.underlying || "",
       commission: product.commission || "",
       currency: product.currency || "",
       administrator: product.administrator || "",
@@ -223,10 +209,8 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
         body: JSON.stringify({
           name: name.trim(),
           category,
-          subcategory: subcategory.trim(),
           asset_class: enrichment.assetClass.trim(),
           geographic_focus: enrichment.geographicFocus.trim(),
-          underlying: enrichment.underlying.trim(),
           commission: enrichment.commission.trim(),
           currency: enrichment.currency.trim(),
           administrator: enrichment.administrator.trim(),
@@ -296,17 +280,11 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                     ))}
                   </select>
                 </ComparisonRow>
-                <ComparisonRow label="Subcategoría" currentValue={catalogEntry.subcategory} newValue={subcategory}>
-                  <input value={subcategory} onChange={(e) => setSubcategory(e.target.value)} className={modalInputClass} />
-                </ComparisonRow>
                 <ComparisonRow label="Clase de activo" currentValue={catalogEntry.asset_class} newValue={enrichment.assetClass}>
                   <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
                 </ComparisonRow>
                 <ComparisonRow label="Foco geográfico" currentValue={catalogEntry.geographic_focus} newValue={enrichment.geographicFocus}>
                   <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
-                </ComparisonRow>
-                <ComparisonRow label="Subyacente" currentValue={catalogEntry.underlying} newValue={enrichment.underlying}>
-                  <input value={enrichment.underlying} onChange={(e) => updateEnrichment({ underlying: e.target.value })} className={modalInputClass} />
                 </ComparisonRow>
                 <ComparisonRow label="Comisión" currentValue={catalogEntry.commission} newValue={enrichment.commission}>
                   <input value={enrichment.commission} onChange={(e) => updateEnrichment({ commission: e.target.value })} className={modalInputClass} />
@@ -340,17 +318,11 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                   ))}
                 </select>
               </ModalField>
-              <ModalField label="Subcategoría">
-                <input value={subcategory} onChange={(e) => setSubcategory(e.target.value)} className={modalInputClass} />
-              </ModalField>
               <ModalField label="Clase de activo">
                 <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
               </ModalField>
               <ModalField label="Foco geográfico">
                 <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
-              </ModalField>
-              <ModalField label="Subyacente">
-                <input value={enrichment.underlying} onChange={(e) => updateEnrichment({ underlying: e.target.value })} className={modalInputClass} />
               </ModalField>
               <ModalField label="Comisión">
                 <input value={enrichment.commission} onChange={(e) => updateEnrichment({ commission: e.target.value })} className={modalInputClass} />

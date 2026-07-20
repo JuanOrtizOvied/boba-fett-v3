@@ -173,7 +173,6 @@ interface ProposedProduct {
   amount: number;
   category: string;
   provider?: string;
-  subcategory?: string;
   commission?: string;
   currency?: string;
   administrator?: string;
@@ -295,20 +294,6 @@ const ReadOnlyProposalCard: FC<{
             </span>
           </div>
         </div>
-
-        {product.subcategory && (
-          <div className="flex flex-col gap-0.5">
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-sabbi-neutral-500">
-              Subcategoría
-              <span className="rounded-full bg-sabbi-primary-soft px-1.5 py-0.5 text-[9px] font-semibold text-sabbi-primary">
-                Auto-clasificado
-              </span>
-            </span>
-            <span className="text-sm text-sabbi-neutral-700">
-              {product.subcategory}
-            </span>
-          </div>
-        )}
 
         {enrichedFields.length > 0 && (
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-sabbi-neutral-100 pt-2.5">

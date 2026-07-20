@@ -30,7 +30,7 @@ type ProductInput = {
   name?: string;
   amount?: number;
   category?: string;
-  subcategory?: string;
+  underlying?: { name: string; percentage: number }[];
   provider?: string;
 };
 
@@ -87,7 +87,7 @@ describe("ProposeProductCard rendering", () => {
           name: "BlackRock Fund",
           amount: 1000,
           category: "mercados_publicos",
-          subcategory: "Renta Fija US Treasuries",
+          underlying: [{ name: "Renta Fija US Treasuries", percentage: 100 }],
         })}
       />,
     );
@@ -95,25 +95,24 @@ describe("ProposeProductCard rendering", () => {
     expect(screen.getByLabelText("Nombre")).toHaveValue("BlackRock Fund");
     expect(screen.getByLabelText("Monto (USD)")).toHaveValue(1000);
     expect(screen.getByLabelText("Categoría")).toHaveValue("mercados_publicos");
-    expect(screen.getByLabelText(/Subcategoría/)).toHaveValue("Renta Fija US Treasuries");
     expect(screen.getByText("Merc. públicos")).toBeInTheDocument();
     expect(screen.queryByText(/Completa:/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sí, agregar" })).not.toBeDisabled();
   });
 
-  test("shows a missing-fields warning and disables confirm when subcategory is missing", () => {
+  test("shows a missing-fields warning and disables confirm when underlying is missing", () => {
     render(
       <ProposeProductCard
         {...cardProps({
           name: "Fondo X",
           amount: 500,
           category: "cash_y_equivalentes",
-          subcategory: undefined,
+          underlying: undefined,
         })}
       />,
     );
 
-    expect(screen.getByText("Completa: subcategoría")).toBeInTheDocument();
+    expect(screen.getByText(/composición/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sí, agregar" })).toBeDisabled();
   });
 
@@ -132,7 +131,7 @@ describe("ProposeProductCard field editing", () => {
           name: "Fondo X",
           amount: 0,
           category: "cash_y_equivalentes",
-          subcategory: "Depósitos a plazo",
+          underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
         })}
       />,
     );
@@ -158,7 +157,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
           name: "BlackRock Fund",
           amount: 1000,
           category: "mercados_publicos",
-          subcategory: "Renta Fija",
+          underlying: [{ name: "Renta Fija", percentage: 100 }],
         })}
       />,
     );
@@ -171,7 +170,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
       content: [
         {
           type: "text",
-          text: "Sí, agregar al portafolio con: nombre: BlackRock Fund, monto: 1000, categoría: mercados_publicos, subcategory: Renta Fija.",
+          text: "Sí, agregar al portafolio con: nombre: BlackRock Fund, monto: 1000, categoría: Mercados públicos, underlying: [Renta Fija: 100%].",
         },
       ],
     });
@@ -186,7 +185,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
           name: "",
           amount: 1000,
           category: "cash_y_equivalentes",
-          subcategory: "Depósitos a plazo",
+          underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
         })}
       />,
     );
@@ -208,7 +207,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
           name: "Fondo Y",
           amount: 500,
           category: "cash_y_equivalentes",
-          subcategory: undefined,
+          underlying: undefined,
         })}
       />,
     );
@@ -235,7 +234,7 @@ describe("ProposeProductCard registration in ProposalBatchProvider", () => {
             name: "BlackRock Fund",
             amount: 1000,
             category: "mercados_publicos",
-            subcategory: "Renta Fija",
+            underlying: [{ name: "Renta Fija", percentage: 100 }],
           })}
         />
         <BatchSnapshot onSnapshot={(entries) => (latest = entries)} />
@@ -256,7 +255,7 @@ describe("ProposeProductCard registration in ProposalBatchProvider", () => {
       name: "BlackRock Fund",
       amount: 1000,
       category: "mercados_publicos",
-      subcategory: "Renta Fija",
+      underlying: [{ name: "Renta Fija", percentage: 100 }],
     };
 
     const { rerender } = render(
@@ -286,7 +285,6 @@ describe("ProposeProductCard persisted response state", () => {
         name: "Fund B",
         amount: 800,
         category: "cash_y_equivalentes",
-        subcategory: "Fondos de Money Market",
       },
       [
         {
@@ -295,7 +293,7 @@ describe("ProposeProductCard persisted response state", () => {
           content: [
             {
               type: "text",
-              text: "Sí, agregar todos al portafolio:\nnombre: Fund B, monto: 800, categoría: cash_y_equivalentes, subcategory: Fondos de Money Market",
+              text: "Sí, agregar todos al portafolio:\nnombre: Fund B, monto: 800, categoría: cash_y_equivalentes, underlying: [Fondos de Money Market: 100%]",
             },
           ],
         },
@@ -311,7 +309,6 @@ describe("ProposeProductCard persisted response state", () => {
         name: "Fondo Visión Largo Plazo Global B",
         amount: 125000.4,
         category: "mercados_privados",
-        subcategory: "Deuda Privada",
       },
       [
         {
@@ -350,7 +347,6 @@ describe("ProposeProductCard persisted response state", () => {
         name: "Fund C",
         amount: 900,
         category: "cash_y_equivalentes",
-        subcategory: "Depósitos a plazo",
       },
       [
         {
@@ -406,7 +402,6 @@ describe("ProposeProductCard persisted response state", () => {
             name: "Fondo Edífica Core VI B",
             amount: 55001.56,
             category: "club_deals",
-            subcategory: "Perú",
           },
           "tc_existing",
         )}
@@ -423,7 +418,6 @@ describe("ProposeProductCard persisted response state", () => {
         name: "Fondo Edífica Core VI B",
         amount: 55001.56,
         category: "club_deals",
-        subcategory: "Perú",
       },
       [
         {

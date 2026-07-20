@@ -21,11 +21,9 @@ class Product(BaseModel):
         description="One of: inversiones_directas, mercados_privados,"
         " club_deals, mercados_publicos, otros, cash_y_equivalentes"
     )
-    subcategory: str = ""
-    composition: list[AssetAllocation] = Field(default_factory=list)
+    underlying: list[AssetAllocation] = Field(default_factory=list)
     asset_class: str = ""
     geographic_focus: str = ""
-    underlying: str = ""
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -40,11 +38,9 @@ class ProductCreate(BaseModel):
     provider: str = ""
     amount: float = Field(gt=0)
     category: str
-    subcategory: str = ""
-    composition: list[AssetAllocation] = Field(default_factory=list)
+    underlying: list[AssetAllocation] = Field(default_factory=list)
     asset_class: str = ""
     geographic_focus: str = ""
-    underlying: str = ""
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -54,11 +50,11 @@ class ProductCreate(BaseModel):
     catalog_product_id: int | None = None
 
     @model_validator(mode="after")
-    def _composition_sums_to_100(self) -> ProductCreate:
-        if self.composition:
-            total = sum(a.percentage for a in self.composition)
+    def _underlying_sums_to_100(self) -> ProductCreate:
+        if self.underlying:
+            total = sum(a.percentage for a in self.underlying)
             if abs(total - 100) >= 0.5:
-                raise ValueError(f"Composition must sum to 100% (got {total:.1f}%)")
+                raise ValueError(f"Underlying must sum to 100% (got {total:.1f}%)")
         return self
 
 
@@ -67,11 +63,9 @@ class ProductUpdate(BaseModel):
     provider: str | None = None
     amount: float | None = None
     category: str | None = None
-    subcategory: str | None = None
-    composition: list[AssetAllocation] | None = None
+    underlying: list[AssetAllocation] | None = None
     asset_class: str | None = None
     geographic_focus: str | None = None
-    underlying: str | None = None
     commission: str | None = None
     currency: str | None = None
     administrator: str | None = None
@@ -81,11 +75,11 @@ class ProductUpdate(BaseModel):
     catalog_product_id: int | None = None
 
     @model_validator(mode="after")
-    def _composition_sums_to_100(self) -> ProductUpdate:
-        if self.composition is not None and self.composition:
-            total = sum(a.percentage for a in self.composition)
+    def _underlying_sums_to_100(self) -> ProductUpdate:
+        if self.underlying is not None and self.underlying:
+            total = sum(a.percentage for a in self.underlying)
             if abs(total - 100) >= 0.5:
-                raise ValueError(f"Composition must sum to 100% (got {total:.1f}%)")
+                raise ValueError(f"Underlying must sum to 100% (got {total:.1f}%)")
         return self
 
 
@@ -106,7 +100,7 @@ class CatalogProduct(BaseModel):
     name: str
     geographic_focus: str = ""
     asset_class: str = ""
-    underlying: str = ""
+    underlying: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -114,7 +108,6 @@ class CatalogProduct(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     category: str = ""
-    subcategory: str = ""
     alternative_names: list[str] = Field(default_factory=list)
     approved_from_product_id: str | None = None
     approved_at: str | None = None
@@ -128,10 +121,9 @@ class CatalogProductCreate(BaseModel):
 
     name: str
     category: str
-    subcategory: str = ""
     asset_class: str = ""
     geographic_focus: str = ""
-    underlying: str = ""
+    underlying: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -146,10 +138,9 @@ class CatalogProductCreate(BaseModel):
 class CatalogProductUpdate(BaseModel):
     name: str | None = None
     category: str | None = None
-    subcategory: str | None = None
     asset_class: str | None = None
     geographic_focus: str | None = None
-    underlying: str | None = None
+    underlying: list[AssetAllocation] | None = None
     commission: str | None = None
     currency: str | None = None
     administrator: str | None = None
@@ -169,7 +160,6 @@ class SearchResult(BaseModel):
     name: str = ""
     asset_class: str = ""
     geographic_focus: str = ""
-    underlying: str = ""
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -177,7 +167,6 @@ class SearchResult(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     category: str = ""
-    subcategory: str = ""
     catalog_product_id: int | None = None
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)

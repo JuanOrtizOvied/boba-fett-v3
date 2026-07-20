@@ -100,7 +100,6 @@ const ChangeLogItem: FC<{ entry: ChangeLogEntry }> = ({ entry }) => {
   const catMeta = categoryKey ? CATEGORY_META[categoryKey] : null;
   const changes = describeChanges(entry);
 
-  const subcategory = product?.subcategory;
   const provider = product?.provider;
 
   return (
@@ -117,11 +116,9 @@ const ChangeLogItem: FC<{ entry: ChangeLogEntry }> = ({ entry }) => {
               {productName}
             </span>
           </div>
-          {(subcategory || provider) && (
+          {provider && (
             <p className="text-xs text-sabbi-neutral-600">
-              {subcategory && provider
-                ? `${subcategory} · ${provider}`
-                : subcategory || provider}
+              {provider}
             </p>
           )}
           {changes && (

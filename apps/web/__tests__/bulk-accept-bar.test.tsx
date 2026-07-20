@@ -26,7 +26,7 @@ type ProductInput = {
   name?: string;
   amount?: number;
   category?: string;
-  subcategory?: string;
+  underlying?: { name: string; percentage: number }[];
   provider?: string;
 };
 
@@ -43,21 +43,21 @@ const FUND_A: ProductInput = {
   name: "Fund A",
   amount: 500,
   category: "cash_y_equivalentes",
-  subcategory: "Depósitos a plazo",
+  underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
 };
 
 const FUND_B_VALID: ProductInput = {
   name: "Fund B",
   amount: 800,
   category: "cash_y_equivalentes",
-  subcategory: "Fondos de Money Market",
+  underlying: [{ name: "Fondos de Money Market", percentage: 100 }],
 };
 
 const FUND_B_INCOMPLETE: ProductInput = {
   name: "Fund B",
   amount: 800,
   category: "cash_y_equivalentes",
-  subcategory: undefined,
+  underlying: undefined,
 };
 
 let appendMock: ReturnType<typeof vi.fn>;
@@ -97,7 +97,7 @@ describe("BulkAcceptBar visibility gating", () => {
       expect(screen.getByText("1 de 2 productos listos")).toBeInTheDocument();
     });
     expect(screen.getByText(/Fund B/)).toBeInTheDocument();
-    expect(screen.getByText(/completa: subcategoría/)).toBeInTheDocument();
+    expect(screen.getByText(/completa:/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agregar todos" })).toBeDisabled();
   });
 
@@ -149,8 +149,8 @@ describe("BulkAcceptBar combined confirmation", () => {
           type: "text",
           text:
             "Sí, agregar todos al portafolio:\n" +
-            "nombre: Fund A, monto: 500, categoría: cash_y_equivalentes, subcategory: Depósitos a plazo\n" +
-            "nombre: Fund B, monto: 800, categoría: cash_y_equivalentes, subcategory: Fondos de Money Market",
+            "nombre: Fund A, monto: 500, categoría: Cash y equivalentes, underlying: [Depósitos a plazo: 100%]\n" +
+            "nombre: Fund B, monto: 800, categoría: Cash y equivalentes, underlying: [Fondos de Money Market: 100%]",
         },
       ],
     });

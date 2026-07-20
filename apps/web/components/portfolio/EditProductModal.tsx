@@ -71,8 +71,8 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setAmount(String(product.amount));
       setCategory(product.category);
       setRows(
-        product.composition.length
-          ? product.composition.map((a) => ({
+        product.underlying.length
+          ? product.underlying.map((a) => ({
               key: nextRowKey(),
               name: a.name,
               percentage: String(a.percentage),
@@ -162,7 +162,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
         provider: provider.trim(),
         amount: parsedAmount,
         category,
-        composition,
+        underlying: composition,
       };
       const res = isEditing
         ? await fetchWithAuth(`/api/products/${product.id}`, {

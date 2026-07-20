@@ -106,7 +106,7 @@ class VersioningRepository:
 
         Every product field is materialized into `snapshot_products.product_data`
         (via `Product.model_dump()`), not just id/name/amount, so enrichment
-        fields (`composition`, `asset_class`, `commission`, etc.) survive
+        fields (`underlying`, `asset_class`, `commission`, etc.) survive
         later live-product edits or deletes (SNAP-002).
         """
         async with self.pool.acquire() as conn:
@@ -465,9 +465,9 @@ class VersioningRepository:
         """Mirrors `ProductRepository._row_to_product` (`db/repository.py`)
         so a materialized snapshot product carries the exact same field
         set as a live `Product`."""
-        comp = row["composition"]
-        if isinstance(comp, str):
-            comp = json.loads(comp)
+        raw = row["underlying"]
+        if isinstance(raw, str):
+            raw = json.loads(raw)
         return Product(
             id=str(row["id"]),
             user_id=str(row["user_id"]),
@@ -475,11 +475,9 @@ class VersioningRepository:
             provider=row["provider"],
             amount=float(row["amount"]),
             category=row["category"],
-            subcategory=row["subcategory"] or "",
-            composition=[AssetAllocation(**a) for a in (comp or [])],
+            underlying=[AssetAllocation(**a) for a in (raw or [])],
             asset_class=row.get("asset_class", "") or "",
             geographic_focus=row.get("geographic_focus", "") or "",
-            underlying=row.get("underlying", "") or "",
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",
             administrator=row.get("administrator", "") or "",

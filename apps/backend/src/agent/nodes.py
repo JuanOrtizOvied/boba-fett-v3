@@ -39,7 +39,7 @@ Extrae TODOS los productos de inversión que encuentres. Para cada producto iden
 - monto invertido en USD
 - categoría (una de: inversiones_directas, mercados_privados,
   club_deals, mercados_publicos, otros, cash_y_equivalentes)
-- composición por asset class si está disponible
+- underlying (distribución por asset class) si está disponible
 
 Presenta los productos encontrados en una lista clara y luego usa la tool
 `add_product` para agregar cada uno al portafolio del usuario."""

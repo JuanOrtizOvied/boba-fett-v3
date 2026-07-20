@@ -345,7 +345,6 @@ type ParsedProduct = {
   nombre: string;
   monto: string;
   categoría: string;
-  subcategoría: string;
   proveedor?: string;
 };
 
@@ -361,7 +360,6 @@ function parseProductLine(line: string): ParsedProduct | null {
     nombre: fields.nombre,
     monto: fields.monto,
     categoría: fields["categoría"] ?? "",
-    subcategoría: fields["subcategoría"] ?? fields["subcategory"] ?? "",
     proveedor: fields.proveedor,
   };
 }
@@ -638,7 +636,6 @@ export interface ProposalEntry {
   name: string;
   amount: number;
   category: string;
-  subcategory: string;
   provider: string;
   isValid: boolean;
   missingFields: string[];
@@ -771,8 +768,7 @@ export function ProposalBatchProvider({ children }: { children: React.ReactNode 
       prev.responded === entry.responded &&
       prev.name === entry.name &&
       prev.amount === entry.amount &&
-      prev.category === entry.category &&
-      prev.subcategory === entry.subcategory
+      prev.category === entry.category
     ) {
       return;
     }
@@ -941,15 +937,12 @@ export function ProposeProductCard({
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
   const [category, setCategory] = useState<Category>(resolveCategoryKey(product?.category ?? "cash_y_equivalentes"));
   const [compRows, setCompRows] = useState<{ key: string; name: string; percentage: string }[]>(() => {
-    if (product?.composition && Array.isArray(product.composition) && product.composition.length > 0) {
-      return product.composition.map((c: { name: string; percentage: number }, i: number) => ({
+    if (product?.underlying && Array.isArray(product.underlying) && product.underlying.length > 0) {
+      return product.underlying.map((c: { name: string; percentage: number }, i: number) => ({
         key: `row-${i}`,
         name: c.name,
         percentage: String(c.percentage),
       }));
-    }
-    if (product?.subcategory) {
-      return [{ key: "row-0", name: product.subcategory, percentage: "100" }];
     }
     return [];
   });
@@ -999,7 +992,7 @@ export function ProposeProductCard({
       `nombre: ${name}`,
       `monto: ${amt}`,
       `categoría: ${categoryLabel}`,
-      `composición: [${compStr}]`,
+      `underlying: [${compStr}]`,
     ];
     if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
     if (catalogProductId != null) parts.push(`catalog_product_id: ${catalogProductId}`);
@@ -1031,7 +1024,6 @@ export function ProposeProductCard({
       name,
       amount: parsedAmount,
       category,
-      subcategory: compRows.length === 1 ? compRows[0].name : "",
       provider,
       isValid,
       missingFields,
@@ -1042,7 +1034,7 @@ export function ProposeProductCard({
       getText: () => {
         const catLabel = CATEGORY_META[category]?.label ?? category;
         const compStr = compRows.map((r) => `${r.name}: ${r.percentage}%`).join(", ");
-        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${catLabel}`, `composición: [${compStr}]`];
+        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${catLabel}`, `underlying: [${compStr}]`];
         if (provider.trim()) p.push(`proveedor: ${provider.trim()}`);
         if (catalogProductId != null) p.push(`catalog_product_id: ${catalogProductId}`);
         return p.join(", ");
@@ -1057,7 +1049,6 @@ export function ProposeProductCard({
   if (!meta) return null;
 
   const provenance = product.provenance;
-  const autoClassified = Boolean(product.subcategory);
   const enrichedFields = ENRICHED_FIELDS.filter(({ key }) => product[key]);
 
   const handleCategoryChange = (next: Category) => {
@@ -1162,12 +1153,7 @@ export function ProposeProductCard({
 
         <div className="flex flex-col gap-1">
           <span className="flex items-center gap-1.5 text-[11px] font-medium text-sabbi-neutral-500">
-            Composición por subcategoría
-            {autoClassified ? (
-              <span className="rounded-full bg-sabbi-primary-soft px-1.5 py-0.5 text-[9px] font-semibold text-sabbi-primary">
-                Auto-clasificado
-              </span>
-            ) : null}
+            Composición subyacente
           </span>
           {editable ? (
             <>

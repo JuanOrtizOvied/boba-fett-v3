@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import asyncpg
 
-from db.models import CatalogProduct, CatalogProductCreate, CatalogProductUpdate
+from db.models import AssetAllocation, CatalogProduct, CatalogProductCreate, CatalogProductUpdate
 
 
 class CatalogRepository:
@@ -18,21 +20,19 @@ class CatalogRepository:
     ) -> CatalogProduct | None:
         """Insert a new catalog entry unless a normalized match already
         exists (`sdd/product-catalog-approval/design` — "Duplicate Detection
-        SQL"). Matching is on name + category + subcategory + asset_class,
-        trimmed and case-insensitive. Returns `None` when a duplicate is
-        found instead of inserting."""
+        SQL"). Matching is on name + category + asset_class, trimmed and
+        case-insensitive. Returns `None` when a duplicate is found instead
+        of inserting."""
         existing = await self.pool.fetchrow(
             """
             SELECT id FROM product_catalog
             WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
               AND LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM($2))
-              AND LOWER(TRIM(COALESCE(subcategory, ''))) = LOWER(TRIM($3))
-              AND LOWER(TRIM(COALESCE(asset_class, ''))) = LOWER(TRIM($4))
+              AND LOWER(TRIM(COALESCE(asset_class, ''))) = LOWER(TRIM($3))
             LIMIT 1
             """,
             data.name,
             data.category,
-            data.subcategory,
             data.asset_class,
         )
         if existing is not None:
@@ -41,19 +41,18 @@ class CatalogRepository:
         row = await self.pool.fetchrow(
             """
             INSERT INTO product_catalog
-                (name, category, subcategory, asset_class, geographic_focus,
+                (name, category, asset_class, geographic_focus,
                  underlying, commission, currency, administrator, manager,
                  liquidity, return_rate, approved_from_product_id,
                  alternative_names, approved_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
             RETURNING *
             """,
             data.name,
             data.category,
-            data.subcategory,
             data.asset_class,
             data.geographic_focus,
-            data.underlying,
+            json.dumps([a.model_dump() for a in data.underlying]),
             data.commission,
             data.currency,
             data.administrator,
@@ -73,19 +72,18 @@ class CatalogRepository:
             UPDATE product_catalog
             SET name = $2,
                 category = $3,
-                subcategory = $4,
-                asset_class = $5,
-                geographic_focus = $6,
-                underlying = $7,
-                commission = $8,
-                currency = $9,
-                administrator = $10,
-                manager = $11,
-                liquidity = $12,
-                return_rate = $13,
-                approved_from_product_id = $14,
+                asset_class = $4,
+                geographic_focus = $5,
+                underlying = $6,
+                commission = $7,
+                currency = $8,
+                administrator = $9,
+                manager = $10,
+                liquidity = $11,
+                return_rate = $12,
+                approved_from_product_id = $13,
                 alternative_names = CASE
-                    WHEN cardinality($15::text[]) > 0 THEN $15
+                    WHEN cardinality($14::text[]) > 0 THEN $14
                     ELSE alternative_names
                 END,
                 approved_at = now()
@@ -95,10 +93,9 @@ class CatalogRepository:
             catalog_id,
             data.name,
             data.category,
-            data.subcategory,
             data.asset_class,
             data.geographic_focus,
-            data.underlying,
+            json.dumps([a.model_dump() for a in data.underlying]),
             data.commission,
             data.currency,
             data.administrator,
@@ -114,6 +111,10 @@ class CatalogRepository:
         self, catalog_id: int, data: CatalogProductUpdate
     ) -> CatalogProduct | None:
         fields = data.model_dump(exclude_none=True)
+        if "underlying" in fields:
+            fields["underlying"] = json.dumps(
+                [a.model_dump() for a in data.underlying]
+            )
         if not fields:
             row = await self.pool.fetchrow(
                 "SELECT * FROM product_catalog WHERE id = $1", catalog_id
@@ -139,7 +140,6 @@ class CatalogRepository:
             SELECT pc.*,
                 GREATEST(
                     similarity(name, $1),
-                    similarity(COALESCE(underlying, ''), $1),
                     similarity(COALESCE(administrator, ''), $1),
                     COALESCE((
                         SELECT MAX(similarity(alt, $1))
@@ -149,9 +149,7 @@ class CatalogRepository:
             FROM product_catalog pc
             WHERE
                 similarity(name, $1) > 0.1
-                OR similarity(COALESCE(underlying, ''), $1) > 0.1
                 OR name ILIKE '%' || $1 || '%'
-                OR COALESCE(underlying, '') ILIKE '%' || $1 || '%'
                 OR COALESCE(asset_class, '') ILIKE '%' || $1 || '%'
                 OR EXISTS (
                     SELECT 1 FROM unnest(alternative_names) AS alt
@@ -167,12 +165,15 @@ class CatalogRepository:
         return [self._row_to_catalog_product(r) for r in rows]
 
     def _row_to_catalog_product(self, row: asyncpg.Record) -> CatalogProduct:
+        raw = row["underlying"]
+        if isinstance(raw, str):
+            raw = json.loads(raw)
         return CatalogProduct(
             id=row["id"],
             name=row["name"],
             geographic_focus=row["geographic_focus"] or "",
             asset_class=row["asset_class"] or "",
-            underlying=row["underlying"] or "",
+            underlying=[AssetAllocation(**a) for a in (raw or [])],
             commission=row["commission"] or "",
             currency=row["currency"] or "",
             administrator=row["administrator"] or "",
@@ -180,7 +181,6 @@ class CatalogRepository:
             liquidity=row["liquidity"] or "",
             return_rate=row["return_rate"] or "",
             category=row["category"] or "",
-            subcategory=row["subcategory"] or "",
             alternative_names=list(row["alternative_names"] or []),
             approved_from_product_id=row["approved_from_product_id"],
             approved_at=(

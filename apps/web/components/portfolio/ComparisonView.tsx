@@ -29,11 +29,9 @@ const FIELD_LABELS: Record<string, string> = {
   provider: "Proveedor",
   amount: "Monto",
   category: "Categoría",
-  subcategory: "Subcategoría",
-  composition: "Composición",
+  underlying: "Composición",
   asset_class: "Clase de activo",
   geographic_focus: "Foco geográfico",
-  underlying: "Subyacente",
   commission: "Comisión",
   currency: "Moneda",
   administrator: "Administrador",
@@ -55,7 +53,7 @@ function formatFieldValue(field: string, value: unknown): string {
   if (field === "category" && typeof value === "string") {
     return CATEGORY_META[value as Category]?.label ?? value;
   }
-  if (field === "composition") {
+  if (field === "underlying") {
     const allocations = value as AssetAllocation[];
     if (!Array.isArray(allocations) || allocations.length === 0) return "—";
     return allocations.map((a) => `${a.name} ${a.percentage}%`).join(", ");

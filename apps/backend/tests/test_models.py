@@ -44,11 +44,11 @@ def test_product_valid_generates_default_id():
     assert product.user_id == "usr_123"
     assert product.name == "BlackRock Private Credit Fund"
     assert product.provider == ""
-    assert product.composition == []
+    assert product.underlying == []
     assert product.catalog_product_id is None
 
 
-def test_product_accepts_explicit_composition():
+def test_product_accepts_explicit_underlying():
     from db.models import AssetAllocation, Product
 
     product = Product(
@@ -56,14 +56,14 @@ def test_product_accepts_explicit_composition():
         name="Multi-asset fund",
         amount=10000,
         category="mercados_publicos",
-        composition=[
+        underlying=[
             AssetAllocation(name="RV US Large Cap", percentage=60),
             AssetAllocation(name="RF Corporate", percentage=40),
         ],
     )
 
-    assert len(product.composition) == 2
-    assert sum(a.percentage for a in product.composition) == 100
+    assert len(product.underlying) == 2
+    assert sum(a.percentage for a in product.underlying) == 100
 
 
 @pytest.mark.parametrize("amount", [0, -1, -100.5])
@@ -88,7 +88,7 @@ def test_product_create_valid():
 
     assert data.name == "Fund A"
     assert data.provider == ""
-    assert data.composition == []
+    assert data.underlying == []
     assert data.catalog_product_id is None
 
 
@@ -116,7 +116,7 @@ def test_product_update_all_fields_optional():
     assert update.provider is None
     assert update.amount is None
     assert update.category is None
-    assert update.composition is None
+    assert update.underlying is None
 
 
 def test_product_update_partial_fields():
@@ -129,39 +129,36 @@ def test_product_update_partial_fields():
     assert update.name is None
 
 
-def test_product_update_composition_replaces_full_list():
+def test_product_update_underlying_replaces_full_list():
     from db.models import AssetAllocation, ProductUpdate
 
     update = ProductUpdate(
-        composition=[AssetAllocation(name="Cripto", percentage=100)]
+        underlying=[AssetAllocation(name="Cripto", percentage=100)]
     )
 
-    assert update.composition is not None
-    assert len(update.composition) == 1
-    assert update.composition[0].name == "Cripto"
+    assert update.underlying is not None
+    assert len(update.underlying) == 1
+    assert update.underlying[0].name == "Cripto"
 
 
-def test_catalog_product_category_and_subcategory_default_empty():
+def test_catalog_product_category_defaults_empty():
     from db.models import CatalogProduct
 
     product = CatalogProduct(id=1, name="Vanguard Total World Stock ETF")
 
     assert product.category == ""
-    assert product.subcategory == ""
 
 
-def test_catalog_product_accepts_explicit_category_and_subcategory():
+def test_catalog_product_accepts_explicit_category():
     from db.models import CatalogProduct
 
     product = CatalogProduct(
         id=2,
         name="US Treasury Bond Fund",
         category="mercados_publicos",
-        subcategory="US Treasuries",
     )
 
     assert product.category == "mercados_publicos"
-    assert product.subcategory == "US Treasuries"
 
 
 def test_search_result_defaults_are_all_empty():
@@ -172,7 +169,6 @@ def test_search_result_defaults_are_all_empty():
     assert result.name == ""
     assert result.asset_class == ""
     assert result.geographic_focus == ""
-    assert result.underlying == ""
     assert result.commission == ""
     assert result.currency == ""
     assert result.administrator == ""
@@ -180,7 +176,6 @@ def test_search_result_defaults_are_all_empty():
     assert result.liquidity == ""
     assert result.return_rate == ""
     assert result.category == ""
-    assert result.subcategory == ""
     assert result.catalog_product_id is None
     assert result.primary_source == "catalog"
     assert result.provenance == {}

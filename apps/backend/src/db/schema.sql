@@ -30,15 +30,13 @@ CREATE TABLE IF NOT EXISTS products (
     provider TEXT DEFAULT '',
     amount NUMERIC NOT NULL CHECK (amount > 0),
     category TEXT NOT NULL,
-    composition JSONB DEFAULT '[]',
+    underlying JSONB DEFAULT '[]',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-ALTER TABLE products ADD COLUMN IF NOT EXISTS subcategory TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS geographic_focus TEXT DEFAULT '';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS underlying TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS commission TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS administrator TEXT DEFAULT '';
@@ -59,6 +57,26 @@ UPDATE product_catalog SET category = 'club_deals' WHERE lower(category) IN ('cl
 UPDATE product_catalog SET category = 'mercados_publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos', 'publicos');
 UPDATE product_catalog SET category = 'cash_y_equivalentes' WHERE lower(category) IN ('cash y equivalentes', 'cash');
 
+-- Migration: remove subcategory, merge composition into underlying
+ALTER TABLE products DROP COLUMN IF EXISTS subcategory;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='composition') THEN
+    ALTER TABLE products DROP COLUMN IF EXISTS underlying;
+    ALTER TABLE products RENAME COLUMN composition TO underlying;
+  END IF;
+END $$;
+
+ALTER TABLE product_catalog DROP COLUMN IF EXISTS subcategory;
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='product_catalog' AND column_name='underlying' AND data_type='text'
+  ) THEN
+    ALTER TABLE product_catalog DROP COLUMN underlying;
+    ALTER TABLE product_catalog ADD COLUMN underlying JSONB DEFAULT '[]';
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
 CREATE INDEX IF NOT EXISTS idx_products_catalog_product_id ON products (catalog_product_id);
 
@@ -69,19 +87,17 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     name TEXT NOT NULL,
     geographic_focus TEXT DEFAULT '',
     asset_class TEXT DEFAULT '',
-    underlying TEXT DEFAULT '',
+    underlying JSONB DEFAULT '[]',
     commission TEXT DEFAULT '',
     currency TEXT DEFAULT '',
     administrator TEXT DEFAULT '',
     manager TEXT DEFAULT '',
     liquidity TEXT DEFAULT '',
     return_rate TEXT DEFAULT '',
-    category TEXT DEFAULT '',
-    subcategory TEXT DEFAULT ''
+    category TEXT DEFAULT ''
 );
 
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '';
-ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS subcategory TEXT DEFAULT '';
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS approved_from_product_id TEXT;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
 

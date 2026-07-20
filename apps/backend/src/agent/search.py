@@ -32,7 +32,6 @@ FIELD_NAMES = (
     "name",
     "asset_class",
     "geographic_focus",
-    "underlying",
     "commission",
     "currency",
     "administrator",
@@ -40,7 +39,6 @@ FIELD_NAMES = (
     "liquidity",
     "return_rate",
     "category",
-    "subcategory",
 )
 
 # Rank of trust for each source, lowest = most trusted. `primary_source`
@@ -61,8 +59,8 @@ _EXTRACTION_SYSTEM_PROMPT = """You are a financial product data extraction assis
 an investment portfolio platform.
 
 Extract these fields for the requested product: name, asset_class,
-geographic_focus, underlying, commission, currency, administrator, manager,
-liquidity, return_rate, category, subcategory.
+geographic_focus, commission, currency, administrator, manager,
+liquidity, return_rate, category.
 
 CRITICAL RULE: if you are not confident about a field, or the information was
 not given to you, leave that field as an empty string. NEVER invent, guess, or
@@ -76,7 +74,6 @@ class ExtractedProduct(BaseModel):
     name: str = ""
     asset_class: str = ""
     geographic_focus: str = ""
-    underlying: str = ""
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -84,7 +81,6 @@ class ExtractedProduct(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     category: str = ""
-    subcategory: str = ""
 
 
 def _merge_fields(
@@ -215,36 +211,21 @@ def _is_valid_category(value: str) -> bool:
     return v in _LEGACY_CATEGORY_LABELS
 
 
-def _is_valid_subcategory(value: str) -> bool:
-    """Check whether a subcategory string matches a canonical taxonomy leaf."""
-    v = value.strip().lower()
-    for info in CATEGORIES.values():
-        for group_name, leaves in info["groups"].items():
-            for leaf in leaves:
-                canonical = leaf if leaf == group_name else f"{group_name} {leaf}"
-                if canonical.lower() == v:
-                    return True
-    return False
-
-
 def _sanitize_taxonomy(result: SearchResult) -> None:
-    """Clear category/subcategory values that don't match the SABBI taxonomy.
+    """Clear category values that don't match the SABBI taxonomy.
     Invalid values (e.g. "Diversificado" from a catalog entry) are wiped so
     _classify can re-attempt auto-classification or the agent asks the user."""
     if result.category and not _is_valid_category(result.category):
         result.category = ""
         result.provenance.pop("category", None)
-    if result.subcategory and not _is_valid_subcategory(result.subcategory):
-        result.subcategory = ""
-        result.provenance.pop("subcategory", None)
 
 
 def _classify(result: SearchResult) -> None:
-    """Auto-classify into category/subcategory from `CATEGORIES` when the
-    already-known fields confidently match exactly one taxonomy leaf. Leaves
-    both empty on no match or ambiguous (multiple leaf) matches so the agent
-    asks the user to classify manually."""
-    if result.category and result.subcategory:
+    """Auto-classify into category from `CATEGORIES` when the already-known
+    fields confidently match exactly one taxonomy leaf. Leaves category empty
+    on no match or ambiguous (multiple leaf) matches so the agent asks the
+    user to classify manually."""
+    if result.category:
         return
 
     haystack = " ".join(
@@ -254,8 +235,6 @@ def _classify(result: SearchResult) -> None:
                 result.name,
                 result.asset_class,
                 result.geographic_focus,
-                result.underlying,
-                result.subcategory,
             ],
         )
     ).lower()
@@ -274,9 +253,7 @@ def _classify(result: SearchResult) -> None:
 
     category_key, group_name, leaf = next(iter(matches))
     result.category = category_key
-    result.subcategory = leaf if leaf == group_name else f"{group_name} {leaf}"
     result.provenance["category"] = result.primary_source
-    result.provenance["subcategory"] = result.primary_source
 
 
 async def cascade_search(query: str, pool: asyncpg.Pool) -> SearchResult | None:

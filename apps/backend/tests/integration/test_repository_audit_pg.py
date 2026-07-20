@@ -29,7 +29,6 @@ def _create_data(**overrides: Any) -> ProductCreate:
         "provider": "SABBI",
         "amount": 150000,
         "category": "mercados_privados",
-        "subcategory": "Mercados Privados",
     }
     data.update(overrides)
     return ProductCreate(**data)

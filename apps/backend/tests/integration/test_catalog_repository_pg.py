@@ -18,10 +18,8 @@ def _entry(**overrides) -> CatalogProductCreate:
     data = {
         "name": "Bono Soberano",
         "category": "mercados_publicos",
-        "subcategory": "renta_fija",
         "asset_class": "bonos",
         "geographic_focus": "LatAm",
-        "underlying": "USD",
         "commission": "1.5%",
         "currency": "USD",
         "administrator": "Admin Co",
@@ -44,7 +42,7 @@ async def test_insert_if_not_duplicate_rejects_exact_duplicate_case_and_spacing(
     assert first is not None
 
     duplicate = await repo.insert_if_not_duplicate(
-        _entry(name="  bono soberano  ", category="PUBLICOS", subcategory=" Renta_Fija ")
+        _entry(name="  bono soberano  ", category="PUBLICOS")
     )
 
     assert duplicate is None
@@ -52,10 +50,10 @@ async def test_insert_if_not_duplicate_rejects_exact_duplicate_case_and_spacing(
 
 async def test_insert_if_not_duplicate_allows_entry_differing_in_asset_class(test_pool):
     """`design.md` scopes the duplicate identity key to
-    name + category + subcategory + asset_class (enrichment fields like
-    `commission` are intentionally excluded — see deviation note in the
-    apply-progress report). An entry differing in `asset_class`, which IS
-    part of the key, must be inserted rather than rejected."""
+    name + category + asset_class (enrichment fields like `commission` are
+    intentionally excluded — see deviation note in the apply-progress
+    report). An entry differing in `asset_class`, which IS part of the key,
+    must be inserted rather than rejected."""
     repo = CatalogRepository(test_pool)
     first = await repo.insert_if_not_duplicate(_entry())
     assert first is not None

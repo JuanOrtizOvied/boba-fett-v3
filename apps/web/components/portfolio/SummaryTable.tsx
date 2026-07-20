@@ -84,80 +84,32 @@ const CategoryRows: FC<{
   categoryPercent: number;
   categoryTotal: number;
   products: Product[];
-}> = ({ index, label, color, categoryPercent, categoryTotal, products }) => {
-  const subcategoryGroups = new Map<string, Product[]>();
-  for (const product of products) {
-    const key = product.subcategory || "Sin subcategoría";
-    const group = subcategoryGroups.get(key);
-    if (group) group.push(product);
-    else subcategoryGroups.set(key, [product]);
-  }
-
-  return (
-    <>
-      <tr className="bg-sabbi-neutral-100/70">
-        <td className="px-4 py-2">
-          <div className="flex items-center gap-2">
-            <span
-              className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-              style={{ backgroundColor: color }}
-            >
-              {index + 1}
-            </span>
-            <span className="font-medium text-sabbi-neutral-900">{label}</span>
-          </div>
-        </td>
-        <td className="px-4 py-2 text-right font-medium text-sabbi-neutral-900">
-          {categoryPercent.toFixed(1)}%
-        </td>
-        <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
-        <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
-      </tr>
-      {Array.from(subcategoryGroups.entries()).map(([subcategory, subProducts]) => {
-        const subTotal = subProducts.reduce((sum, p) => sum + p.amount, 0);
-        const subPercent =
-          categoryTotal > 0 ? (subTotal / categoryTotal) * 100 : 0;
-        return (
-          <SubcategoryRows
-            key={subcategory}
-            subcategory={subcategory}
-            color={color}
-            subPercent={subPercent}
-            categoryTotal={categoryTotal}
-            products={subProducts}
-          />
-        );
-      })}
-    </>
-  );
-};
-
-const SubcategoryRows: FC<{
-  subcategory: string;
-  color: string;
-  subPercent: number;
-  categoryTotal: number;
-  products: Product[];
-}> = ({ subcategory, color, subPercent, categoryTotal, products }) => (
+}> = ({ index, label, color, categoryPercent, categoryTotal, products }) => (
   <>
-    <tr className="bg-sabbi-neutral-50/80">
-      <td className="px-4 py-1.5 pl-10">
-        <span className="text-xs font-medium text-sabbi-neutral-700">
-          {subcategory}
-        </span>
+    <tr className="bg-sabbi-neutral-100/70">
+      <td className="px-4 py-2">
+        <div className="flex items-center gap-2">
+          <span
+            className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+            style={{ backgroundColor: color }}
+          >
+            {index + 1}
+          </span>
+          <span className="font-medium text-sabbi-neutral-900">{label}</span>
+        </div>
       </td>
-      <td className="px-4 py-1.5 text-right text-xs font-medium text-sabbi-neutral-700">
-        {subPercent.toFixed(1)}%
+      <td className="px-4 py-2 text-right font-medium text-sabbi-neutral-900">
+        {categoryPercent.toFixed(1)}%
       </td>
-      <td className="px-4 py-1.5 text-right text-xs text-sabbi-neutral-400">—</td>
-      <td className="px-4 py-1.5 text-right text-xs text-sabbi-neutral-400">—</td>
+      <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
+      <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
     </tr>
     {products.map((product) => {
       const productPercent =
         categoryTotal > 0 ? (product.amount / categoryTotal) * 100 : 0;
       return (
         <tr key={product.id}>
-          <td className="px-4 py-1.5 pl-14">
+          <td className="px-4 py-1.5 pl-10">
             <div className="flex flex-col gap-1">
               <span className="truncate text-xs text-sabbi-neutral-600">
                 {product.name}

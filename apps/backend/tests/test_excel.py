@@ -15,7 +15,7 @@ def _product(**overrides) -> Product:
         provider="Provider A",
         amount=10_000,
         category="inversiones_directas",
-        composition=[AssetAllocation(name="Fund A", percentage=100)],
+        underlying=[AssetAllocation(name="Fund A", percentage=100)],
     )
     defaults.update(overrides)
     return Product(**defaults)
@@ -30,7 +30,7 @@ def sample_products() -> list[Product]:
             name="Multi-asset Fund",
             amount=5_000,
             category="mercados_publicos",
-            composition=[
+            underlying=[
                 AssetAllocation(name="RV US Large Cap", percentage=60),
                 AssetAllocation(name="RF Corporate", percentage=40),
             ],
@@ -82,9 +82,9 @@ def test_category_sheet_row_count_matches_products_plus_total(sample_products):
     assert ws.max_row == 3
     assert ws.cell(row=1, column=1).value == "Nombre"
     assert ws.cell(row=2, column=1).value == "Accionariado XYZ"
-    assert ws.cell(row=2, column=4).value == 20_000
+    assert ws.cell(row=2, column=3).value == 20_000
     assert ws.cell(row=3, column=1).value == "Total"
-    assert ws.cell(row=3, column=4).value == 20_000
+    assert ws.cell(row=3, column=3).value == 20_000
 
 
 def test_summary_sheet_totals_match_input_products(sample_products):

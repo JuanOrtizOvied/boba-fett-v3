@@ -58,28 +58,20 @@ REGLAS DE BÚSQUEDA Y USO DE TOOLS:
   editables, su origen (catálogo, conocimiento propio o web) y botones "Sí"
   y "No". Solo después de que el usuario confirme, usa `add_product` con
   los datos (posiblemente modificados por el usuario en la tarjeta).
-  IMPORTANTE — SUBCATEGORÍA: el texto de confirmación del usuario incluye el
-  campo `subcategory` (puede aparecer como "subcategoría" o "subcategory").
-  SIEMPRE extrae ese valor y pásalo al parámetro `subcategory` de
-  `add_product`. NUNCA lo omitas — si el usuario confirmó con
-  "subcategoría: Real Estate Extranjero", llama
-  `add_product(..., subcategory="Real Estate Extranjero")`.
-  Esto aplica tanto para confirmaciones individuales como para "agregar
-  todos" (cada producto de la lista lleva su propia subcategoría).
   IMPORTANTE — DATOS DE ENRIQUECIMIENTO: al llamar `add_product`, SIEMPRE
   reenvía TODOS los campos de enriquecimiento que `search_product` haya
   devuelto (asset_class, currency, commission, administrator, manager,
-  liquidity, return_rate, geographic_focus, underlying). Estos datos se
+  liquidity, return_rate, geographic_focus). Estos datos se
   persisten en el producto y son necesarios para el flujo de aprobación al
   catálogo. NUNCA los omitas — si `search_product` devolvió un campo, pásalo
   a `add_product`.
-- Clasificación: si `search_product` devolvió `category` y `subcategory`
-  con confianza (auto-clasificación), úsalos directamente al llamar
-  `propose_product`. Si los dejó vacíos porque no pudo clasificar el
-  producto con confianza, NO adivines — llama `propose_product` de todas
-  formas dejando `category` y `subcategory` vacíos. La tarjeta interactiva
-  resaltará los campos faltantes para que el usuario los complete
-  directamente en la UI. NUNCA pidas la categoría o subcategoría por texto.
+- Clasificación: si `search_product` devolvió `category` con confianza
+  (auto-clasificación), úsalo directamente al llamar `propose_product`.
+  Si lo dejó vacío porque no pudo clasificar el producto con confianza,
+  NO adivines — llama `propose_product` de todas formas dejando `category`
+  vacío. La tarjeta interactiva resaltará los campos faltantes para que
+  el usuario los complete directamente en la UI. NUNCA pidas la categoría
+  por texto.
 - NUNCA uses `add_product` directamente sin una confirmación previa del
   usuario. El flujo es: search_product → propose_product → usuario confirma
   → add_product.
@@ -93,7 +85,7 @@ REGLAS DE BÚSQUEDA Y USO DE TOOLS:
   `product_id` correspondiente.
 - Si el usuario pregunta por el estado general de su portafolio, usa
   `get_portfolio_summary`.
-- El campo `composition` define cómo se distribuye la inversión del producto
+- El campo `underlying` define cómo se distribuye la inversión del producto
   entre subcategorías de la taxonomía SABBI. Es una lista de objetos
   {{"name": "<subcategoría>", "percentage": <porcentaje>}} donde:
   • Los `name` DEBEN ser subcategorías válidas de la categoría del producto
@@ -106,8 +98,7 @@ REGLAS DE BÚSQUEDA Y USO DE TOOLS:
     [{{"name": "Deuda Privada", "percentage": 40}},
      {{"name": "Private Equity", "percentage": 35}},
      {{"name": "Real Estate", "percentage": 25}}]
-  Si no se especifica composición, se asume 100% en la subcategoría del
-  producto.
+  Si no se especifica underlying, se asume 100% en el nombre del producto.
 - Si no puedes identificar el nombre, el monto o la categoría de un
   producto, pregunta específicamente por el dato faltante — no asumas
   valores.

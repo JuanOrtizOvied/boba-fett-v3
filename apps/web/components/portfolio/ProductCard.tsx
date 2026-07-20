@@ -124,11 +124,9 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
               <p className="truncate text-sm font-semibold text-sabbi-neutral-900">
                 {product.name}
               </p>
-              {(product.subcategory || product.provider) && (
+              {product.provider && (
                 <p className="truncate text-xs text-sabbi-neutral-600">
-                  {product.subcategory && product.provider
-                    ? `${product.subcategory} · ${product.provider}`
-                    : product.subcategory || product.provider}
+                  {product.provider}
                 </p>
               )}
             </div>
@@ -156,18 +154,18 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
             {formatUsd(product.amount)}
           </p>
 
-          {product.composition.length > 0 && (() => {
+          {product.underlying.length > 0 && (() => {
             const isSingleSelf =
-              product.composition.length === 1 &&
-              product.composition[0].percentage >= 99.9 &&
-              product.composition[0].name === product.name;
-            const sorted = [...product.composition]
+              product.underlying.length === 1 &&
+              product.underlying[0].percentage >= 99.9 &&
+              product.underlying[0].name === product.name;
+            const sorted = [...product.underlying]
               .map((a, i) => ({ ...a, origIdx: i }))
               .sort((a, b) => b.percentage - a.percentage);
             return (
               <div className="flex flex-col gap-1.5">
                 <div className="flex h-2 overflow-hidden rounded-full bg-sabbi-neutral-100">
-                  {product.composition.map((asset, index) => (
+                  {product.underlying.map((asset, index) => (
                     <div
                       key={`${asset.name}-${index}`}
                       style={{
@@ -177,9 +175,9 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
                     />
                   ))}
                 </div>
-                {isSingleSelf && product.subcategory ? (
+                {isSingleSelf ? (
                   <span className="text-xs text-sabbi-neutral-600">
-                    {product.subcategory}
+                    {product.underlying[0].name}
                   </span>
                 ) : (
                   <div className="flex flex-col gap-0.5">

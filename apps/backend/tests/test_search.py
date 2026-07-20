@@ -71,7 +71,6 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
         asset_class="Renta Variable",
         commission="0.07%",
         category="mercados_publicos",
-        subcategory="Renta Variable Developed ex-US",
     )
 
     class _FakeCatalogRepository:
@@ -218,13 +217,11 @@ def test_search_tavily_returns_empty_dict_when_search_call_fails(monkeypatch):
 def test_classify_sets_confident_taxonomy_match():
     from agent.search import _classify
 
-    result = SearchResult(asset_class="Renta Fija", underlying="US Treasuries")
+    result = SearchResult(asset_class="Renta Fija", geographic_focus="US Treasuries")
     _classify(result)
 
     assert result.category == "mercados_publicos"
-    assert result.subcategory == "Renta Fija US Treasuries"
     assert result.provenance["category"] == result.primary_source
-    assert result.provenance["subcategory"] == result.primary_source
 
 
 def test_classify_leaves_empty_on_ambiguous_match():
@@ -236,7 +233,6 @@ def test_classify_leaves_empty_on_ambiguous_match():
     _classify(result)
 
     assert result.category == ""
-    assert result.subcategory == ""
     assert "category" not in result.provenance
 
 
@@ -247,17 +243,15 @@ def test_classify_leaves_empty_when_no_taxonomy_leaf_matches():
     _classify(result)
 
     assert result.category == ""
-    assert result.subcategory == ""
 
 
-def test_classify_skips_when_both_fields_already_set():
+def test_classify_skips_when_category_already_set():
     from agent.search import _classify
 
-    result = SearchResult(category="cash_y_equivalentes", subcategory="Depósitos a plazo")
+    result = SearchResult(category="cash_y_equivalentes")
     _classify(result)
 
     assert result.category == "cash_y_equivalentes"
-    assert result.subcategory == "Depósitos a plazo"
 
 
 # --- cascade_search --------------------------------------------------------------
@@ -270,7 +264,6 @@ def test_cascade_search_stops_after_l1_when_catalog_result_is_complete(monkeypat
         name="Vanguard Total World Stock ETF",
         asset_class="Renta Variable",
         geographic_focus="Global",
-        underlying="VT",
         commission="0.07%",
         currency="USD",
         administrator="Vanguard",
@@ -278,7 +271,6 @@ def test_cascade_search_stops_after_l1_when_catalog_result_is_complete(monkeypat
         liquidity="Diaria",
         return_rate="7%",
         category="mercados_publicos",
-        subcategory="Renta Variable Developed ex-US",
         primary_source="catalog",
         provenance={field: "catalog" for field in search_module.FIELD_NAMES},
     )
@@ -349,11 +341,10 @@ def test_cascade_search_falls_through_levels_and_keeps_catalog_authoritative(mon
     assert result.currency == ""
     assert "currency" not in result.provenance
 
-    # never-invent: no taxonomy leaf matched, classification leaves both empty
+    # never-invent: no taxonomy leaf matched, classification leaves category empty
     assert result.category == ""
-    assert result.subcategory == ""
 
-    # field parity — the full 12-field shape is always present
+    # field parity — the full field shape is always present
     for field in search_module.FIELD_NAMES:
         assert hasattr(result, field)
 

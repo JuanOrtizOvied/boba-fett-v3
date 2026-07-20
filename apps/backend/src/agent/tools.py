@@ -100,7 +100,7 @@ def _user_id(config: RunnableConfig) -> str:
     return user_id
 
 
-def _to_composition(items: list[dict[str, Any]]) -> list[AssetAllocation]:
+def _to_allocations(items: list[dict[str, Any]]) -> list[AssetAllocation]:
     return [AssetAllocation(name=item["name"], percentage=item["percentage"]) for item in items]
 
 
@@ -110,7 +110,7 @@ async def propose_product(
     amount: float,
     category: str,
     provider: str = "",
-    composition: list[dict[str, Any]] | None = None,
+    underlying: list[dict[str, Any]] | None = None,
     asset_class: str = "",
     currency: str = "",
     commission: str = "",
@@ -119,7 +119,6 @@ async def propose_product(
     liquidity: str = "",
     return_rate: str = "",
     geographic_focus: str = "",
-    subcategory: str = "",
     catalog_product_id: int | None = None,
     primary_source: FieldSource = "catalog",
     provenance: dict[str, FieldSource] | None = None,
@@ -144,7 +143,7 @@ async def propose_product(
             mercados_privados, club_deals, mercados_publicos, otros,
             cash_y_equivalentes.
         provider: Provider or fund manager name.
-        composition: List of {name, percentage} subcategory allocations.
+        underlying: List of {name, percentage} subcategory allocations.
             Names MUST be canonical subcategory leaves from the CATEGORIES
             taxonomy for the chosen category. Use the leaf name when it equals
             the group name (e.g. 'Deuda Privada', 'Private Equity') or
@@ -159,7 +158,6 @@ async def propose_product(
         liquidity: Liquidity terms, from search_product if available.
         return_rate: Historical return rate, from search_product if available.
         geographic_focus: Geographic focus, from search_product if available.
-        subcategory: Taxonomy leaf subcategory (auto-classified or user-picked).
         catalog_product_id: Source `product_catalog.id` when search_product found
             the product in the SABBI catalog. Forward it unchanged.
         primary_source: Weakest data source used across all fields
@@ -178,7 +176,7 @@ async def propose_product(
             "amount": amount,
             "category": _normalize_category_key(category),
             "provider": provider,
-            "composition": composition or [{"name": subcategory or name, "percentage": 100}],
+            "underlying": underlying or [{"name": name, "percentage": 100}],
             "asset_class": asset_class,
             "currency": currency,
             "commission": commission,
@@ -187,7 +185,6 @@ async def propose_product(
             "liquidity": liquidity,
             "return_rate": return_rate,
             "geographic_focus": geographic_focus,
-            "subcategory": subcategory,
             "catalog_product_id": catalog_product_id,
             "primary_source": primary_source,
             "provenance": resolved_provenance,
@@ -202,8 +199,7 @@ async def add_product(
     amount: float,
     category: str,
     provider: str = "",
-    composition: list[dict[str, Any]] | None = None,
-    subcategory: str = "",
+    underlying: list[dict[str, Any]] | None = None,
     asset_class: str = "",
     currency: str = "",
     commission: str = "",
@@ -212,7 +208,6 @@ async def add_product(
     liquidity: str = "",
     return_rate: str = "",
     geographic_focus: str = "",
-    underlying: str = "",
     catalog_product_id: int | None = None,
     *,
     config: RunnableConfig,
@@ -226,14 +221,13 @@ async def add_product(
             mercados_privados, club_deals, mercados_publicos, otros,
             cash_y_equivalentes.
         provider: Provider or fund manager name.
-        composition: List of {name, percentage} subcategory allocations.
+        underlying: List of {name, percentage} subcategory allocations.
             Names MUST be canonical subcategory leaves from the CATEGORIES
             taxonomy for the chosen category. Use the leaf name when it equals
             the group name (e.g. 'Deuda Privada') or '{group} {leaf}' when
             they differ (e.g. 'Renta Variable US Large Cap').
             Percentages MUST sum to 100. When omitted, defaults to 100%
-            allocated to the subcategory if provided.
-        subcategory: Taxonomy leaf subcategory (e.g. 'Real Estate Extranjero').
+            allocated to the product name.
         asset_class: Asset class, from search_product if available.
         currency: Currency, from search_product if available.
         commission: Commission/fee, from search_product if available.
@@ -242,13 +236,12 @@ async def add_product(
         liquidity: Liquidity terms, from search_product if available.
         return_rate: Historical return rate, from search_product if available.
         geographic_focus: Geographic focus, from search_product if available.
-        underlying: Underlying asset, from search_product if available.
         catalog_product_id: Source `product_catalog.id` when the product came
             from the SABBI catalog. Keep it so admin approval can replace that row.
     """
     repo = await _repository()
     user_id = _user_id(config)
-    comp = _to_composition(composition or [{"name": subcategory or name, "percentage": 100}])
+    allocs = _to_allocations(underlying or [{"name": name, "percentage": 100}])
     product = await repo.create(
         user_id,
         ProductCreate(
@@ -256,11 +249,9 @@ async def add_product(
             provider=provider,
             amount=amount,
             category=_normalize_category_key(category),
-            subcategory=subcategory,
-            composition=comp,
+            underlying=allocs,
             asset_class=asset_class,
             geographic_focus=geographic_focus,
-            underlying=underlying,
             commission=commission,
             currency=currency,
             administrator=administrator,
@@ -282,7 +273,7 @@ async def update_product(
     provider: str | None = None,
     amount: float | None = None,
     category: str | None = None,
-    composition: list[dict[str, Any]] | None = None,
+    underlying: list[dict[str, Any]] | None = None,
     *,
     config: RunnableConfig,
 ) -> dict:
@@ -294,11 +285,11 @@ async def update_product(
         provider: New provider name, if changed.
         amount: New amount in USD, if changed.
         category: New category, if changed.
-        composition: New composition list, if changed.
+        underlying: New underlying allocation list, if changed.
     """
     del config  # unused — product_id already scopes the update, no portfolio lookup needed
     repo = await _repository()
-    comp = _to_composition(composition) if composition is not None else None
+    allocs = _to_allocations(underlying) if underlying is not None else None
     product = await repo.update(
         product_id,
         ProductUpdate(
@@ -306,7 +297,7 @@ async def update_product(
             provider=provider,
             amount=amount,
             category=_normalize_category_key(category) if category else None,
-            composition=comp,
+            underlying=allocs,
         ),
         source="agent",
         metadata={"tool": "update_product"},

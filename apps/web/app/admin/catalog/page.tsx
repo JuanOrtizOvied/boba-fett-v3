@@ -9,7 +9,6 @@ import { useToast } from "@/components/ui/Toast";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "category", label: "Categoría" },
-  { key: "subcategory", label: "Subcategoría" },
   { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
@@ -123,7 +122,9 @@ export default function AdminCatalogPage() {
                       </td>
                       {CATALOG_COLUMNS.map((column) => {
                         const val = entry[column.key];
-                        const display = Array.isArray(val) ? val.join(", ") : val;
+                        const display = Array.isArray(val)
+                          ? val.map((v) => (typeof v === "object" && v && "name" in v ? `${(v as { name: string; percentage: number }).name} ${(v as { name: string; percentage: number }).percentage}%` : v)).join(", ")
+                          : val;
                         return (
                           <td
                             key={column.key}
@@ -235,7 +236,6 @@ function ConfirmDeleteDialog({
 const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: "name", label: "Nombre" },
   { key: "category", label: "Categoría" },
-  { key: "subcategory", label: "Subcategoría" },
   { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
@@ -266,7 +266,11 @@ function EditCatalogModal({
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
       const val = entry[field.key as keyof CatalogProduct];
-      initial[field.key] = Array.isArray(val) ? val.join("\n") : String(val ?? "");
+      if (field.key === "underlying" && Array.isArray(val)) {
+        initial[field.key] = val.map((v) => (typeof v === "object" && v && "name" in v ? `${(v as { name: string; percentage: number }).name}: ${(v as { name: string; percentage: number }).percentage}%` : String(v))).join("\n");
+      } else {
+        initial[field.key] = Array.isArray(val) ? val.join("\n") : String(val ?? "");
+      }
     }
     setForm(initial);
     setErrorMessage(null);
@@ -287,7 +291,7 @@ function EditCatalogModal({
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      const patch: Record<string, string | string[]> = {};
+      const patch: Record<string, unknown> = {};
       for (const field of EDITABLE_FIELDS) {
         if (field.key === "alternative_names") {
           const current = (form[field.key] ?? "")
@@ -295,6 +299,16 @@ function EditCatalogModal({
             .map((s) => s.trim())
             .filter(Boolean);
           const original = (entry.alternative_names ?? []) as string[];
+          if (JSON.stringify(current) !== JSON.stringify(original)) {
+            patch[field.key] = current;
+          }
+        } else if (field.key === "underlying") {
+          const lines = (form[field.key] ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+          const current = lines.map((line) => {
+            const match = line.match(/^(.+?):\s*(\d+(?:\.\d+)?)%?$/);
+            return match ? { name: match[1].trim(), percentage: parseFloat(match[2]) } : { name: line, percentage: 0 };
+          });
+          const original = entry.underlying ?? [];
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
@@ -377,6 +391,16 @@ function EditCatalogModal({
                 <textarea
                   rows={3}
                   placeholder="One name per line"
+                  value={form[field.key] ?? ""}
+                  onChange={(e) => updateField(field.key, e.target.value)}
+                  className={modalInputClass + " resize-y"}
+                />
+              </ModalField>
+            ) : field.key === "underlying" ? (
+              <ModalField key={field.key} label={field.label}>
+                <textarea
+                  rows={3}
+                  placeholder="Name: percentage% (one per line)"
                   value={form[field.key] ?? ""}
                   onChange={(e) => updateField(field.key, e.target.value)}
                   className={modalInputClass + " resize-y"}

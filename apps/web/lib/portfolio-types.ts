@@ -24,11 +24,9 @@ export interface Product {
   provider: string;
   amount: number;
   category: Category;
-  subcategory: string;
-  composition: AssetAllocation[];
+  underlying: AssetAllocation[];
   asset_class: string;
   geographic_focus: string;
-  underlying: string;
   commission: string;
   currency: string;
   administrator: string;
@@ -43,8 +41,7 @@ export interface ProductCreateInput {
   provider?: string;
   amount: number;
   category: Category;
-  subcategory?: string;
-  composition: AssetAllocation[];
+  underlying: AssetAllocation[];
 }
 
 export interface ProductUpdateInput {
@@ -52,8 +49,7 @@ export interface ProductUpdateInput {
   provider?: string;
   amount?: number;
   category?: Category;
-  subcategory?: string;
-  composition?: AssetAllocation[];
+  underlying?: AssetAllocation[];
 }
 
 /**
@@ -77,9 +73,9 @@ export interface ProposedProduct {
 /**
  * `propose_product`'s return shape once the cascading `search_product` tool
  * (`multi-level-search`) has enriched it — see `agent/tools.py::propose_product`.
- * Enrichment fields and `subcategory` are only populated when a level of the
- * cascade found them; `reliability_tag` aggregates `provenance` into the
- * card-level badge shown by `ProposeProductCard`.
+ * Enrichment fields are only populated when a level of the cascade found
+ * them; `reliability_tag` aggregates `provenance` into the card-level badge
+ * shown by `ProposeProductCard`.
  */
 export interface EnrichedProposedProduct extends ProposedProduct {
   asset_class?: string;
@@ -90,8 +86,7 @@ export interface EnrichedProposedProduct extends ProposedProduct {
   liquidity?: string;
   return_rate?: string;
   geographic_focus?: string;
-  subcategory?: string;
-  composition?: { name: string; percentage: number }[];
+  underlying?: { name: string; percentage: number }[];
   catalog_product_id?: number | null;
   primary_source?: FieldSource;
   provenance?: ProvenanceMap;
@@ -109,7 +104,7 @@ export interface CatalogProduct {
   name: string;
   geographic_focus: string;
   asset_class: string;
-  underlying: string;
+  underlying: AssetAllocation[];
   commission: string;
   currency: string;
   administrator: string;
@@ -117,7 +112,6 @@ export interface CatalogProduct {
   liquidity: string;
   return_rate: string;
   category: string;
-  subcategory: string;
   alternative_names: string[];
   approved_from_product_id: string | null;
   approved_at: string | null;
@@ -131,10 +125,9 @@ export interface CatalogProduct {
 export interface CatalogProductCreate {
   name: string;
   category: string;
-  subcategory?: string;
   asset_class?: string;
   geographic_focus?: string;
-  underlying?: string;
+  underlying?: AssetAllocation[];
   commission?: string;
   currency?: string;
   administrator?: string;

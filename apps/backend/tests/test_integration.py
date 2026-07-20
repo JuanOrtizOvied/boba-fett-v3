@@ -169,8 +169,7 @@ def _fake_row(**overrides) -> dict:
         "provider": "Provider A",
         "amount": 10000.0,
         "category": "inversiones_directas",
-        "subcategory": "",
-        "composition": json.dumps([{"name": "Fund A", "percentage": 100}]),
+        "underlying": json.dumps([{"name": "Fund A", "percentage": 100}]),
     }
     row.update(overrides)
     return row
@@ -188,7 +187,7 @@ def test_repository_list_by_user_maps_rows_to_products():
     assert len(products) == 2
     assert products[0].id == "prod_abc12345"
     assert products[0].amount == 10000.0
-    assert products[0].composition[0].name == "Fund A"
+    assert products[0].underlying[0].name == "Fund A"
     pool.fetch.assert_awaited_once()
 
 

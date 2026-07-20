@@ -61,22 +61,20 @@ class ProductRepository:
         product_id = f"prod_{uuid.uuid4().hex[:8]}"
         await conn.execute(
             """INSERT INTO products
-               (id, user_id, name, provider, amount, category, subcategory,
-                composition, asset_class, geographic_focus, underlying,
+               (id, user_id, name, provider, amount, category,
+                underlying, asset_class, geographic_focus,
                 commission, currency, administrator, manager, liquidity,
                 return_rate, catalog_product_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)""",
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)""",
             product_id,
             user_id,
             data.name,
             data.provider,
             data.amount,
             data.category,
-            data.subcategory,
-            json.dumps([a.model_dump() for a in data.composition]),
+            json.dumps([a.model_dump() for a in data.underlying]),
             data.asset_class,
             data.geographic_focus,
-            data.underlying,
             data.commission,
             data.currency,
             data.administrator,
@@ -137,9 +135,9 @@ class ProductRepository:
         before_product = self._row_to_product(before_row)
 
         updates = data.model_dump(exclude_none=True)
-        if "composition" in updates:
-            updates["composition"] = json.dumps(
-                [a.model_dump() for a in data.composition]
+        if "underlying" in updates:
+            updates["underlying"] = json.dumps(
+                [a.model_dump() for a in data.underlying]
             )
         if not updates:
             return before_product
@@ -276,9 +274,9 @@ class ProductRepository:
         }
 
     def _row_to_product(self, row: asyncpg.Record) -> Product:
-        comp = row["composition"]
-        if isinstance(comp, str):
-            comp = json.loads(comp)
+        raw = row["underlying"]
+        if isinstance(raw, str):
+            raw = json.loads(raw)
         return Product(
             id=str(row["id"]),
             user_id=str(row["user_id"]),
@@ -286,11 +284,9 @@ class ProductRepository:
             provider=row["provider"],
             amount=float(row["amount"]),
             category=row["category"],
-            subcategory=row["subcategory"] or "",
-            composition=[AssetAllocation(**a) for a in (comp or [])],
+            underlying=[AssetAllocation(**a) for a in (raw or [])],
             asset_class=row.get("asset_class", "") or "",
             geographic_focus=row.get("geographic_focus", "") or "",
-            underlying=row.get("underlying", "") or "",
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",
             administrator=row.get("administrator", "") or "",

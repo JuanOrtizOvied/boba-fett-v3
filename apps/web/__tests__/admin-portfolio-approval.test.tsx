@@ -19,11 +19,9 @@ const PRODUCT: Product = {
   provider: "BCP",
   amount: 10000,
   category: "mercados_publicos",
-  subcategory: "Renta Fija US Treasuries",
-  composition: [{ name: "US Treasuries", percentage: 100 }],
+  underlying: [{ name: "US Treasuries", percentage: 100 }],
   asset_class: "",
   geographic_focus: "",
-  underlying: "",
   commission: "",
   currency: "",
   administrator: "",
@@ -38,7 +36,7 @@ const CATALOG_ENTRY = {
   name: "Bono Soberano Catálogo",
   geographic_focus: "LatAm",
   asset_class: "Renta Fija",
-  underlying: "Bonos",
+  underlying: [{ name: "Bonos", percentage: 100 }],
   commission: "1.5%",
   currency: "USD",
   administrator: "Admin Co",
@@ -46,7 +44,6 @@ const CATALOG_ENTRY = {
   liquidity: "T+2",
   return_rate: "8%",
   category: "mercados_publicos",
-  subcategory: "Renta Fija US Treasuries",
   alternative_names: [],
   approved_from_product_id: null,
   approved_at: null,
@@ -79,14 +76,11 @@ describe("ReadOnlyProductCard approval affordance", () => {
 });
 
 describe("ApproveProductModal pre-fill", () => {
-  test("pre-fills name, category and subcategory, leaves enrichment fields empty", () => {
+  test("pre-fills name and category, leaves enrichment fields empty", () => {
     render(<ApproveProductModal product={PRODUCT} onClose={vi.fn()} />);
 
     expect(screen.getByLabelText("Nombre")).toHaveValue("Bono Soberano");
     expect(screen.getByLabelText("Categoría")).toHaveValue("mercados_publicos");
-    expect(screen.getByLabelText("Subcategoría")).toHaveValue(
-      "Renta Fija US Treasuries",
-    );
     expect(screen.getByLabelText("Clase de activo")).toHaveValue("");
     expect(screen.getByLabelText("Comisión")).toHaveValue("");
   });
@@ -161,11 +155,10 @@ describe("ApproveProductModal confirm", () => {
     expect(body).toMatchObject({
       name: "Bono Soberano",
       category: "mercados_publicos",
-      subcategory: "Renta Fija US Treasuries",
-        asset_class: "Renta Fija",
-        approved_from_product_id: "prod-1",
-        catalog_product_id: null,
-      });
+      asset_class: "Renta Fija",
+      approved_from_product_id: "prod-1",
+      catalog_product_id: null,
+    });
 
     await waitFor(() => {
       expect(onApproved).toHaveBeenCalledWith("prod-1");

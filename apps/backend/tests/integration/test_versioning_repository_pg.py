@@ -32,7 +32,6 @@ def _create_data(**overrides: Any) -> ProductCreate:
         "provider": "SABBI",
         "amount": 150000,
         "category": "mercados_privados",
-        "subcategory": "Mercados Privados",
     }
     data.update(overrides)
     return ProductCreate(**data)
@@ -46,14 +45,12 @@ def _enriched_data(**overrides: Any) -> ProductCreate:
         "provider": "BlackRock",
         "amount": 87500,
         "category": "mercados_publicos",
-        "subcategory": "Renta Fija Global",
-        "composition": [
+        "underlying": [
             {"name": "Deuda privada", "percentage": 60},
             {"name": "Deuda soberana", "percentage": 40},
         ],
         "asset_class": "Renta Fija",
         "geographic_focus": "Global",
-        "underlying": "AGGU",
         "commission": "0.10%",
         "currency": "USD",
         "administrator": "BlackRock",
@@ -137,7 +134,7 @@ async def test_create_snapshot_materializes_full_product_fields(test_pool, test_
     assert materialized["asset_class"] == "Renta Fija"
     assert materialized["commission"] == "0.10%"
     assert materialized["geographic_focus"] == "Global"
-    assert materialized["composition"] == [
+    assert materialized["underlying"] == [
         {"name": "Deuda privada", "percentage": 60},
         {"name": "Deuda soberana", "percentage": 40},
     ]
@@ -424,21 +421,21 @@ async def test_compare_snapshots_per_field_delta_amount_only(test_pool, test_use
     assert changes == {"amount": {"before": 100000.0, "after": 130000.0}}
 
 
-async def test_compare_snapshots_per_field_delta_composition(test_pool, test_user_id):
-    """CMP-003 "Composition change" — the delta includes the before/after
+async def test_compare_snapshots_per_field_delta_underlying(test_pool, test_user_id):
+    """CMP-003 "Underlying change" — the delta includes the before/after
     allocation lists."""
     repo = ProductRepository(test_pool)
     versioning = VersioningRepository(test_pool)
 
     product = await repo.create(
         test_user_id,
-        _create_data(composition=[{"name": "Debt", "percentage": 100}]),
+        _create_data(underlying=[{"name": "Debt", "percentage": 100}]),
     )
     snapshot_a = await versioning.create_snapshot(test_user_id, "a")
     await repo.update(
         product.id,
         ProductUpdate(
-            composition=[
+            underlying=[
                 {"name": "Debt", "percentage": 60},
                 {"name": "Equity", "percentage": 40},
             ]
@@ -448,9 +445,9 @@ async def test_compare_snapshots_per_field_delta_composition(test_pool, test_use
 
     diff = await versioning.compare_snapshots(snapshot_a["id"], snapshot_b["id"], test_user_id)
 
-    composition_delta = diff["modified"][0]["changes"]["composition"]
-    assert composition_delta["before"] == [{"name": "Debt", "percentage": 100}]
-    assert composition_delta["after"] == [
+    underlying_delta = diff["modified"][0]["changes"]["underlying"]
+    assert underlying_delta["before"] == [{"name": "Debt", "percentage": 100}]
+    assert underlying_delta["after"] == [
         {"name": "Debt", "percentage": 60},
         {"name": "Equity", "percentage": 40},
     ]

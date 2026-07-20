@@ -56,8 +56,8 @@ def _autosize_columns(ws, count: int, width: int = 26) -> None:
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
 
-def _composition_summary(product: Product) -> str:
-    return ", ".join(f"{a.name} {a.percentage:.0f}%" for a in product.composition)
+def _underlying_summary(product: Product) -> str:
+    return ", ".join(f"{a.name} {a.percentage:.0f}%" for a in product.underlying)
 
 
 def _group_by_category(products: list[Product]) -> dict[str, list[Product]]:
@@ -70,22 +70,21 @@ def _group_by_category(products: list[Product]) -> dict[str, list[Product]]:
 def _write_category_sheet(wb: Workbook, category: str, products: list[Product]) -> None:
     label = CATEGORY_LABELS.get(category, category)
     ws = wb.create_sheet(title=label[:31])
-    headers = ["Nombre", "Subcategoría", "Proveedor", "Monto (USD)", "Composición"]
+    headers = ["Nombre", "Proveedor", "Monto (USD)", "Underlying"]
     _style_header_row(ws, headers)
 
     row = 2
     for product in products:
         ws.cell(row=row, column=1, value=product.name)
-        ws.cell(row=row, column=2, value=product.subcategory)
-        ws.cell(row=row, column=3, value=product.provider)
-        amount_cell = ws.cell(row=row, column=4, value=product.amount)
+        ws.cell(row=row, column=2, value=product.provider)
+        amount_cell = ws.cell(row=row, column=3, value=product.amount)
         amount_cell.number_format = CURRENCY_FORMAT
-        ws.cell(row=row, column=5, value=_composition_summary(product))
+        ws.cell(row=row, column=4, value=_underlying_summary(product))
         row += 1
 
     total_label_cell = ws.cell(row=row, column=1, value="Total")
     total_label_cell.font = Font(bold=True)
-    total_amount_cell = ws.cell(row=row, column=4, value=sum(p.amount for p in products))
+    total_amount_cell = ws.cell(row=row, column=3, value=sum(p.amount for p in products))
     total_amount_cell.number_format = CURRENCY_FORMAT
     total_amount_cell.font = Font(bold=True)
 
