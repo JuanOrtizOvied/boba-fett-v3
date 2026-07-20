@@ -77,6 +77,19 @@ export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) =
   );
 };
 
+function aggregateUnderlying(products: Product[], categoryTotal: number) {
+  const map = new Map<string, number>();
+  for (const p of products) {
+    const weight = categoryTotal > 0 ? p.amount / categoryTotal : 0;
+    for (const a of p.underlying) {
+      map.set(a.name, (map.get(a.name) ?? 0) + weight * a.percentage);
+    }
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, pct]) => ({ name, percentage: pct }));
+}
+
 const CategoryRows: FC<{
   index: number;
   label: string;
@@ -84,51 +97,50 @@ const CategoryRows: FC<{
   categoryPercent: number;
   categoryTotal: number;
   products: Product[];
-}> = ({ index, label, color, categoryPercent, categoryTotal, products }) => (
-  <>
-    <tr className="bg-sabbi-neutral-100/70">
-      <td className="px-4 py-2">
-        <div className="flex items-center gap-2">
-          <span
-            className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-            style={{ backgroundColor: color }}
-          >
-            {index + 1}
-          </span>
-          <span className="font-medium text-sabbi-neutral-900">{label}</span>
-        </div>
-      </td>
-      <td className="px-4 py-2 text-right font-medium text-sabbi-neutral-900">
-        {categoryPercent.toFixed(1)}%
-      </td>
-      <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
-      <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
-    </tr>
-    {products.map((product) => {
-      const productPercent =
-        categoryTotal > 0 ? (product.amount / categoryTotal) * 100 : 0;
-      return (
-        <tr key={product.id}>
+}> = ({ index, label, color, categoryPercent, categoryTotal, products }) => {
+  const compositionRows = aggregateUnderlying(products, categoryTotal);
+  return (
+    <>
+      <tr className="bg-sabbi-neutral-100/70">
+        <td className="px-4 py-2">
+          <div className="flex items-center gap-2">
+            <span
+              className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+              style={{ backgroundColor: color }}
+            >
+              {index + 1}
+            </span>
+            <span className="font-medium text-sabbi-neutral-900">{label}</span>
+          </div>
+        </td>
+        <td className="px-4 py-2 text-right font-medium text-sabbi-neutral-900">
+          {categoryPercent.toFixed(1)}%
+        </td>
+        <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
+        <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
+      </tr>
+      {compositionRows.map((row) => (
+        <tr key={row.name}>
           <td className="px-4 py-1.5 pl-10">
             <div className="flex flex-col gap-1">
               <span className="truncate text-xs text-sabbi-neutral-600">
-                {product.name}
+                {row.name}
               </span>
               <div className="h-1 w-32 overflow-hidden rounded-full bg-sabbi-neutral-100">
                 <div
                   className="h-full rounded-full"
-                  style={{ width: `${productPercent}%`, backgroundColor: color }}
+                  style={{ width: `${row.percentage}%`, backgroundColor: color }}
                 />
               </div>
             </div>
           </td>
           <td className="px-4 py-1.5 text-right text-xs text-sabbi-neutral-600">
-            {productPercent.toFixed(1)}%
+            {row.percentage.toFixed(1)}%
           </td>
           <td className="px-4 py-1.5 text-right text-xs text-sabbi-neutral-400">—</td>
           <td className="px-4 py-1.5 text-right text-xs text-sabbi-neutral-400">—</td>
         </tr>
-      );
-    })}
-  </>
-);
+      ))}
+    </>
+  );
+};
