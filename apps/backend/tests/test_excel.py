@@ -14,7 +14,7 @@ def _product(**overrides) -> Product:
         name="Fund A",
         provider="Provider A",
         amount=10_000,
-        category="directas",
+        category="inversiones_directas",
         composition=[AssetAllocation(name="Fund A", percentage=100)],
     )
     defaults.update(overrides)
@@ -24,12 +24,12 @@ def _product(**overrides) -> Product:
 @pytest.fixture
 def sample_products() -> list[Product]:
     return [
-        _product(name="Accionariado XYZ", amount=20_000, category="directas"),
-        _product(name="Deuda Privada Fund", amount=15_000, category="privados"),
+        _product(name="Accionariado XYZ", amount=20_000, category="inversiones_directas"),
+        _product(name="Deuda Privada Fund", amount=15_000, category="mercados_privados"),
         _product(
             name="Multi-asset Fund",
             amount=5_000,
-            category="publicos",
+            category="mercados_publicos",
             composition=[
                 AssetAllocation(name="RV US Large Cap", percentage=60),
                 AssetAllocation(name="RF Corporate", percentage=40),

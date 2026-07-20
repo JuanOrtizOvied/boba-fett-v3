@@ -42,29 +42,29 @@
   --sabbi-cream: #F2EDE4;
 
   /* Portfolio category taxonomy (6 categories) — accent / badge bg / badge text */
-  --sabbi-cat-directas: #c2410c; /* Inversiones directas */
-  --sabbi-cat-directas-bg: #fff7ed;
-  --sabbi-cat-directas-text: #9a3412;
+  --sabbi-cat-inversiones_directas: #c2410c; /* Inversiones directas */
+  --sabbi-cat-inversiones_directas-bg: #fff7ed;
+  --sabbi-cat-inversiones_directas-text: #9a3412;
 
-  --sabbi-cat-privados: #7c3aed; /* Mercados privados */
-  --sabbi-cat-privados-bg: #f5f3ff;
-  --sabbi-cat-privados-text: #5b21b6;
+  --sabbi-cat-mercados_privados: #7c3aed; /* Mercados privados */
+  --sabbi-cat-mercados_privados-bg: #f5f3ff;
+  --sabbi-cat-mercados_privados-text: #5b21b6;
 
-  --sabbi-cat-club: #0d9488; /* Club deals */
-  --sabbi-cat-club-bg: #f0fdfa;
-  --sabbi-cat-club-text: #115e59;
+  --sabbi-cat-club_deals: #0d9488; /* Club deals */
+  --sabbi-cat-club_deals-bg: #f0fdfa;
+  --sabbi-cat-club_deals-text: #115e59;
 
-  --sabbi-cat-publicos: #2563eb; /* Mercados públicos */
-  --sabbi-cat-publicos-bg: #eff6ff;
-  --sabbi-cat-publicos-text: #1e40af;
+  --sabbi-cat-mercados_publicos: #2563eb; /* Mercados públicos */
+  --sabbi-cat-mercados_publicos-bg: #eff6ff;
+  --sabbi-cat-mercados_publicos-text: #1e40af;
 
   --sabbi-cat-otros: #d97706; /* Otros */
   --sabbi-cat-otros-bg: #fffbeb;
   --sabbi-cat-otros-text: #92400e;
 
-  --sabbi-cat-cash: #16a34a; /* Cash y equivalentes */
-  --sabbi-cat-cash-bg: #f0fdf4;
-  --sabbi-cat-cash-text: #166534;
+  --sabbi-cat-cash_y_equivalentes: #16a34a; /* Cash y equivalentes */
+  --sabbi-cat-cash_y_equivalentes-bg: #f0fdf4;
+  --sabbi-cat-cash_y_equivalentes-text: #166534;
 
   /* Neutral grays — legacy, kept for any remaining consumers */
   --sabbi-neutral-50: #f9fafb;
@@ -103,12 +103,12 @@
   --color-sabbi-gold: var(--sabbi-gold);
   --color-sabbi-cream: var(--sabbi-cream);
 
-  --color-sabbi-cat-directas: var(--sabbi-cat-directas);
-  --color-sabbi-cat-privados: var(--sabbi-cat-privados);
-  --color-sabbi-cat-club: var(--sabbi-cat-club);
-  --color-sabbi-cat-publicos: var(--sabbi-cat-publicos);
+  --color-sabbi-cat-inversiones_directas: var(--sabbi-cat-inversiones_directas);
+  --color-sabbi-cat-mercados_privados: var(--sabbi-cat-mercados_privados);
+  --color-sabbi-cat-club_deals: var(--sabbi-cat-club_deals);
+  --color-sabbi-cat-mercados_publicos: var(--sabbi-cat-mercados_publicos);
   --color-sabbi-cat-otros: var(--sabbi-cat-otros);
-  --color-sabbi-cat-cash: var(--sabbi-cat-cash);
+  --color-sabbi-cat-cash_y_equivalentes: var(--sabbi-cat-cash_y_equivalentes);
 
   --color-sabbi-neutral-50: var(--sabbi-neutral-50);
   --color-sabbi-neutral-100: var(--sabbi-neutral-100);

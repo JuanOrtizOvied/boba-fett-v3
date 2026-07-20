@@ -70,7 +70,7 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
         name="Vanguard Total World Stock ETF",
         asset_class="Renta Variable",
         commission="0.07%",
-        category="publicos",
+        category="mercados_publicos",
         subcategory="Renta Variable Developed ex-US",
     )
 
@@ -87,7 +87,7 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
 
     assert result.name == "Vanguard Total World Stock ETF"
     assert result.commission == "0.07%"
-    assert result.category == "publicos"
+    assert result.category == "mercados_publicos"
     assert result.catalog_product_id == 1
     assert result.provenance["name"] == "catalog"
     assert result.provenance["commission"] == "catalog"
@@ -221,7 +221,7 @@ def test_classify_sets_confident_taxonomy_match():
     result = SearchResult(asset_class="Renta Fija", underlying="US Treasuries")
     _classify(result)
 
-    assert result.category == "publicos"
+    assert result.category == "mercados_publicos"
     assert result.subcategory == "Renta Fija US Treasuries"
     assert result.provenance["category"] == result.primary_source
     assert result.provenance["subcategory"] == result.primary_source
@@ -253,10 +253,10 @@ def test_classify_leaves_empty_when_no_taxonomy_leaf_matches():
 def test_classify_skips_when_both_fields_already_set():
     from agent.search import _classify
 
-    result = SearchResult(category="cash", subcategory="Depósitos a plazo")
+    result = SearchResult(category="cash_y_equivalentes", subcategory="Depósitos a plazo")
     _classify(result)
 
-    assert result.category == "cash"
+    assert result.category == "cash_y_equivalentes"
     assert result.subcategory == "Depósitos a plazo"
 
 
@@ -277,7 +277,7 @@ def test_cascade_search_stops_after_l1_when_catalog_result_is_complete(monkeypat
         manager="Vanguard",
         liquidity="Diaria",
         return_rate="7%",
-        category="publicos",
+        category="mercados_publicos",
         subcategory="Renta Variable Developed ex-US",
         primary_source="catalog",
         provenance={field: "catalog" for field in search_module.FIELD_NAMES},

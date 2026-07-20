@@ -37,7 +37,7 @@ def test_product_valid_generates_default_id():
         user_id="usr_123",
         name="BlackRock Private Credit Fund",
         amount=50000,
-        category="privados",
+        category="mercados_privados",
     )
 
     assert product.id.startswith("prod_")
@@ -55,7 +55,7 @@ def test_product_accepts_explicit_composition():
         user_id="usr_123",
         name="Multi-asset fund",
         amount=10000,
-        category="publicos",
+        category="mercados_publicos",
         composition=[
             AssetAllocation(name="RV US Large Cap", percentage=60),
             AssetAllocation(name="RF Corporate", percentage=40),
@@ -71,7 +71,7 @@ def test_product_rejects_non_positive_amount(amount):
     from db.models import Product
 
     with pytest.raises(ValidationError):
-        Product(user_id="usr_123", name="Fund", amount=amount, category="cash")
+        Product(user_id="usr_123", name="Fund", amount=amount, category="cash_y_equivalentes")
 
 
 def test_product_requires_name_and_category():
@@ -84,7 +84,7 @@ def test_product_requires_name_and_category():
 def test_product_create_valid():
     from db.models import ProductCreate
 
-    data = ProductCreate(name="Fund A", amount=1000, category="directas")
+    data = ProductCreate(name="Fund A", amount=1000, category="inversiones_directas")
 
     assert data.name == "Fund A"
     assert data.provider == ""
@@ -97,14 +97,14 @@ def test_product_create_rejects_non_positive_amount(amount):
     from db.models import ProductCreate
 
     with pytest.raises(ValidationError):
-        ProductCreate(name="Fund A", amount=amount, category="directas")
+        ProductCreate(name="Fund A", amount=amount, category="inversiones_directas")
 
 
 def test_product_create_requires_name():
     from db.models import ProductCreate
 
     with pytest.raises(ValidationError):
-        ProductCreate(amount=100, category="directas")
+        ProductCreate(amount=100, category="inversiones_directas")
 
 
 def test_product_update_all_fields_optional():
@@ -122,10 +122,10 @@ def test_product_update_all_fields_optional():
 def test_product_update_partial_fields():
     from db.models import ProductUpdate
 
-    update = ProductUpdate(amount=2500, category="cash")
+    update = ProductUpdate(amount=2500, category="cash_y_equivalentes")
 
     assert update.amount == 2500
-    assert update.category == "cash"
+    assert update.category == "cash_y_equivalentes"
     assert update.name is None
 
 
@@ -156,11 +156,11 @@ def test_catalog_product_accepts_explicit_category_and_subcategory():
     product = CatalogProduct(
         id=2,
         name="US Treasury Bond Fund",
-        category="publicos",
+        category="mercados_publicos",
         subcategory="US Treasuries",
     )
 
-    assert product.category == "publicos"
+    assert product.category == "mercados_publicos"
     assert product.subcategory == "US Treasuries"
 
 

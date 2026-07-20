@@ -17,7 +17,7 @@ from db.models import CatalogProductCreate
 def _entry(**overrides) -> CatalogProductCreate:
     data = {
         "name": "Bono Soberano",
-        "category": "publicos",
+        "category": "mercados_publicos",
         "subcategory": "renta_fija",
         "asset_class": "bonos",
         "geographic_focus": "LatAm",

@@ -40,7 +40,7 @@ const DETAIL: SnapshotDetail = {
       name: "BlackRock Fund",
       provider: "BlackRock",
       amount: 50000,
-      category: "privados",
+      category: "mercados_privados",
       subcategory: "",
       composition: [],
       asset_class: "",

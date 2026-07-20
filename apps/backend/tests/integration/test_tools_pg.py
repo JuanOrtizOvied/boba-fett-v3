@@ -25,7 +25,7 @@ from agent.tools import (
 
 async def test_add_product_persists_valid_product(patch_get_pool, tool_config, test_pool):
     result = await add_product.ainvoke(
-        {"name": "BlackRock Fund", "amount": 1000, "category": "publicos"},
+        {"name": "BlackRock Fund", "amount": 1000, "category": "mercados_publicos"},
         config=tool_config,
     )
 
@@ -44,7 +44,7 @@ async def test_add_product_persists_source_catalog_product_id(
         {
             "name": "Catalog Fund",
             "amount": 1000,
-            "category": "publicos",
+            "category": "mercados_publicos",
             "catalog_product_id": 123,
         },
         config=tool_config,
@@ -65,7 +65,7 @@ async def test_add_product_logs_change_with_agent_source(
     `metadata.tool` marker so the audit trail can tell them apart from REST
     API and admin mutations (`tasks.md` T-012)."""
     result = await add_product.ainvoke(
-        {"name": "Agent-Sourced Fund", "amount": 1000, "category": "publicos"},
+        {"name": "Agent-Sourced Fund", "amount": 1000, "category": "mercados_publicos"},
         config=tool_config,
     )
 
@@ -89,7 +89,7 @@ async def test_add_product_rejects_non_positive_amount(patch_get_pool, tool_conf
     before any SQL is issued — either way, no row is ever inserted."""
     with pytest.raises(ValidationError):
         await add_product.ainvoke(
-            {"name": "Bad Fund", "amount": 0, "category": "cash"}, config=tool_config
+            {"name": "Bad Fund", "amount": 0, "category": "cash_y_equivalentes"}, config=tool_config
         )
 
     count = await test_pool.fetchval(
@@ -105,7 +105,7 @@ async def test_add_product_rejects_non_positive_amount(patch_get_pool, tool_conf
 
 async def test_update_product_updates_existing_product(patch_get_pool, tool_config, test_pool):
     created = await add_product.ainvoke(
-        {"name": "Fund A", "amount": 1000, "category": "cash"}, config=tool_config
+        {"name": "Fund A", "amount": 1000, "category": "cash_y_equivalentes"}, config=tool_config
     )
     product_id = created["product"]["id"]
 
@@ -135,7 +135,7 @@ async def test_update_product_on_nonexistent_id_returns_error(patch_get_pool, to
 
 async def test_delete_product_removes_existing_row(patch_get_pool, tool_config, test_pool):
     created = await add_product.ainvoke(
-        {"name": "Fund To Delete", "amount": 500, "category": "cash"}, config=tool_config
+        {"name": "Fund To Delete", "amount": 500, "category": "cash_y_equivalentes"}, config=tool_config
     )
     product_id = created["product"]["id"]
 
@@ -169,20 +169,20 @@ async def test_get_portfolio_summary_on_populated_portfolio(patch_get_pool, tool
     """3 products across 2 categories — totals, distribution, and the
     largest position are all computed live from Postgres."""
     await add_product.ainvoke(
-        {"name": "Fund A", "amount": 7000, "category": "directas"}, config=tool_config
+        {"name": "Fund A", "amount": 7000, "category": "inversiones_directas"}, config=tool_config
     )
     await add_product.ainvoke(
-        {"name": "Fund B", "amount": 2000, "category": "cash"}, config=tool_config
+        {"name": "Fund B", "amount": 2000, "category": "cash_y_equivalentes"}, config=tool_config
     )
     await add_product.ainvoke(
-        {"name": "Fund C", "amount": 1000, "category": "cash"}, config=tool_config
+        {"name": "Fund C", "amount": 1000, "category": "cash_y_equivalentes"}, config=tool_config
     )
 
     result = await get_portfolio_summary.ainvoke({}, config=tool_config)
 
     assert result["total_amount"] == 10000
     assert result["product_count"] == 3
-    assert set(result["categories_used"]) == {"directas", "cash"}
+    assert set(result["categories_used"]) == {"inversiones_directas", "cash_y_equivalentes"}
     assert result["largest_position"]["name"] == "Fund A"
     assert result["largest_position"]["percentage"] == 70.0
 
@@ -196,7 +196,7 @@ async def test_create_snapshot_persists_row_for_calling_user(
     patch_get_pool, tool_config, test_pool, test_user_id
 ):
     await add_product.ainvoke(
-        {"name": "Fund A", "amount": 1000, "category": "cash"}, config=tool_config
+        {"name": "Fund A", "amount": 1000, "category": "cash_y_equivalentes"}, config=tool_config
     )
 
     result = await create_snapshot.ainvoke(

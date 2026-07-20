@@ -31,7 +31,7 @@ def _create_data(**overrides: Any) -> ProductCreate:
         "name": "BlackRock Private Credit Fund",
         "provider": "SABBI",
         "amount": 150000,
-        "category": "privados",
+        "category": "mercados_privados",
         "subcategory": "Mercados Privados",
     }
     data.update(overrides)
@@ -45,7 +45,7 @@ def _enriched_data(**overrides: Any) -> ProductCreate:
         "name": "iShares Global Bond ETF",
         "provider": "BlackRock",
         "amount": 87500,
-        "category": "publicos",
+        "category": "mercados_publicos",
         "subcategory": "Renta Fija Global",
         "composition": [
             {"name": "Deuda privada", "percentage": 60},
@@ -461,16 +461,16 @@ async def test_compare_snapshots_per_field_delta_category(test_pool, test_user_i
     repo = ProductRepository(test_pool)
     versioning = VersioningRepository(test_pool)
 
-    product = await repo.create(test_user_id, _create_data(category="privados"))
+    product = await repo.create(test_user_id, _create_data(category="mercados_privados"))
     snapshot_a = await versioning.create_snapshot(test_user_id, "a")
-    await repo.update(product.id, ProductUpdate(category="club"))
+    await repo.update(product.id, ProductUpdate(category="club_deals"))
     snapshot_b = await versioning.create_snapshot(test_user_id, "b")
 
     diff = await versioning.compare_snapshots(snapshot_a["id"], snapshot_b["id"], test_user_id)
 
     assert diff["modified"][0]["changes"]["category"] == {
-        "before": "privados",
-        "after": "club",
+        "before": "mercados_privados",
+        "after": "club_deals",
     }
 
 

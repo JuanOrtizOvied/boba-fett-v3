@@ -17,7 +17,7 @@ from tests.integration.conftest import fake_user
 def _approve_payload(**overrides) -> dict:
     payload = {
         "name": "Bono Soberano",
-        "category": "publicos",
+        "category": "mercados_publicos",
         "subcategory": "renta_fija",
         "asset_class": "bonos",
         "commission": "1.5%",
@@ -43,7 +43,7 @@ async def test_approve_creates_catalog_entry(admin_api_client, test_pool):
         "SELECT * FROM product_catalog WHERE id = $1", body["id"]
     )
     assert row is not None
-    assert row["category"] == "publicos"
+    assert row["category"] == "mercados_publicos"
 
 
 async def test_approve_missing_required_field_returns_422_and_no_insert(
@@ -52,12 +52,12 @@ async def test_approve_missing_required_field_returns_422_and_no_insert(
     _app, client = admin_api_client
 
     response = await client.post(
-        "/admin/catalog/approve", json={"category": "publicos"}  # missing "name"
+        "/admin/catalog/approve", json={"category": "mercados_publicos"}  # missing "name"
     )
 
     assert response.status_code == 422
     count = await test_pool.fetchval(
-        "SELECT count(*) FROM product_catalog WHERE category = $1", "publicos"
+        "SELECT count(*) FROM product_catalog WHERE category = $1", "mercados_publicos"
     )
     assert count == 0
 
@@ -94,7 +94,7 @@ async def test_approve_full_flow_create_then_repeat_rejected(admin_api_client, t
         user_id,
         "Fondo Renta",
         1000,
-        "publicos",
+        "mercados_publicos",
         "renta_fija",
     )
 
@@ -221,7 +221,7 @@ async def test_admin_lists_all_products_across_users_with_email(admin_api_client
         user_id,
         "Cross Fund",
         500,
-        "cash",
+        "cash_y_equivalentes",
     )
 
     response = await client.get("/admin/products")

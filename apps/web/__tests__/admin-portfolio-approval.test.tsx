@@ -18,7 +18,7 @@ const PRODUCT: Product = {
   name: "Bono Soberano",
   provider: "BCP",
   amount: 10000,
-  category: "publicos",
+  category: "mercados_publicos",
   subcategory: "Renta Fija US Treasuries",
   composition: [{ name: "US Treasuries", percentage: 100 }],
   asset_class: "",
@@ -45,7 +45,7 @@ const CATALOG_ENTRY = {
   manager: "Manager Co",
   liquidity: "T+2",
   return_rate: "8%",
-  category: "publicos",
+  category: "mercados_publicos",
   subcategory: "Renta Fija US Treasuries",
   alternative_names: [],
   approved_from_product_id: null,
@@ -83,7 +83,7 @@ describe("ApproveProductModal pre-fill", () => {
     render(<ApproveProductModal product={PRODUCT} onClose={vi.fn()} />);
 
     expect(screen.getByLabelText("Nombre")).toHaveValue("Bono Soberano");
-    expect(screen.getByLabelText("Categoría")).toHaveValue("publicos");
+    expect(screen.getByLabelText("Categoría")).toHaveValue("mercados_publicos");
     expect(screen.getByLabelText("Subcategoría")).toHaveValue(
       "Renta Fija US Treasuries",
     );
@@ -160,7 +160,7 @@ describe("ApproveProductModal confirm", () => {
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body).toMatchObject({
       name: "Bono Soberano",
-      category: "publicos",
+      category: "mercados_publicos",
       subcategory: "Renta Fija US Treasuries",
         asset_class: "Renta Fija",
         approved_from_product_id: "prod-1",

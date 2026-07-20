@@ -47,17 +47,17 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS liquidity TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS return_rate TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_product_id INTEGER;
 
-UPDATE products SET category = 'directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas');
-UPDATE products SET category = 'privados' WHERE lower(category) IN ('mercados privados', 'mercados privado');
-UPDATE products SET category = 'club' WHERE lower(category) = 'club deals';
-UPDATE products SET category = 'publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos');
-UPDATE products SET category = 'cash' WHERE lower(category) = 'cash y equivalentes';
+UPDATE products SET category = 'inversiones_directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas', 'directas');
+UPDATE products SET category = 'mercados_privados' WHERE lower(category) IN ('mercados privados', 'mercados privado', 'privados');
+UPDATE products SET category = 'club_deals' WHERE lower(category) IN ('club deals', 'club');
+UPDATE products SET category = 'mercados_publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos', 'publicos');
+UPDATE products SET category = 'cash_y_equivalentes' WHERE lower(category) IN ('cash y equivalentes', 'cash');
 
-UPDATE product_catalog SET category = 'directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas');
-UPDATE product_catalog SET category = 'privados' WHERE lower(category) IN ('mercados privados', 'mercados privado');
-UPDATE product_catalog SET category = 'club' WHERE lower(category) = 'club deals';
-UPDATE product_catalog SET category = 'publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos');
-UPDATE product_catalog SET category = 'cash' WHERE lower(category) = 'cash y equivalentes';
+UPDATE product_catalog SET category = 'inversiones_directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas', 'directas');
+UPDATE product_catalog SET category = 'mercados_privados' WHERE lower(category) IN ('mercados privados', 'mercados privado', 'privados');
+UPDATE product_catalog SET category = 'club_deals' WHERE lower(category) IN ('club deals', 'club');
+UPDATE product_catalog SET category = 'mercados_publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos', 'publicos');
+UPDATE product_catalog SET category = 'cash_y_equivalentes' WHERE lower(category) IN ('cash y equivalentes', 'cash');
 
 CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
 CREATE INDEX IF NOT EXISTS idx_products_catalog_product_id ON products (catalog_product_id);

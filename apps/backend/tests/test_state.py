@@ -2,20 +2,27 @@
 
 from __future__ import annotations
 
-EXPECTED_CATEGORIES = {"directas", "privados", "club", "publicos", "otros", "cash"}
+EXPECTED_CATEGORIES = {
+    "inversiones_directas",
+    "mercados_privados",
+    "club_deals",
+    "mercados_publicos",
+    "otros",
+    "cash_y_equivalentes",
+}
 
 # category -> group -> leaves, mirrors the table in
 # openspec/changes/multi-level-search/specs/taxonomy.spec.md
 EXPECTED_TAXONOMY = {
-    "directas": {
-        "label": "Real Estate Directo",
+    "inversiones_directas": {
+        "label": "Inversiones directas",
         "groups": {
             "RE Perú": ["Residencial", "Oficinas", "Comercial/Industrial"],
             "RE Extranjero": ["RE Extranjero"],
         },
     },
-    "privados": {
-        "label": "Mercados Privados",
+    "mercados_privados": {
+        "label": "Mercados privados",
         "groups": {
             "Deuda Privada": ["Deuda Privada"],
             "Private Equity": ["Private Equity"],
@@ -25,16 +32,16 @@ EXPECTED_TAXONOMY = {
             "Infraestructura": ["Infraestructura"],
         },
     },
-    "club": {
-        "label": "Club Deals",
+    "club_deals": {
+        "label": "Club deals",
         "groups": {
             "Real Estate": ["Perú", "Extranjero"],
             "Deuda Privada": ["Perú", "Extranjero"],
             "Otros": ["Perú", "Extranjero"],
         },
     },
-    "publicos": {
-        "label": "Mercados Públicos",
+    "mercados_publicos": {
+        "label": "Mercados públicos",
         "groups": {
             "Renta Variable": [
                 "US Large Cap",
@@ -60,8 +67,8 @@ EXPECTED_TAXONOMY = {
             "Commodities": ["Oro"],
         },
     },
-    "cash": {
-        "label": "Cash y Equivalentes",
+    "cash_y_equivalentes": {
+        "label": "Cash y equivalentes",
         "groups": {
             "Cash": ["Depósitos a plazo", "Fondos de Money Market"],
         },
@@ -119,5 +126,5 @@ def test_taxonomy_matches_spec_table_exactly():
 def test_publicos_exposes_renta_fija_group_with_us_treasuries_leaf():
     from agent.state import CATEGORIES
 
-    assert "Renta Fija" in CATEGORIES["publicos"]["groups"]
-    assert "US Treasuries" in CATEGORIES["publicos"]["groups"]["Renta Fija"]
+    assert "Renta Fija" in CATEGORIES["mercados_publicos"]["groups"]
+    assert "US Treasuries" in CATEGORIES["mercados_publicos"]["groups"]["Renta Fija"]

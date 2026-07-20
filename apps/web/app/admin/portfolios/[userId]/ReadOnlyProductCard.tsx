@@ -174,7 +174,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
   onApproved,
 }) => {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState<Category>("directas");
+  const [category, setCategory] = useState<Category>("inversiones_directas");
   const [subcategory, setSubcategory] = useState("");
   const [enrichment, setEnrichment] = useState<EnrichmentFields>(EMPTY_ENRICHMENT);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

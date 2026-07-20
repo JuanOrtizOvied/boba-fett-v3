@@ -939,7 +939,7 @@ export function ProposeProductCard({
   const [name, setName] = useState(product?.name ?? "");
   const [provider, setProvider] = useState(product?.provider ?? "");
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
-  const [category, setCategory] = useState<Category>(resolveCategoryKey(product?.category ?? "cash"));
+  const [category, setCategory] = useState<Category>(resolveCategoryKey(product?.category ?? "cash_y_equivalentes"));
   const [compRows, setCompRows] = useState<{ key: string; name: string; percentage: string }[]>(() => {
     if (product?.composition && Array.isArray(product.composition) && product.composition.length > 0) {
       return product.composition.map((c: { name: string; percentage: number }, i: number) => ({

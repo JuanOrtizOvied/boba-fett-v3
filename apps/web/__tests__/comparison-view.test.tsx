@@ -11,7 +11,7 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     name: "BlackRock Fund",
     provider: "BlackRock",
     amount: 100000,
-    category: "privados",
+    category: "mercados_privados",
     subcategory: "",
     composition: [],
     asset_class: "",

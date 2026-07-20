@@ -205,7 +205,7 @@ def test_propose_product_forwards_enrichment_and_provenance():
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 5000,
-                "category": "publicos",
+                "category": "mercados_publicos",
                 "commission": "0.45%",
                 "administrator": "BlackRock",
                 "catalog_product_id": 42,
@@ -235,7 +235,7 @@ def test_propose_product_tag_verified_when_all_fields_are_catalog():
             {
                 "name": "Vanguard Total World Stock ETF",
                 "amount": 1000,
-                "category": "publicos",
+                "category": "mercados_publicos",
                 "provenance": {"name": "catalog", "commission": "catalog"},
             }
         )
@@ -252,7 +252,7 @@ def test_propose_product_tag_verified_when_identity_is_catalog_even_with_enrichm
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 1000,
-                "category": "publicos",
+                "category": "mercados_publicos",
                 "provenance": {"name": "catalog", "liquidity": "web_search"},
             }
         )
@@ -269,7 +269,7 @@ def test_propose_product_tag_web_when_identity_is_not_catalog_and_web_contribute
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 1000,
-                "category": "publicos",
+                "category": "mercados_publicos",
                 "provenance": {"name": "claude_knowledge", "liquidity": "web_search"},
             }
         )
@@ -308,19 +308,19 @@ def test_propose_product_tag_unverified_when_provenance_empty():
     assert result["product"]["provenance"] == {}
 
 
-def test_propose_product_normalizes_category_key_to_label():
+def test_propose_product_normalizes_legacy_key_to_new_key():
     from agent.tools import propose_product
 
     result = asyncio.run(
         propose_product.ainvoke(
-            {"name": "Fondo XYZ", "amount": 1000, "category": "privados"}
+            {"name": "Fondo XYZ", "amount": 1000, "category": "mercados_privados"}
         )
     )
 
-    assert result["product"]["category"] == "Mercados Privados"
+    assert result["product"]["category"] == "mercados_privados"
 
 
-def test_propose_product_preserves_category_label():
+def test_propose_product_normalizes_label_to_new_key():
     from agent.tools import propose_product
 
     result = asyncio.run(
@@ -329,19 +329,19 @@ def test_propose_product_preserves_category_label():
         )
     )
 
-    assert result["product"]["category"] == "Mercados Privados"
+    assert result["product"]["category"] == "mercados_privados"
 
 
-def test_category_to_label_all_keys():
-    from agent.tools import _category_to_label
+def test_key_to_label_all_keys():
+    from agent.tools import _KEY_TO_LABEL
 
-    assert _category_to_label("directas") == "Real Estate Directo"
-    assert _category_to_label("privados") == "Mercados Privados"
-    assert _category_to_label("club") == "Club Deals"
-    assert _category_to_label("publicos") == "Mercados Públicos"
-    assert _category_to_label("otros") == "Otros"
-    assert _category_to_label("cash") == "Cash y Equivalentes"
-    assert _category_to_label("unknown") == "unknown"
+    assert _KEY_TO_LABEL["inversiones_directas"] == "Inversiones directas"
+    assert _KEY_TO_LABEL["mercados_privados"] == "Mercados privados"
+    assert _KEY_TO_LABEL["club_deals"] == "Club deals"
+    assert _KEY_TO_LABEL["mercados_publicos"] == "Mercados públicos"
+    assert _KEY_TO_LABEL["otros"] == "Otros"
+    assert _KEY_TO_LABEL["cash_y_equivalentes"] == "Cash y equivalentes"
+    assert "unknown" not in _KEY_TO_LABEL
 
 
 def test_derive_card_tag_directly():

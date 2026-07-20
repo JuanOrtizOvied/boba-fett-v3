@@ -17,7 +17,10 @@ class Product(BaseModel):
     name: str
     provider: str = ""
     amount: float = Field(gt=0)
-    category: str = Field(description="One of: directas, privados, club, publicos, otros, cash")
+    category: str = Field(
+        description="One of: inversiones_directas, mercados_privados,"
+        " club_deals, mercados_publicos, otros, cash_y_equivalentes"
+    )
     subcategory: str = ""
     composition: list[AssetAllocation] = Field(default_factory=list)
     asset_class: str = ""

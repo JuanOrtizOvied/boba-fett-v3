@@ -35,7 +35,7 @@ async def test_create_product_with_valid_payload_persists_in_postgres(api_client
 
     response = await client.post(
         "/portfolio/me/products",
-        json={"name": "BlackRock Fund", "amount": 1000, "category": "publicos"},
+        json={"name": "BlackRock Fund", "amount": 1000, "category": "mercados_publicos"},
     )
 
     assert response.status_code == 201
@@ -55,7 +55,7 @@ async def test_create_product_with_invalid_amount_returns_422_and_no_insert(
 
     response = await client.post(
         "/portfolio/me/products",
-        json={"name": "Bad Fund", "amount": -5, "category": "publicos"},
+        json={"name": "Bad Fund", "amount": -5, "category": "mercados_publicos"},
     )
 
     assert response.status_code == 422
@@ -70,7 +70,7 @@ async def test_create_product_missing_required_field_returns_422(api_client):
 
     response = await client.post(
         "/portfolio/me/products",
-        json={"amount": 1000, "category": "publicos"},  # missing "name"
+        json={"amount": 1000, "category": "mercados_publicos"},  # missing "name"
     )
 
     assert response.status_code == 422
@@ -97,7 +97,7 @@ async def test_update_rejects_non_owner(api_client, test_pool):
 
     create_response = await client.post(
         "/portfolio/me/products",
-        json={"name": "Owner Fund", "amount": 500, "category": "cash"},
+        json={"name": "Owner Fund", "amount": 500, "category": "cash_y_equivalentes"},
     )
     product_id = create_response.json()["id"]
 
@@ -118,7 +118,7 @@ async def test_update_rejects_non_owner_admin(api_client, test_pool):
 
     create_response = await client.post(
         "/portfolio/me/products",
-        json={"name": "Owner Fund", "amount": 500, "category": "cash"},
+        json={"name": "Owner Fund", "amount": 500, "category": "cash_y_equivalentes"},
     )
     product_id = create_response.json()["id"]
 
@@ -155,14 +155,14 @@ async def test_list_and_summary_scoped_to_caller_only(api_client, test_pool):
 
     await client.post(
         "/portfolio/me/products",
-        json={"name": "User A Fund", "amount": 1000, "category": "cash"},
+        json={"name": "User A Fund", "amount": 1000, "category": "cash_y_equivalentes"},
     )
 
     user_b_id = await _insert_user(test_pool)
     app.dependency_overrides[get_current_user] = lambda: fake_user(user_b_id)
     await client.post(
         "/portfolio/me/products",
-        json={"name": "User B Fund", "amount": 2000, "category": "cash"},
+        json={"name": "User B Fund", "amount": 2000, "category": "cash_y_equivalentes"},
     )
 
     list_response = await client.get("/portfolio/me")

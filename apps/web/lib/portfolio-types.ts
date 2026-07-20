@@ -5,12 +5,12 @@
  */
 
 export type Category =
-  | "directas"
-  | "privados"
-  | "club"
-  | "publicos"
+  | "inversiones_directas"
+  | "mercados_privados"
+  | "club_deals"
+  | "mercados_publicos"
   | "otros"
-  | "cash";
+  | "cash_y_equivalentes";
 
 export interface AssetAllocation {
   name: string;

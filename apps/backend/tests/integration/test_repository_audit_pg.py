@@ -28,7 +28,7 @@ def _create_data(**overrides: Any) -> ProductCreate:
         "name": "BlackRock Private Credit Fund",
         "provider": "SABBI",
         "amount": 150000,
-        "category": "privados",
+        "category": "mercados_privados",
         "subcategory": "Mercados Privados",
     }
     data.update(overrides)
@@ -156,14 +156,14 @@ async def test_update_partial_field_only_changes_touched_field_in_after_state(
 ):
     repo = ProductRepository(test_pool)
     product = await repo.create(
-        test_user_id, _create_data(category="privados", provider="SABBI")
+        test_user_id, _create_data(category="mercados_privados", provider="SABBI")
     )
 
-    await repo.update(product.id, ProductUpdate(category="club"))
+    await repo.update(product.id, ProductUpdate(category="club_deals"))
 
     update_change = await _fetch_change(test_pool, product.id, "update")
     after = _jsonb(update_change["after_state"])
-    assert after["category"] == "club"
+    assert after["category"] == "club_deals"
     assert after["provider"] == "SABBI"
 
 

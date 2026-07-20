@@ -34,14 +34,14 @@ class AgentState(TypedDict):
 # further breakdown (e.g. "RE Extranjero") use their own name as the single
 # leaf, so every group always exposes at least one leaf.
 CATEGORIES: dict[str, dict[str, object]] = {
-    "directas": {
+    "inversiones_directas": {
         "label": "Inversiones directas",
         "groups": {
             "RE Perú": ["Residencial", "Oficinas", "Comercial/Industrial"],
             "RE Extranjero": ["RE Extranjero"],
         },
     },
-    "privados": {
+    "mercados_privados": {
         "label": "Mercados privados",
         "groups": {
             "Deuda Privada": ["Deuda Privada"],
@@ -52,7 +52,7 @@ CATEGORIES: dict[str, dict[str, object]] = {
             "Infraestructura": ["Infraestructura"],
         },
     },
-    "club": {
+    "club_deals": {
         "label": "Club deals",
         "groups": {
             "Real Estate": ["Perú", "Extranjero"],
@@ -60,7 +60,7 @@ CATEGORIES: dict[str, dict[str, object]] = {
             "Otros": ["Perú", "Extranjero"],
         },
     },
-    "publicos": {
+    "mercados_publicos": {
         "label": "Mercados públicos",
         "groups": {
             "Renta Variable": [
@@ -87,7 +87,7 @@ CATEGORIES: dict[str, dict[str, object]] = {
             "Commodities": ["Oro"],
         },
     },
-    "cash": {
+    "cash_y_equivalentes": {
         "label": "Cash y equivalentes",
         "groups": {
             "Cash": ["Depósitos a plazo", "Fondos de Money Market"],

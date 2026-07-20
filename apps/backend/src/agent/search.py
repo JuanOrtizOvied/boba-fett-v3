@@ -198,6 +198,12 @@ _LEGACY_CATEGORY_LABELS: set[str] = {
     "club deals",
     "mercados públicos",
     "cash y equivalentes",
+    # Old short keys (legacy aliases)
+    "directas",
+    "privados",
+    "club",
+    "publicos",
+    "cash",
 }
 
 

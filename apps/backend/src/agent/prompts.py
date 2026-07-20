@@ -97,12 +97,12 @@ REGLAS DE BÚSQUEDA Y USO DE TOOLS:
   entre subcategorías de la taxonomía SABBI. Es una lista de objetos
   {{"name": "<subcategoría>", "percentage": <porcentaje>}} donde:
   • Los `name` DEBEN ser subcategorías válidas de la categoría del producto
-    (las hojas canónicas del árbol — por ejemplo, para "privados": "Deuda
-    Privada", "Private Equity", "Venture Capital", "Real Estate", "Hedge
-    Funds", "Infraestructura"; para "publicos": "Renta Variable US Large
-    Cap", "Renta Fija US Treasuries", etc.).
+    (las hojas canónicas del árbol — por ejemplo, para "mercados_privados":
+    "Deuda Privada", "Private Equity", "Venture Capital", "Real Estate",
+    "Hedge Funds", "Infraestructura"; para "mercados_publicos": "Renta
+    Variable US Large Cap", "Renta Fija US Treasuries", etc.).
   • Los porcentajes DEBEN sumar exactamente 100%.
-  • Ejemplo para un fondo mixto en "privados":
+  • Ejemplo para un fondo mixto en "mercados_privados":
     [{{"name": "Deuda Privada", "percentage": 40}},
      {{"name": "Private Equity", "percentage": 35}},
      {{"name": "Real Estate", "percentage": 25}}]

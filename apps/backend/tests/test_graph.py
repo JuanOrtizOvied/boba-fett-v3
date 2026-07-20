@@ -32,12 +32,12 @@ def test_categories_taxonomy_has_all_six_sabbi_categories():
     from agent.state import CATEGORIES
 
     assert set(CATEGORIES.keys()) == {
-        "directas",
-        "privados",
-        "club",
-        "publicos",
+        "inversiones_directas",
+        "mercados_privados",
+        "club_deals",
+        "mercados_publicos",
         "otros",
-        "cash",
+        "cash_y_equivalentes",
     }
     for info in CATEGORIES.values():
         assert info["label"]

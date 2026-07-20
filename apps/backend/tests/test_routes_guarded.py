@@ -92,7 +92,7 @@ def test_create_product_scoped_to_authenticated_user(app_client):
 
     response = client.post(
         "/portfolio/me/products",
-        json={"name": "Fund A", "amount": 1000, "category": "cash"},
+        json={"name": "Fund A", "amount": 1000, "category": "cash_y_equivalentes"},
     )
 
     assert response.status_code == 201

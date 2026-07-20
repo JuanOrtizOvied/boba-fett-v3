@@ -33,23 +33,28 @@ _KEY_TO_LABEL: dict[str, str] = {k: str(v["label"]) for k, v in CATEGORIES.items
 _LABEL_TO_KEY: dict[str, str] = {v.lower(): k for k, v in _KEY_TO_LABEL.items()}
 
 _LEGACY_ALIASES: dict[str, str] = {
-    "real estate directo": "directas",
-    "mercados privados": "privados",
-    "club deals": "club",
-    "mercados públicos": "publicos",
-    "mercados publicos": "publicos",
-    "cash y equivalentes": "cash",
-    "inversiones directas": "directas",
-    "club deals": "club",
-    "mercados privado": "privados",
+    "real estate directo": "inversiones_directas",
+    "mercados privados": "mercados_privados",
+    "club deals": "club_deals",
+    "mercados públicos": "mercados_publicos",
+    "mercados publicos": "mercados_publicos",
+    "cash y equivalentes": "cash_y_equivalentes",
+    "inversiones directas": "inversiones_directas",
+    "mercados privado": "mercados_privados",
+    # Old short keys → new canonical keys
+    "directas": "inversiones_directas",
+    "privados": "mercados_privados",
+    "club": "club_deals",
+    "publicos": "mercados_publicos",
+    "cash": "cash_y_equivalentes",
 }
 _LABEL_TO_KEY.update(_LEGACY_ALIASES)
 
 
 def _normalize_category_key(key_or_label: str) -> str:
     """Normalize a category value to its canonical key (e.g. 'Cash y
-    Equivalentes' -> 'cash', 'privados' -> 'privados'). Falls back to
-    'otros' for unknown values."""
+    Equivalentes' -> 'cash_y_equivalentes', 'privados' ->
+    'mercados_privados'). Falls back to 'otros' for unknown values."""
     if key_or_label in _KEY_TO_LABEL:
         return key_or_label
     resolved = _LABEL_TO_KEY.get(key_or_label.lower())
@@ -135,8 +140,9 @@ async def propose_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Category key, one of: directas, privados, club,
-            publicos, otros, cash.
+        category: Category key, one of: inversiones_directas,
+            mercados_privados, club_deals, mercados_publicos, otros,
+            cash_y_equivalentes.
         provider: Provider or fund manager name.
         composition: List of {name, percentage} subcategory allocations.
             Names MUST be canonical subcategory leaves from the CATEGORIES
@@ -216,8 +222,9 @@ async def add_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Category key, one of: directas, privados, club,
-            publicos, otros, cash.
+        category: Category key, one of: inversiones_directas,
+            mercados_privados, club_deals, mercados_publicos, otros,
+            cash_y_equivalentes.
         provider: Provider or fund manager name.
         composition: List of {name, percentage} subcategory allocations.
             Names MUST be canonical subcategory leaves from the CATEGORIES

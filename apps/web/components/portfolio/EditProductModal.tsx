@@ -57,7 +57,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<Category>(defaultCategory ?? "directas");
+  const [category, setCategory] = useState<Category>(defaultCategory ?? "inversiones_directas");
   const [rows, setRows] = useState<CompositionRow[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -83,7 +83,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setName("");
       setProvider("");
       setAmount("");
-      setCategory(defaultCategory ?? "directas");
+      setCategory(defaultCategory ?? "inversiones_directas");
       setRows([]);
     }
   }, [isOpen, product, defaultCategory]);

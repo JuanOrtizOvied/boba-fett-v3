@@ -25,14 +25,21 @@ PERCENT_FORMAT = "0.0%"
 
 # Kept in sync with `apps/web/lib/categories.ts` (`CATEGORY_META`) and the
 # `CATEGORIES` taxonomy in `agent/state.py`.
-CATEGORY_ORDER: list[str] = ["directas", "privados", "club", "publicos", "otros", "cash"]
+CATEGORY_ORDER: list[str] = [
+    "inversiones_directas",
+    "mercados_privados",
+    "club_deals",
+    "mercados_publicos",
+    "otros",
+    "cash_y_equivalentes",
+]
 CATEGORY_LABELS: dict[str, str] = {
-    "directas": "Inversiones directas",
-    "privados": "Mercados privados",
-    "club": "Club deals",
-    "publicos": "Mercados públicos",
+    "inversiones_directas": "Inversiones directas",
+    "mercados_privados": "Mercados privados",
+    "club_deals": "Club deals",
+    "mercados_publicos": "Mercados públicos",
     "otros": "Otros",
-    "cash": "Cash y equivalentes",
+    "cash_y_equivalentes": "Cash y equivalentes",
 }
 
 

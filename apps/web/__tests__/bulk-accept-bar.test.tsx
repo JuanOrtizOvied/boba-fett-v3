@@ -42,21 +42,21 @@ function cardProps(product: ProductInput) {
 const FUND_A: ProductInput = {
   name: "Fund A",
   amount: 500,
-  category: "cash",
+  category: "cash_y_equivalentes",
   subcategory: "Depósitos a plazo",
 };
 
 const FUND_B_VALID: ProductInput = {
   name: "Fund B",
   amount: 800,
-  category: "cash",
+  category: "cash_y_equivalentes",
   subcategory: "Fondos de Money Market",
 };
 
 const FUND_B_INCOMPLETE: ProductInput = {
   name: "Fund B",
   amount: 800,
-  category: "cash",
+  category: "cash_y_equivalentes",
   subcategory: undefined,
 };
 
@@ -149,8 +149,8 @@ describe("BulkAcceptBar combined confirmation", () => {
           type: "text",
           text:
             "Sí, agregar todos al portafolio:\n" +
-            "nombre: Fund A, monto: 500, categoría: cash, subcategory: Depósitos a plazo\n" +
-            "nombre: Fund B, monto: 800, categoría: cash, subcategory: Fondos de Money Market",
+            "nombre: Fund A, monto: 500, categoría: cash_y_equivalentes, subcategory: Depósitos a plazo\n" +
+            "nombre: Fund B, monto: 800, categoría: cash_y_equivalentes, subcategory: Fondos de Money Market",
         },
       ],
     });
