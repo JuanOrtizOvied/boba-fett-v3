@@ -151,23 +151,6 @@ const EMPTY_ENRICHMENT: EnrichmentFields = {
   returnRate: "",
 };
 
-const CATALOG_COMPARISON_FIELDS = [
-  { key: "name", label: "Nombre" },
-  { key: "category", label: "Categoría" },
-  { key: "subcategory", label: "Subcategoría" },
-  { key: "asset_class", label: "Clase de activo" },
-  { key: "geographic_focus", label: "Foco geográfico" },
-  { key: "underlying", label: "Subyacente" },
-  { key: "commission", label: "Comisión" },
-  { key: "currency", label: "Moneda" },
-  { key: "administrator", label: "Administradora" },
-  { key: "manager", label: "Gestor" },
-  { key: "liquidity", label: "Liquidez" },
-  { key: "return_rate", label: "Rentabilidad" },
-] as const;
-
-type CatalogComparisonKey = (typeof CATALOG_COMPARISON_FIELDS)[number]["key"];
-
 export interface ApproveProductModalProps {
   /** `null` closes the modal. */
   product: Product | null;
@@ -273,24 +256,6 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
     }
   };
 
-  const nextCatalogValues: Record<CatalogComparisonKey, string> = {
-    name: name.trim(),
-    category,
-    subcategory: subcategory.trim(),
-    asset_class: enrichment.assetClass.trim(),
-    geographic_focus: enrichment.geographicFocus.trim(),
-    underlying: enrichment.underlying.trim(),
-    commission: enrichment.commission.trim(),
-    currency: enrichment.currency.trim(),
-    administrator: enrichment.administrator.trim(),
-    manager: enrichment.manager.trim(),
-    liquidity: enrichment.liquidity.trim(),
-    return_rate: enrichment.returnRate.trim(),
-  };
-
-  const formatComparisonValue = (value: string | null | undefined) =>
-    value && value.trim() ? value : "—";
-
   return (
     <div
       className="animate-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -314,140 +279,99 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
+        <div className="flex flex-1 flex-col gap-0 overflow-y-auto">
           {catalogEntry ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-semibold text-amber-900">
-                Este producto ya existe en el catálogo. Revisa los valores actuales y los nuevos antes de aprobar.
-              </p>
-              <div className="mt-3 overflow-x-auto">
-                <div className="grid min-w-[640px] grid-cols-[160px_1fr_1fr] gap-x-3 gap-y-2 text-xs">
-                  <span className="font-semibold text-sabbi-neutral-500">Campo</span>
-                  <span className="font-semibold text-sabbi-neutral-500">Valor actual</span>
-                  <span className="font-semibold text-sabbi-neutral-500">Nuevo valor</span>
-                  {CATALOG_COMPARISON_FIELDS.map(({ key, label }) => (
-                    <div key={key} className="contents">
-                      <span className="font-medium text-sabbi-neutral-700">{label}</span>
-                      <span className="break-words text-sabbi-neutral-700">
-                        {formatComparisonValue(catalogEntry[key])}
-                      </span>
-                      <span className="break-words font-medium text-sabbi-neutral-900">
-                        {formatComparisonValue(nextCatalogValues[key])}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+            <>
+              <div className="bg-amber-50 px-5 py-3 text-sm font-medium text-amber-800">
+                Este producto ya existe en el catálogo. Los campos modificados se resaltan.
               </div>
+              <div className="flex flex-col divide-y divide-sabbi-neutral-100">
+                <ComparisonRow label="Nombre" currentValue={catalogEntry.name} newValue={name}>
+                  <input value={name} onChange={(e) => setName(e.target.value)} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Categoría" currentValue={catalogEntry.category} newValue={category}>
+                  <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className={modalInputClass}>
+                    {CATEGORY_ORDER.map((cat) => (
+                      <option key={cat} value={cat}>{CATEGORY_META[cat].label}</option>
+                    ))}
+                  </select>
+                </ComparisonRow>
+                <ComparisonRow label="Subcategoría" currentValue={catalogEntry.subcategory} newValue={subcategory}>
+                  <input value={subcategory} onChange={(e) => setSubcategory(e.target.value)} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Clase de activo" currentValue={catalogEntry.asset_class} newValue={enrichment.assetClass}>
+                  <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Foco geográfico" currentValue={catalogEntry.geographic_focus} newValue={enrichment.geographicFocus}>
+                  <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Subyacente" currentValue={catalogEntry.underlying} newValue={enrichment.underlying}>
+                  <input value={enrichment.underlying} onChange={(e) => updateEnrichment({ underlying: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Comisión" currentValue={catalogEntry.commission} newValue={enrichment.commission}>
+                  <input value={enrichment.commission} onChange={(e) => updateEnrichment({ commission: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Moneda" currentValue={catalogEntry.currency} newValue={enrichment.currency}>
+                  <input value={enrichment.currency} onChange={(e) => updateEnrichment({ currency: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Administradora" currentValue={catalogEntry.administrator} newValue={enrichment.administrator}>
+                  <input value={enrichment.administrator} onChange={(e) => updateEnrichment({ administrator: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Gestor" currentValue={catalogEntry.manager} newValue={enrichment.manager}>
+                  <input value={enrichment.manager} onChange={(e) => updateEnrichment({ manager: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Liquidez" currentValue={catalogEntry.liquidity} newValue={enrichment.liquidity}>
+                  <input value={enrichment.liquidity} onChange={(e) => updateEnrichment({ liquidity: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+                <ComparisonRow label="Rentabilidad" currentValue={catalogEntry.return_rate} newValue={enrichment.returnRate}>
+                  <input value={enrichment.returnRate} onChange={(e) => updateEnrichment({ returnRate: e.target.value })} className={modalInputClass} />
+                </ComparisonRow>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col gap-4 p-5">
+              <ModalField label="Nombre">
+                <input value={name} onChange={(e) => setName(e.target.value)} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Categoría">
+                <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className={modalInputClass}>
+                  {CATEGORY_ORDER.map((cat) => (
+                    <option key={cat} value={cat}>{CATEGORY_META[cat].label}</option>
+                  ))}
+                </select>
+              </ModalField>
+              <ModalField label="Subcategoría">
+                <input value={subcategory} onChange={(e) => setSubcategory(e.target.value)} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Clase de activo">
+                <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Foco geográfico">
+                <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Subyacente">
+                <input value={enrichment.underlying} onChange={(e) => updateEnrichment({ underlying: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Comisión">
+                <input value={enrichment.commission} onChange={(e) => updateEnrichment({ commission: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Moneda">
+                <input value={enrichment.currency} onChange={(e) => updateEnrichment({ currency: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Administradora">
+                <input value={enrichment.administrator} onChange={(e) => updateEnrichment({ administrator: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Gestor">
+                <input value={enrichment.manager} onChange={(e) => updateEnrichment({ manager: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Liquidez">
+                <input value={enrichment.liquidity} onChange={(e) => updateEnrichment({ liquidity: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Rentabilidad">
+                <input value={enrichment.returnRate} onChange={(e) => updateEnrichment({ returnRate: e.target.value })} className={modalInputClass} />
+              </ModalField>
             </div>
-          ) : null}
-
-          <div className="grid gap-6 sm:grid-cols-2">
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-semibold tracking-wide text-sabbi-neutral-600 uppercase">
-              Datos del producto
-            </p>
-            <ModalField label="Nombre">
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Categoría">
-              <select
-                value={category}
-                onChange={(event) => setCategory(event.target.value as Category)}
-                className={modalInputClass}
-              >
-                {CATEGORY_ORDER.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {CATEGORY_META[cat].label}
-                  </option>
-                ))}
-              </select>
-            </ModalField>
-            <ModalField label="Subcategoría">
-              <input
-                value={subcategory}
-                onChange={(event) => setSubcategory(event.target.value)}
-                className={modalInputClass}
-              />
-            </ModalField>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-semibold tracking-wide text-sabbi-neutral-600 uppercase">
-              Datos de enriquecimiento
-            </p>
-            <ModalField label="Clase de activo">
-              <input
-                value={enrichment.assetClass}
-                onChange={(event) => updateEnrichment({ assetClass: event.target.value })}
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Foco geográfico">
-              <input
-                value={enrichment.geographicFocus}
-                onChange={(event) =>
-                  updateEnrichment({ geographicFocus: event.target.value })
-                }
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Subyacente">
-              <input
-                value={enrichment.underlying}
-                onChange={(event) => updateEnrichment({ underlying: event.target.value })}
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Comisión">
-              <input
-                value={enrichment.commission}
-                onChange={(event) => updateEnrichment({ commission: event.target.value })}
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Moneda">
-              <input
-                value={enrichment.currency}
-                onChange={(event) => updateEnrichment({ currency: event.target.value })}
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Administradora">
-              <input
-                value={enrichment.administrator}
-                onChange={(event) =>
-                  updateEnrichment({ administrator: event.target.value })
-                }
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Gestor">
-              <input
-                value={enrichment.manager}
-                onChange={(event) => updateEnrichment({ manager: event.target.value })}
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Liquidez">
-              <input
-                value={enrichment.liquidity}
-                onChange={(event) => updateEnrichment({ liquidity: event.target.value })}
-                className={modalInputClass}
-              />
-            </ModalField>
-            <ModalField label="Rentabilidad">
-              <input
-                value={enrichment.returnRate}
-                onChange={(event) => updateEnrichment({ returnRate: event.target.value })}
-                className={modalInputClass}
-              />
-            </ModalField>
-          </div>
-          </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">
@@ -488,3 +412,38 @@ const ModalField: FC<{ label: string; children: ReactNode }> = ({ label, childre
     {children}
   </label>
 );
+
+const ComparisonRow: FC<{
+  label: string;
+  currentValue: string;
+  newValue: string;
+  children: ReactNode;
+}> = ({ label, currentValue, newValue, children }) => {
+  const current = (currentValue || "").trim();
+  const next = (newValue || "").trim();
+  const hasChanged = current !== next;
+
+  return (
+    <div
+      className={`grid grid-cols-2 gap-4 px-5 py-3 transition-colors ${
+        hasChanged ? "border-l-3 border-l-amber-400 bg-amber-50/40" : ""
+      }`}
+    >
+      <div className="flex flex-col gap-1">
+        <span className="flex items-center gap-2 text-xs font-medium text-sabbi-neutral-500">
+          {label}
+          {hasChanged && (
+            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">
+              Modificado
+            </span>
+          )}
+        </span>
+        {children}
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-sabbi-neutral-500">Valor actual</span>
+        <span className="text-sm text-sabbi-neutral-600">{current || "—"}</span>
+      </div>
+    </div>
+  );
+};
