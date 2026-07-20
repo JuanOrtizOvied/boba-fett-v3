@@ -946,7 +946,7 @@ export function ProposeProductCard({
     }
     return [];
   });
-  let compRowSeq = useRef(compRows.length);
+  const compRowSeq = useRef(compRows.length);
   const catalogProductId = product?.catalog_product_id;
 
   const compTotal = compRows.reduce((s, r) => s + (parseFloat(r.percentage) || 0), 0);

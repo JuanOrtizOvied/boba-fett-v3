@@ -9,6 +9,27 @@ interface AdminThread {
   user_id: string | null;
   email?: string;
   created_at: string | null;
+  cost?: number | null;
+}
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "claude-sonnet-4-20250514": { input: 3, output: 15 },
+  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+  "claude-opus-4-20250514": { input: 15, output: 75 },
+};
+
+function calcThreadCost(
+  messages: { type: string; response_metadata?: { model: string; usage: { input_tokens: number; output_tokens: number } } }[],
+): number {
+  let total = 0;
+  for (const msg of messages) {
+    if (msg.type !== "ai" || !msg.response_metadata?.model) continue;
+    const p = MODEL_PRICING[msg.response_metadata.model];
+    if (!p) continue;
+    const { input_tokens, output_tokens } = msg.response_metadata.usage;
+    total += (input_tokens * p.input + output_tokens * p.output) / 1_000_000;
+  }
+  return total;
 }
 
 /**
@@ -31,6 +52,20 @@ export default function AdminThreadsPage() {
         }
         const data: AdminThread[] = await res.json();
         setThreads(data);
+
+        const withCosts = await Promise.all(
+          data.map(async (t) => {
+            try {
+              const r = await fetchWithAuth(`/api/admin/threads/${t.thread_id}`);
+              if (!r.ok) return { ...t, cost: null };
+              const { messages } = await r.json();
+              return { ...t, cost: calcThreadCost(messages) };
+            } catch {
+              return { ...t, cost: null };
+            }
+          }),
+        );
+        setThreads(withCosts);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error desconocido");
       }
@@ -55,6 +90,7 @@ export default function AdminThreadsPage() {
                 <tr>
                   <th className="px-4 py-2">Usuario</th>
                   <th className="px-4 py-2">Actualizado</th>
+                  <th className="px-4 py-2 text-right">Costo</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
@@ -68,6 +104,15 @@ export default function AdminThreadsPage() {
                     </td>
                     <td className="px-4 py-2 text-sabbi-neutral-600">
                       {t.created_at ? new Date(t.created_at).toLocaleString() : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right text-sabbi-neutral-700">
+                      {t.cost === undefined ? (
+                        <span className="text-sabbi-neutral-400">…</span>
+                      ) : t.cost === null || t.cost === 0 ? (
+                        <span className="text-sabbi-neutral-400">—</span>
+                      ) : (
+                        <span className="font-semibold">${t.cost.toFixed(4)}</span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <Link

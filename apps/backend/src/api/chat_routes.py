@@ -85,6 +85,18 @@ def _serialize_message(msg: AnyMessage) -> dict[str, Any]:
         result["tool_calls"] = [
             {"id": tc["id"], "name": tc["name"], "args": tc["args"]} for tc in tool_calls
         ]
+    meta = getattr(msg, "response_metadata", None)
+    if meta and isinstance(meta, dict):
+        model = meta.get("model") or meta.get("model_name") or ""
+        usage = meta.get("usage") or {}
+        if model or usage:
+            result["response_metadata"] = {
+                "model": model,
+                "usage": {
+                    "input_tokens": usage.get("input_tokens", 0),
+                    "output_tokens": usage.get("output_tokens", 0),
+                },
+            }
     return result
 
 

@@ -33,13 +33,100 @@ type ToolCall = {
   args: Record<string, unknown>;
 };
 
+type MessageUsage = {
+  input_tokens: number;
+  output_tokens: number;
+};
+
+type ResponseMetadata = {
+  model: string;
+  usage: MessageUsage;
+};
+
 type AdminThreadMessage = {
   id?: string;
   type: string;
   content: string | ContentBlock[] | null;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
+  response_metadata?: ResponseMetadata;
 };
+
+// -- Cost calculation -----------------------------------------------------
+
+const MODEL_PRICING: Record<string, { input: number; output: number; label: string }> = {
+  "claude-sonnet-4-20250514": { input: 3, output: 15, label: "Sonnet 4" },
+  "claude-haiku-4-5-20251001": { input: 1, output: 5, label: "Haiku 4.5" },
+  "claude-opus-4-20250514": { input: 15, output: 75, label: "Opus 4" },
+};
+
+function getModelLabel(model: string): string {
+  return MODEL_PRICING[model]?.label ?? model.replace(/^claude-/, "").replace(/-\d+$/, "");
+}
+
+function calcMessageCost(meta?: ResponseMetadata): number {
+  if (!meta?.usage) return 0;
+  const pricing = MODEL_PRICING[meta.model];
+  if (!pricing) return 0;
+  const { input_tokens, output_tokens } = meta.usage;
+  return (input_tokens * pricing.input + output_tokens * pricing.output) / 1_000_000;
+}
+
+type ModelCostSummary = {
+  model: string;
+  label: string;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  messageCount: number;
+};
+
+function computeCostSummary(messages: AdminThreadMessage[]): {
+  byModel: ModelCostSummary[];
+  totalCost: number;
+  totalMessages: number;
+} {
+  const map = new Map<string, ModelCostSummary>();
+  let totalCost = 0;
+  let totalMessages = 0;
+
+  for (const msg of messages) {
+    if (msg.type !== "ai" || !msg.response_metadata?.model) continue;
+    const meta = msg.response_metadata;
+    const model = meta.model;
+    const cost = calcMessageCost(meta);
+    const existing = map.get(model);
+    if (existing) {
+      existing.inputTokens += meta.usage.input_tokens;
+      existing.outputTokens += meta.usage.output_tokens;
+      existing.cost += cost;
+      existing.messageCount += 1;
+    } else {
+      map.set(model, {
+        model,
+        label: getModelLabel(model),
+        inputTokens: meta.usage.input_tokens,
+        outputTokens: meta.usage.output_tokens,
+        cost,
+        messageCount: 1,
+      });
+    }
+    totalCost += cost;
+    totalMessages += 1;
+  }
+
+  return {
+    byModel: [...map.values()].sort((a, b) => b.cost - a.cost),
+    totalCost,
+    totalMessages,
+  };
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
 
 // -- Content extraction ---------------------------------------------------
 
@@ -545,6 +632,28 @@ const AssistantMessageBubble: FC<{
             </div>
           </CollapsibleRaw>
         )}
+
+        {message.response_metadata?.model && (
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-sabbi-neutral-500">
+            <span className="rounded-full border border-sabbi-neutral-200 bg-sabbi-neutral-50 px-2 py-0.5 font-medium">
+              {getModelLabel(message.response_metadata.model)}
+            </span>
+            {message.response_metadata.usage && (
+              <>
+                <span>
+                  {formatTokens(message.response_metadata.usage.input_tokens)} in
+                  {" / "}
+                  {formatTokens(message.response_metadata.usage.output_tokens)} out
+                </span>
+                {calcMessageCost(message.response_metadata) > 0 && (
+                  <span className="font-semibold text-sabbi-neutral-700">
+                    ${calcMessageCost(message.response_metadata).toFixed(4)}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -644,11 +753,51 @@ export default function AdminThreadViewPage() {
     (m) => m.type !== "tool",
   );
 
+  const costSummary = computeCostSummary(messages);
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-sabbi-neutral-900">
         Conversación
       </h1>
+
+      {costSummary.totalMessages > 0 && (
+        <div className="overflow-hidden rounded-xl border border-sabbi-neutral-200 bg-white">
+          <div className="flex items-center justify-between border-b border-sabbi-neutral-100 bg-sabbi-neutral-50 px-4 py-2.5">
+            <span className="text-xs font-semibold tracking-wide text-sabbi-neutral-700 uppercase">
+              Costo del chat
+            </span>
+            <span className="font-display text-base font-bold text-sabbi-neutral-900">
+              ${costSummary.totalCost.toFixed(4)}
+            </span>
+          </div>
+          <div className="divide-y divide-sabbi-neutral-100">
+            {costSummary.byModel.map((m) => (
+              <div
+                key={m.model}
+                className="flex items-center justify-between px-4 py-2 text-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-sabbi-neutral-200 bg-sabbi-neutral-50 px-2 py-0.5 text-[11px] font-medium text-sabbi-neutral-700">
+                    {m.label}
+                  </span>
+                  <span className="text-xs text-sabbi-neutral-500">
+                    {m.messageCount} {m.messageCount === 1 ? "mensaje" : "mensajes"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-sabbi-neutral-500">
+                    {formatTokens(m.inputTokens)} in / {formatTokens(m.outputTokens)} out
+                  </span>
+                  <span className="font-semibold text-sabbi-neutral-900">
+                    ${m.cost.toFixed(4)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 overflow-y-auto px-4 py-6">
         {visibleMessages.map((message, index) => (
