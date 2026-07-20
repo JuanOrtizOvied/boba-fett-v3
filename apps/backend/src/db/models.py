@@ -167,6 +167,7 @@ class SearchResult(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     category: str = ""
+    underlying: list[AssetAllocation] = Field(default_factory=list)
     catalog_product_id: int | None = None
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)

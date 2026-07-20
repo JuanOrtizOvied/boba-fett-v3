@@ -19,7 +19,7 @@ import os
 import asyncpg
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
 from agent.state import CATEGORIES
@@ -60,11 +60,21 @@ an investment portfolio platform.
 
 Extract these fields for the requested product: name, asset_class,
 geographic_focus, commission, currency, administrator, manager,
-liquidity, return_rate, category.
+liquidity, return_rate, category, underlying.
+
+`underlying` is the product's underlying asset composition — a list of
+{name, percentage} objects summing to 100%. Each entry names an asset class
+or sub-asset (e.g. "Private Debt", "Real Estate", "US Treasuries") and its
+weight in the product. Return an empty list if unknown.
 
 CRITICAL RULE: if you are not confident about a field, or the information was
-not given to you, leave that field as an empty string. NEVER invent, guess, or
-fabricate a value you cannot verify."""
+not given to you, leave that field as an empty string (or empty list for
+underlying). NEVER invent, guess, or fabricate a value you cannot verify."""
+
+
+class _ExtractedAllocation(BaseModel):
+    name: str = ""
+    percentage: float = 0
 
 
 class ExtractedProduct(BaseModel):
@@ -81,10 +91,11 @@ class ExtractedProduct(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     category: str = ""
+    underlying: list[_ExtractedAllocation] = Field(default_factory=list)
 
 
 def _merge_fields(
-    result: SearchResult, new_data: dict[str, str], source: FieldSource
+    result: SearchResult, new_data: dict, source: FieldSource
 ) -> SearchResult:
     """Fill only the fields `result` doesn't already have, tagging each
     newly-filled field's provenance with `source`. Never overwrites a field
@@ -98,6 +109,15 @@ def _merge_fields(
             setattr(result, field, new_value)
             result.provenance[field] = source
             filled_any = True
+    raw_underlying = new_data.get("underlying") or []
+    if not result.underlying and raw_underlying:
+        from db.models import AssetAllocation
+        result.underlying = [
+            AssetAllocation(**a) if isinstance(a, dict) else a
+            for a in raw_underlying
+        ]
+        result.provenance["underlying"] = source
+        filled_any = True
     if filled_any and _SOURCE_RANK[source] > _SOURCE_RANK[result.primary_source]:
         result.primary_source = source
     return result
@@ -121,11 +141,14 @@ async def _search_catalog(query: str, pool: asyncpg.Pool) -> SearchResult:
         return result
     match = matches[0]
     result.catalog_product_id = match.id
+    if match.underlying:
+        result.underlying = match.underlying
+        result.provenance["underlying"] = "catalog"
     catalog_data = {field: getattr(match, field) for field in FIELD_NAMES}
     return _merge_fields(result, catalog_data, "catalog")
 
 
-async def _run_extraction(human_content: str) -> dict[str, str]:
+async def _run_extraction(human_content: str) -> dict:
     llm = ChatAnthropic(model=EXTRACTION_MODEL_NAME, temperature=0)
     structured_llm = llm.with_structured_output(ExtractedProduct)
     extracted = await structured_llm.ainvoke(
