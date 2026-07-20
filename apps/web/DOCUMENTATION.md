@@ -67,25 +67,29 @@ Protected by `middleware.ts` -- unauthenticated users are redirected to `/login`
 
 **Files:** `app/admin/layout.tsx`, `app/admin/page.tsx`
 
-Admin-only section with a sidebar layout. The layout component (`AdminLayout`) performs a client-side role check -- non-admin users are redirected to `/`. Contains four sub-pages:
+Admin-only section with a sidebar layout. The layout component (`AdminLayout`) performs a client-side role check -- non-admin users are redirected to `/`. Contains six sub-pages:
 
 | Route | File | Description |
 |---|---|---|
 | `/admin` | `app/admin/page.tsx` | User directory -- lists all users with email, role, creation date |
 | `/admin/users/create` | `app/admin/users/create/page.tsx` | User creation form (email, password, role selector) |
 | `/admin/portfolios` | `app/admin/portfolios/page.tsx` | All portfolios overview with product count and totals |
-| `/admin/portfolios/[userId]` | `app/admin/portfolios/[userId]/page.tsx` | Read-only view of a single user's portfolio (no edit/delete) |
+| `/admin/portfolios/[userId]` | `app/admin/portfolios/[userId]/page.tsx` | Read-only view of a single user's portfolio, with a per-card "Aprobar al catálogo" affordance (no edit/delete) |
+| `/admin/catalog` | `app/admin/catalog/page.tsx` | Product catalog entries listing -- sticky-header table with inline edit/delete per entry |
 | `/admin/threads` | `app/admin/threads/page.tsx` | Thread directory across all users |
 | `/admin/threads/[threadId]` | `app/admin/threads/[threadId]/page.tsx` | Read-only message history for a single thread |
 
-Admin sidebar navigation links:
+Admin sidebar navigation links (`NAV_LINKS` in `app/admin/layout.tsx`):
 
 - Usuarios (user list)
 - Crear usuario (user creation form)
 - Portafolios (portfolio overview)
+- Catálogo (catalog entries listing)
 - Chats (thread directory)
-- Volver al portafolio (link back to `/`)
-- Cerrar sesion (logout)
+- Volver al portafolio (link back to `/`, outside `NAV_LINKS`)
+- Cerrar sesion (logout, outside `NAV_LINKS`)
+
+See [Admin Catalog Approval](#admin-catalog-approval) below for the full `/admin/catalog` and approval-modal workflow.
 
 ### `/api/[...path]` -- API Proxy Route
 
@@ -328,14 +332,15 @@ tools: {
 An interactive card rendered when the agent calls `propose_product`. Features:
 
 - **Header:** Category badge + "Producto encontrado" label + reliability badge (Catalogo SABBI, Busqueda web, No verificado)
-- **Editable fields** (while pending): Name, Provider, Amount (USD), Category (dropdown), Subcategory (grouped dropdown with optgroups from `CATEGORY_SUBCATEGORIES`)
+- **Editable fields** (while pending): Name, Provider, Amount (USD), Category (dropdown)
+- **Composición subyacente:** Multi-row composition editor -- a grouped dropdown (optgroups from `CATEGORY_SUBCATEGORIES`, sourced from the product's category) adds a row per selection; each row has a percentage input and a remove button. Rows must sum to 100% (`isCompValid`). This is the same UX pattern as `EditProductModal`'s composition editor -- there is no standalone subcategory field or dropdown anymore.
 - **Enriched fields** (read-only): Commission, Currency, Administrator, Manager, Liquidity, Return rate -- with field-level source markers (globe emoji for web_search, robot emoji for claude_knowledge)
-- **Auto-classified badge:** Shown next to Subcategory when the agent pre-filled it
-- **Missing fields warning:** Amber text listing incomplete required fields (nombre, monto, subcategoria)
+- **Catalog match:** When `product.catalog_product_id` is present (the agent matched an existing catalog entry), it is echoed back in the confirm payload so the backend can link the created product to that catalog row
+- **Missing fields warning:** Amber text listing incomplete required fields (nombre, monto, composición)
 - **Action buttons:** "Si, agregar" (disabled when invalid) and "No" (always enabled)
 - **Confirmed/Rejected state:** Replaces buttons with a status label
 
-On confirm, the card sends a structured user message: `"Si, agregar al portafolio con: nombre: X, monto: Y, categoria: Z, subcategory: W."` which the agent parses to call `add_product`.
+On confirm, the card sends a structured user message: `"Sí, agregar al portafolio con: nombre: X, monto: Y, categoría: Z, underlying: [Leaf: P%, ...]."` (plus `proveedor: ...` and `catalog_product_id: ...` when present) which the agent parses to call `add_product`.
 
 #### ProposalBatchProvider and BulkAcceptBar
 
@@ -344,7 +349,7 @@ On confirm, the card sends a structured user message: `"Si, agregar al portafoli
 **BulkAcceptBar** appears when 2+ proposals are pending. Shows `"X de Y productos listos"` with an "Agregar todos" button that:
 
 - Is disabled if any pending card has missing required fields
-- Sends one combined message: `"Si, agregar todos al portafolio:\nnombre: A, monto: ...\nnombre: B, monto: ..."`
+- Sends one combined message: `"Sí, agregar todos al portafolio:\nnombre: A, monto: ..., underlying: [...]\nnombre: B, monto: ..., underlying: [...]"`
 - Marks all cards as confirmed simultaneously
 
 The batch uses a module-level `_globalRespondedIds` set that survives React re-renders/remounts.
@@ -379,32 +384,27 @@ The right-side panel of the builder view. Layout:
 ```
 PortfolioPanel
   |-- [Loading state] Spinner + "Cargando portafolio..."
-  |-- [Empty state] PieIcon + instructions + "Agregar producto manualmente"
+  |-- [Empty state] PieIcon + instructions + "Agregar producto manualmente" + SnapshotButton
   |-- [Data state]
         |-- Fixed header (shrink-0, border-b)
-        |     |-- MetricsRow
+        |     |-- Total amount (abbreviated USD) + product count
+        |     |-- Largest position (percentage + product name)
+        |     |-- SnapshotButton ("Guardar versión")
+        |     |-- "Ver versiones" button (opens VersioningDrawer, shows snapshot count badge)
         |     |-- CategoryTabs
         |-- Scrollable body (flex-1, overflow-y-auto)
               |-- CategorySection (per visible category)
               |-- EditProductModal (overlay)
+              |-- VersioningDrawer (right-side slide-over)
 ```
 
-Uses the `usePortfolio()` hook for data and UI state. Product deletion calls `DELETE /api/products/:id` directly.
+Uses the `usePortfolio()` hook for data and `usePortfolioVersioning()` for snapshots/comparison/change-log state. Product deletion calls `DELETE /api/products/:id` directly. See [Portfolio Versioning](#portfolio-versioning) below for the snapshot/change-log/comparison feature set.
 
-### MetricsRow
+### MetricsRow (unused)
 
 **File:** `components/portfolio/MetricsRow.tsx`
 
-Four metric cards in a responsive grid (`grid-cols-2 lg:grid-cols-4`):
-
-| Metric | Value | Subtext |
-|---|---|---|
-| Total | Abbreviated USD (e.g. `$1.2M`) | Product count |
-| Mayor posicion | Percentage of total | Product name |
-| Categorias | `X de 6` | "Completo" or "Incompleto" |
-| Estado | "Listo" or "Vacio" | "Puedes enviarlo" or "Agrega productos" |
-
-Cards flash with `animate-metric-flash` (green highlight fade) when their value changes.
+A four-card metric grid (`grid-cols-2 lg:grid-cols-4`: Total, Mayor posición, Categorías, Estado) with `animate-metric-flash` highlight-on-change. It is **not imported anywhere** -- `PortfolioPanel` was reworked to show total amount, product count, and largest position inline in its fixed header (alongside the versioning controls) instead of mounting this component. Kept in the tree as dead code; treat it as legacy reference, not the active metrics UI.
 
 ### CategoryTabs
 
@@ -435,14 +435,14 @@ Product card with two mutually exclusive states:
 
 **View state:**
 
-- Product name and provider/subcategory line
+- Product name and provider line
 - Formatted USD amount (DM Sans display font)
-- Composition bar (horizontal stacked bar chart) with legend dots showing asset name + percentage
+- Composition bar (horizontal stacked bar chart, built from `product.underlying`) with legend dots showing asset name + percentage
 - Category badge (colored pill)
 - Hover-revealed edit/delete icon buttons (opacity transition)
 - Left colored border strip matching the category color
 
-Special handling: When composition has a single entry at 100% with the same name as the product, the legend shows the subcategory instead of duplicating the product name.
+Special handling: When `product.underlying` has a single entry at ~100% with the same name as the product, the legend shows that single entry's name instead of duplicating the product name as both title and legend.
 
 **Confirm-delete state** (inline, no separate dialog):
 
@@ -473,17 +473,18 @@ Two-column overlay modal for creating and editing products. Closes on Escape key
 - Amount in USD (number input, required, must be > 0)
 - Category (dropdown from `CATEGORY_ORDER`)
 
-**Right column -- Composition by asset class:**
+**Right column -- Composición por subcategoría:**
 
-- Dynamic rows (name + percentage inputs + remove button)
-- "Agregar asset class" button to add rows
-- Real-time percentage total indicator (green when ~100%, red otherwise)
+- A grouped dropdown ("Agregar subcategoría...") sourced from `CATEGORY_SUBCATEGORIES[category]` -- selecting a leaf adds a composition row for it and removes it from the dropdown so it can't be added twice
+- Each row shows the selected subcategory name (read-only), a percentage input, and a remove button
+- Real-time percentage total indicator (green when within 0.5 of 100%, red otherwise)
+- Changing the Category dropdown resets the composition rows, since the subcategory options are category-scoped
 
-**Validation:** Name, amount > 0, and at least one composition entry are required before save.
+**Validation:** Name, amount > 0, and at least one composition entry summing to ~100% are required before save.
 
 **API calls:**
 
-- **Create:** `POST /api/portfolio/me/products` with `{ name, provider, amount, category, composition }`
+- **Create:** `POST /api/portfolio/me/products` with `{ name, provider, amount, category, underlying }`
 - **Edit:** `PATCH /api/products/:id` with the same payload
 
 Shows inline form errors and toast notifications on failure.
@@ -511,6 +512,156 @@ Four-column table (`Categoria`, `Actual %`, `Retorno`, `Deseado %`):
 - **Product rows** (indented): Product name + mini progress bar (relative to category total) + actual %
 - **Total footer row:** Bold, sums to 100.0%
 - **Retorno and Deseado %:** Currently render "--" (deferred scope -- no return/target data model exists)
+
+---
+
+## Admin Catalog Approval
+
+An admin-only workflow that lets admins promote a product from an investor's portfolio into the shared **product catalog** (`product_catalog` table), enriching it with fields the catalog needs (asset class, geographic focus, commission, currency, administrator, manager, liquidity, return rate) that a raw portfolio product doesn't carry.
+
+### Catalog Listing -- `/admin/catalog`
+
+**File:** `app/admin/catalog/page.tsx`
+
+Fetches `GET /api/admin/catalog/entries` and renders a sticky-header, horizontally scrollable table (`CATALOG_COLUMNS`): Categoría, Nombres alternativos, Clase de activo, Foco geográfico, Subyacente, Comisión, Moneda, Administrador, Gestor, Rendimiento. Name and the Opciones (edit/delete) column are sticky-left/right respectively.
+
+- **Edit:** Opens `EditCatalogModal` (defined in the same file), a two-column form covering all `EDITABLE_FIELDS`. `alternative_names` and `underlying` are edited as newline-delimited textareas (`Name: percentage%` syntax for `underlying`) and parsed back into arrays/objects on save. Only changed fields are sent in the `PATCH /api/admin/catalog/entries/:id` payload.
+- **Delete:** Confirmation dialog (`ConfirmDeleteDialog`) -- on confirm, calls `DELETE /api/admin/catalog/entries/:id`, plays a 400ms `animate-row-delete` fade before removing the row from local state.
+
+### Approve-to-Catalog Affordance -- `/admin/portfolios/[userId]`
+
+**File:** `app/admin/portfolios/[userId]/ReadOnlyProductCard.tsx`
+
+**`ReadOnlyProductCard`** visually mirrors `ProductCard`'s view state (name, provider, amount, composition bar) but drops all edit/delete affordances and instead has a single full-width "Aprobar al catálogo" button at the bottom. Implemented as a page-scoped component (not a variant of the shared `ProductCard`) so the mutable portfolio-builder component's contract stays unchanged. When the product has already been approved (its ID appears in `approved_from_product_id` on some catalog entry), the card gets an emerald border, `animate-product-added`, and the button becomes a disabled "Aprobado" state.
+
+**`ApproveProductModal`** (same file) opens when a card's "Aprobar al catálogo" button is clicked:
+
+- Pre-fills `name`/`category` from the source product; every enrichment field (asset class, geographic focus, commission, currency, administrator, manager, liquidity, return rate) starts empty for the admin to fill in
+- **Comparison mode:** If the product already matches a catalog entry (`product.catalog_product_id`), the modal switches to a per-field `ComparisonRow` layout instead of plain inputs -- each row shows the **editable new value on the left** and the **read-only current catalog value on the right** ("Valor actual"), with an amber left border and a "Modificado" badge on any row where the trimmed values differ
+- **New-entry mode:** If there's no existing catalog match, the modal renders a plain single-column form instead
+- Confirm posts `POST /api/admin/catalog/approve` with `{ name, category, ...enrichment fields, approved_from_product_id, catalog_product_id }`. A `409` response ("Ya existe un producto igual en el catálogo") and other errors stay inline; success calls `onApproved(productId)` (marks the source card approved) and closes the modal.
+
+### Wiring -- `app/admin/portfolios/[userId]/page.tsx`
+
+On mount, fetches the portfolio, the admin user list (to resolve the owner's email), and `GET /api/admin/catalog/entries` in parallel. Catalog entries seed `approvedProductIds` (from each entry's `approved_from_product_id`) so already-approved cards render correctly on load, and are also used to resolve `approvingCatalogEntry` -- the matching catalog row (by `catalog_product_id`) passed into `ApproveProductModal` to trigger comparison mode.
+
+---
+
+## Portfolio Versioning
+
+Change-tracking and point-in-time snapshots for a portfolio, plus side-by-side comparison between two snapshots. Backed by `db/versioning.py`'s `VersioningRepository` (`portfolio_changes` and `portfolio_snapshots` tables) on the FastAPI side.
+
+### usePortfolioVersioning Hook
+
+**File:** `lib/usePortfolioVersioning.ts`
+
+Mirrors `usePortfolio.ts`'s conventions (`fetchWithAuth`, redirect to `/login` on `401`). Three independent slices, all mounted once from `PortfolioPanel`:
+
+- **Snapshots:** `snapshots`, `isLoadingSnapshots`, `fetchSnapshots()`, `createSnapshot(name, description?)`, `hasChanges` (from `GET /api/portfolio/me/snapshots/has-changes` -- disables the "Guardar versión" button when the current portfolio is identical to the last snapshot; creating a snapshot of an empty portfolio is explicitly supported and never disabled)
+- **Comparison:** `comparison`, `isComparing`, `compareError`, `compareSnapshots(aId, bId)`, `clearComparison()` -- calls `GET /api/portfolio/me/compare?a=:id&b=:id`; on failure, `comparison` is reset to `null` (never left stale) and `compareError` is set from the response's `{"detail": "..."}` body when present
+- **Change log:** `changes`, `isLoadingChanges`, `changesTotal`, `changesHasMore`, `fetchChanges({ limit?, offset? })` -- calls `GET /api/portfolio/me/changes`, which returns `{ changes, total, has_more }` (paginated)
+
+The change-log and `hasChanges` slices both re-fetch on the shared `sabbi:portfolio-refetch` window event (see [Portfolio Events](#portfolio-events)), so they stay fresh after every chat-triggered mutation without a dedicated event.
+
+### Data Shapes
+
+```typescript
+interface Snapshot {
+  id: string;
+  name: string;
+  description: string;
+  product_count: number;
+  total_amount: number;
+  category_summary: { category: string; percentage: number }[];
+  created_at: string;
+}
+
+interface SnapshotDetail extends Snapshot {
+  products: Product[];
+}
+
+type ChangeOperation = "create" | "update" | "delete";
+type ChangeSource = "agent" | "api" | "admin";
+
+interface ChangeLogEntry {
+  id: string;
+  user_id: string;
+  product_id: string | null;
+  operation: ChangeOperation;
+  before_state: Product | null;
+  after_state: Product | null;
+  source: ChangeSource;
+  metadata: Record<string, unknown>;
+  snapshot_id: string | null;
+  created_at: string;
+}
+
+interface SnapshotDiff {
+  snapshot_a: string;
+  snapshot_b: string;
+  added: Product[];
+  removed: Product[];
+  modified: {
+    product_id: string;
+    name: string;
+    before: Product;
+    after: Product;
+    changes: Record<string, { before: unknown; after: unknown }>;
+  }[];
+  summary: {
+    added_count: number;
+    removed_count: number;
+    modified_count: number;
+    total_amount_delta: number;
+    product_count_delta: number;
+  };
+}
+```
+
+### SnapshotButton and SnapshotModal
+
+**Files:** `components/portfolio/SnapshotButton.tsx`, `components/portfolio/SnapshotModal.tsx`
+
+`SnapshotButton` is a small "Guardar versión" button (camera icon) mounted in `PortfolioPanel`'s header and its empty state; disabled with a "Sin cambios respecto a la última versión" tooltip when `hasChanges` is false. Clicking it opens `SnapshotModal`, an overlay form (name required, description optional) following `EditProductModal`'s conventions (Escape/overlay-click to close, inline errors, toast on failure/success).
+
+### VersioningDrawer
+
+**File:** `components/portfolio/VersioningDrawer.tsx`
+
+Right-side slide-over (`animate-drawer-panel`, 220ms) opened by PortfolioPanel's "Ver versiones" button. Two tabs (`role="tablist"`):
+
+- **"Versiones"** -- renders `SnapshotList`
+- **"Cambios"** -- renders `ChangeLog`
+
+Owns the two-step "select two snapshots to compare" selection state and the read-only snapshot detail fetch (`GET /portfolio/me/snapshots/:id`, called directly via `fetchWithAuth`). All transient state (active tab, compare selection, detail view, open comparison) resets whenever the drawer closes.
+
+### SnapshotList
+
+**File:** `components/portfolio/SnapshotList.tsx`
+
+Newest-first list of snapshot cards, each showing name, abbreviated total, a mini composition bar + legend (categories merged via `resolveCategoryKey` since a snapshot's stored `category_summary` may contain legacy keys), and a full date. Each card has a "Seleccionar para comparar" checkbox; once two are selected, a "Comparar versiones seleccionadas" button appears above the list. Clicking a card (not the checkbox) opens its read-only detail view (product list with amounts) in place of the list, with a "Volver a versiones" back link.
+
+### ChangeLog
+
+**File:** `components/portfolio/ChangeLog.tsx`
+
+Paginated, reverse-chronological list of `portfolio_changes` rows. Each row shows an operation badge (Creado/Actualizado/Eliminado), the affected product's name, provider, category badge, a source icon + label (Agente/Manual/Admin), and a relative timestamp (`formatRelativeTime`). For `update` entries, `describeChanges()` diffs `before_state`/`after_state` inline (amount, category, name changes) as a compact italic summary line. A "Cargar más" button pages through results when `changesHasMore` is true.
+
+### VersioningBar (unused)
+
+**File:** `components/portfolio/VersioningBar.tsx`
+
+A thin strip meant to sit between the metrics/category-tabs header and the scrollable body, showing snapshot count and a recent-activity indicator. Like `MetricsRow`, it is **not imported anywhere** -- `PortfolioPanel` surfaces the same information (snapshot count via the "Ver versiones" badge) directly in its header instead. Kept as dead code / legacy reference.
+
+### ComparisonView
+
+**File:** `components/portfolio/ComparisonView.tsx`
+
+Full-width modal (`z-[60]`, above the drawer) comparing two snapshots, opened from `SnapshotList`'s "Comparar versiones seleccionadas" action:
+
+- **Added** (green) / **Removed** (red) sections list affected products with name + amount
+- **Modified** (amber) section lists, per product, every changed field as `Label: before → after` (`FIELD_LABELS` maps API field names like `underlying`, `asset_class`, `catalog_product_id` to Spanish labels; `formatFieldValue` renders amounts via `formatUsd`, categories via their display label, and `underlying` as a compact `Name %` list)
+- Loading (spinner), error (`compareError`, red banner), and "Sin cambios entre estas dos versiones" empty states are all handled explicitly so the modal never renders blank
 
 ---
 
@@ -573,16 +724,16 @@ SVG icon library with consistent defaults (24x24 viewBox, stroke-based, `current
 
 | Icon | Usage |
 |---|---|
-| `RobotIcon` | Chat panel header, history loader, welcome message |
-| `CameraIcon` | Screenshot/image attachment indicator |
+| `RobotIcon` | Chat panel header, history loader, welcome message, `ChangeLog` "Agente" source icon |
+| `CameraIcon` | Screenshot/image attachment indicator, `SnapshotButton` ("Guardar versión") |
 | `PdfIcon` | PDF attachment indicator |
 | `FileIcon` | Generic file attachment indicator |
 | `LinkIcon` | Link input type in welcome message |
 | `ClipIcon` | Attachment button, drag-and-drop overlay |
 | `SendIcon` | Send button, "Enviar a SABBI" button |
-| `EditIcon` | Product card edit button |
-| `TrashIcon` | Product card delete button, delete confirmation |
-| `CheckIcon` | (Available for use) |
+| `EditIcon` | Product card edit button, admin catalog entry edit, `ChangeLog` "Manual" source icon |
+| `TrashIcon` | Product card delete button, delete confirmation, admin catalog entry delete |
+| `CheckIcon` | `ReadOnlyProductCard` "Aprobar al catálogo" / "Aprobado" button |
 | `PlusIcon` | Add product button, add asset class row |
 | `DownloadIcon` | Export button |
 | `PieIcon` | Empty portfolio state, summary view |
@@ -590,7 +741,7 @@ SVG icon library with consistent defaults (24x24 viewBox, stroke-based, `current
 | `XIcon` | Modal close button, remove attachment, remove composition row |
 | `InfoIcon` | (Available for use) |
 | `MinusIcon` | (Available for use) |
-| `WarningIcon` | Delete confirmation warning |
+| `WarningIcon` | Delete confirmation warning, `ChangeLog` "Admin" source icon |
 | `ChevronDownIcon` | (Available for use) |
 
 ### Loading States
@@ -670,10 +821,16 @@ See [Pages & Routes > /api/[...path]](#apipath----api-proxy-route) above. The pr
 
 **File:** `lib/portfolio-types.ts`
 
-Frontend mirror of the backend's `db/models.py`:
+Frontend mirror of the backend's `db/models.py`. The `subcategory` field and the `composition` name were removed -- products now carry an `underlying` asset-allocation array (still `{ name, percentage }[]`), and `category` uses full snake_case keys rather than the old short ones:
 
 ```typescript
-type Category = "directas" | "privados" | "club" | "publicos" | "otros" | "cash";
+type Category =
+  | "inversiones_directas"
+  | "mercados_privados"
+  | "club_deals"
+  | "mercados_publicos"
+  | "otros"
+  | "cash_y_equivalentes";
 
 interface AssetAllocation {
   name: string;
@@ -687,8 +844,16 @@ interface Product {
   provider: string;
   amount: number;
   category: Category;
-  subcategory: string;
-  composition: AssetAllocation[];
+  underlying: AssetAllocation[];
+  asset_class: string;
+  geographic_focus: string;
+  commission: string;
+  currency: string;
+  administrator: string;
+  manager: string;
+  liquidity: string;
+  return_rate: string;
+  catalog_product_id: number | null;
 }
 
 interface ProductCreateInput {
@@ -696,8 +861,7 @@ interface ProductCreateInput {
   provider?: string;
   amount: number;
   category: Category;
-  subcategory?: string;
-  composition: AssetAllocation[];
+  underlying: AssetAllocation[];
 }
 
 interface ProductUpdateInput {
@@ -705,8 +869,7 @@ interface ProductUpdateInput {
   provider?: string;
   amount?: number;
   category?: Category;
-  subcategory?: string;
-  composition?: AssetAllocation[];
+  underlying?: AssetAllocation[];
 }
 
 type FieldSource = "catalog" | "claude_knowledge" | "web_search";
@@ -721,10 +884,47 @@ interface EnrichedProposedProduct extends ProposedProduct {
   liquidity?: string;
   return_rate?: string;
   geographic_focus?: string;
-  subcategory?: string;
+  underlying?: { name: string; percentage: number }[];
+  catalog_product_id?: number | null;
   primary_source?: FieldSource;
   provenance?: ProvenanceMap;
   reliability_tag?: string;
+}
+
+/** A `product_catalog` row -- `GET /admin/catalog/entries`. */
+interface CatalogProduct {
+  id: number;
+  name: string;
+  geographic_focus: string;
+  asset_class: string;
+  underlying: AssetAllocation[];
+  commission: string;
+  currency: string;
+  administrator: string;
+  manager: string;
+  liquidity: string;
+  return_rate: string;
+  category: string;
+  alternative_names: string[];
+  approved_from_product_id: string | null;
+  approved_at: string | null;
+}
+
+/** Admin-submitted payload for `POST /admin/catalog/approve`. */
+interface CatalogProductCreate {
+  name: string;
+  category: string;
+  asset_class?: string;
+  geographic_focus?: string;
+  underlying?: AssetAllocation[];
+  commission?: string;
+  currency?: string;
+  administrator?: string;
+  manager?: string;
+  liquidity?: string;
+  return_rate?: string;
+  approved_from_product_id?: string | null;
+  catalog_product_id?: number | null;
 }
 ```
 
@@ -764,12 +964,12 @@ interface EnrichedProposedProduct extends ProposedProduct {
 
 | Category | Key | Accent | Badge BG | Badge Text |
 |---|---|---|---|---|
-| Inversiones directas | `directas` | `#c2410c` | `#fff7ed` | `#9a3412` |
-| Mercados privados | `privados` | `#7c3aed` | `#f5f3ff` | `#5b21b6` |
-| Club deals | `club` | `#0d9488` | `#f0fdfa` | `#115e59` |
-| Mercados publicos | `publicos` | `#2563eb` | `#eff6ff` | `#1e40af` |
+| Inversiones directas | `inversiones_directas` | `#c2410c` | `#fff7ed` | `#9a3412` |
+| Mercados privados | `mercados_privados` | `#7c3aed` | `#f5f3ff` | `#5b21b6` |
+| Club deals | `club_deals` | `#0d9488` | `#f0fdfa` | `#115e59` |
+| Mercados publicos | `mercados_publicos` | `#2563eb` | `#eff6ff` | `#1e40af` |
 | Otros | `otros` | `#d97706` | `#fffbeb` | `#92400e` |
-| Cash y equivalentes | `cash` | `#16a34a` | `#f0fdf4` | `#166534` |
+| Cash y equivalentes | `cash_y_equivalentes` | `#16a34a` | `#f0fdf4` | `#166534` |
 
 **Status colors:**
 
@@ -786,7 +986,7 @@ The `@theme inline` block maps CSS custom properties to Tailwind utility classes
 
 - `--color-sabbi-primary` -> `bg-sabbi-primary`, `text-sabbi-primary`, etc.
 - `--color-sabbi-green` -> `bg-sabbi-green`, `text-sabbi-green`, etc.
-- All category colors -> `bg-sabbi-cat-directas`, etc.
+- All category colors -> `bg-sabbi-cat-inversiones_directas`, etc.
 - All neutral grays -> `bg-sabbi-neutral-50` through `bg-sabbi-neutral-900`
 
 **Design tokens:**
@@ -836,6 +1036,9 @@ Both use `display: "swap"` and `subsets: ["latin"]`.
 | `animate-modal-overlay` | `modal-overlay-in` (fade in) | 180ms | Modal backdrop |
 | `animate-modal-panel` | `modal-panel-in` (scale 0.96 + slide up) | 200ms | Modal content |
 | `animate-slide-in-up` | `slide-in-up` (fade + slide up 12px) | 200ms | Toast notifications |
+| `animate-drawer-panel` | `drawer-panel-in` (slide in from right) | 220ms | `VersioningDrawer` right-side slide-over |
+| `animate-row-delete` | `row-fade-out` (red flash + fade + scale down) | 350ms | Admin catalog table row deletion |
+| `propose-card-highlight` | `card-highlight-pulse` (lime box-shadow pulse) | 1.5s x2 | Solo pending `ProposeProductCard` highlight |
 
 ### Assistant Markdown Styles
 
@@ -868,11 +1071,16 @@ CSS adjacency selectors on `.tool-result-item` merge consecutive tool result row
 
 ### Category Order and Metadata
 
-Six categories in fixed display order:
+Six categories in fixed display order, using the full snake_case keys the backend stores (renamed from the earlier short keys -- see [Legacy Category Aliases](#legacy-category-aliases) below):
 
 ```typescript
 const CATEGORY_ORDER: Category[] = [
-  "directas", "privados", "club", "publicos", "otros", "cash"
+  "inversiones_directas",
+  "mercados_privados",
+  "club_deals",
+  "mercados_publicos",
+  "otros",
+  "cash_y_equivalentes",
 ];
 ```
 
@@ -880,23 +1088,37 @@ Each category has full metadata (`CategoryMeta`) including label, short label, a
 
 ### Subcategory Taxonomy (3-Level)
 
-Mirrors the backend's taxonomy. Structure: `Category -> Group -> Leaf`.
+Mirrors the backend's taxonomy (`agent/state.py::CATEGORIES`). Structure: `Category -> Group -> Leaf`. Products no longer store a standalone `subcategory` field -- this taxonomy is now used purely to populate the composition-row dropdowns in `EditProductModal` and `ProposeProductCard` (via `CATEGORY_SUBCATEGORIES[category]`), where each selected leaf becomes one `underlying` entry.
 
 | Category | Groups | Leaves (examples) |
 |---|---|---|
-| `directas` | RE Peru, RE Extranjero | Residencial, Oficinas, Comercial/Industrial |
-| `privados` | Deuda Privada, Private Equity, VC, Real Estate, Hedge Funds, Infraestructura | (same as group) |
-| `club` | Real Estate, Deuda Privada, Otros | Peru, Extranjero |
-| `publicos` | Renta Variable, Renta Fija | US Large Cap, US Treasuries, IG Corporates, High Yield, EM Bonds, etc. |
+| `inversiones_directas` | RE Perú, RE Extranjero | Residencial, Oficinas, Comercial/Industrial |
+| `mercados_privados` | Deuda Privada, Private Equity, VC, Real Estate, Hedge Funds, Infraestructura | (same as group) |
+| `club_deals` | Real Estate, Deuda Privada, Otros | Perú, Extranjero |
+| `mercados_publicos` | Renta Variable, Renta Fija | US Large Cap, US Treasuries, IG Corporates, High Yield, EM Bonds, etc. |
 | `otros` | Cripto, Commodities | Bitcoin, Ethereum, Otras, Oro |
-| `cash` | Cash | Depositos a plazo, Fondos de Money Market |
+| `cash_y_equivalentes` | Cash | Depósitos a plazo, Fondos de Money Market |
+
+### Legacy Category Aliases
+
+`LABEL_TO_KEY` (built from `CATEGORY_META` labels, plus a few explicit lowercase-label entries) also includes the **old short keys** as legacy aliases, since existing database rows and older change-log/snapshot records may still carry them:
+
+```typescript
+"directas": "inversiones_directas",
+"privados": "mercados_privados",
+"club": "club_deals",
+"publicos": "mercados_publicos",
+"cash": "cash_y_equivalentes",
+```
+
+`resolveCategoryKey(value: string): Category` normalizes any known alias (or full label, case-insensitively) back to the current `Category` key, falling back to `"otros"` for anything unrecognized. It's used wherever a category value might come from older stored data -- e.g. `ChangeLog`'s before/after diffing, `SnapshotList`'s category-summary merge, and the admin portfolio view's product list.
 
 ### Helper Functions
 
 ```typescript
-categoryColorVar(category: Category): string   // e.g. "var(--sabbi-cat-directas)"
-categoryBgVar(category: Category): string       // e.g. "var(--sabbi-cat-directas-bg)"
-categoryTextVar(category: Category): string     // e.g. "var(--sabbi-cat-directas-text)"
+categoryColorVar(category: Category): string   // e.g. "var(--sabbi-cat-inversiones_directas)"
+categoryBgVar(category: Category): string       // e.g. "var(--sabbi-cat-inversiones_directas-bg)"
+categoryTextVar(category: Category): string     // e.g. "var(--sabbi-cat-inversiones_directas-text)"
 ```
 
 ---
@@ -908,8 +1130,10 @@ categoryTextVar(category: Category): string     // e.g. "var(--sabbi-cat-directa
 | Function | Input | Output Example | Usage |
 |---|---|---|---|
 | `formatUsd(amount)` | `150000` | `$150,000` | Product cards, tables |
-| `formatAbbreviatedUsd(amount)` | `1200000` | `$1.2M` | Metric cards, donut center |
+| `formatAbbreviatedUsd(amount)` | `1200000` | `$1.2M` | Metric cards, donut center, snapshot totals |
 | `formatAbbreviatedUsd(amount)` | `150000` | `$150K` | Metric cards |
+| `formatRelativeTime(iso)` | recent ISO timestamp | `"recién"`, `"hace 5m"`, `"hace 2h"` | `ChangeLog` / `VersioningBar` timestamps -- falls back to a short `es-PE` date once older than a day |
+| `formatDateTime(iso)` | ISO timestamp | `"14 jul 2026, 09:30"` | `SnapshotList`, `ComparisonView` full date/time labels (`es-PE`) |
 
 ---
 
@@ -926,7 +1150,7 @@ categoryTextVar(category: Category): string     // e.g. "var(--sabbi-cat-directa
 **`__tests__/propose-product-card.test.tsx`** -- Tests for `ProposeProductCard`:
 
 - Rendering with full fields (no missing-fields warning)
-- Missing subcategory shows warning and disables confirm
+- Missing `underlying` composition shows warning and disables confirm
 - Error result renders nothing
 - Editing amount clears validation warning
 - Confirm sends exact structured text and shows "Confirmado"
