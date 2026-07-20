@@ -491,7 +491,7 @@ function AssistantInner() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ChatPanel isLoadingHistory={isLoadingHistory} />
+      <ChatPanel isLoadingHistory={isLoadingHistory} userEmail={user?.email} />
     </AssistantRuntimeProvider>
   );
 }

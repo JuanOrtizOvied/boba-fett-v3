@@ -48,30 +48,38 @@ const HistoryLoader: FC = () => (
   </div>
 );
 
-export const ChatPanel: FC<{ isLoadingHistory?: boolean }> = ({
+export const ChatPanel: FC<{ isLoadingHistory?: boolean; userEmail?: string }> = ({
   isLoadingHistory,
+  userEmail,
 }) => {
   return (
     <div className="flex h-full min-h-0 min-w-[300px] flex-col border-r border-sabbi-neutral-200 bg-background">
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-sabbi-neutral-200 px-4 py-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full text-white" style={{ background: "var(--sabbi-green)" }}>
-          <RobotIcon size={16} />
-        </div>
-        <div className="flex flex-col">
-          <h3 className="text-[13.5px] font-medium text-sabbi-neutral-900">
-            Asistente SABBI
-          </h3>
-          <span
-            className="flex items-center gap-1 text-[11.5px]"
-            style={{ color: "var(--success)" }}
-          >
+      <div className="flex shrink-0 items-center justify-between border-b border-sabbi-neutral-200 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full text-white" style={{ background: "var(--sabbi-green)" }}>
+            <RobotIcon size={16} />
+          </div>
+          <div className="flex flex-col">
+            <h3 className="text-[13.5px] font-medium text-sabbi-neutral-900">
+              Asistente SABBI
+            </h3>
             <span
-              className="size-1.5 rounded-full"
-              style={{ background: "var(--success)" }}
-            />
-            En línea
-          </span>
+              className="flex items-center gap-1 text-[11.5px]"
+              style={{ color: "var(--success)" }}
+            >
+              <span
+                className="size-1.5 rounded-full"
+                style={{ background: "var(--success)" }}
+              />
+              En línea
+            </span>
+          </div>
         </div>
+        {userEmail && (
+          <span className="truncate text-xs text-sabbi-neutral-500" title={userEmail}>
+            {userEmail}
+          </span>
+        )}
       </div>
       {isLoadingHistory ? <HistoryLoader /> : <Thread />}
     </div>
