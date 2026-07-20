@@ -6,7 +6,8 @@ import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
 import { compositionColor } from "@/lib/compositionPalette";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { formatUsd } from "@/lib/format";
-import type { CatalogProduct, Category, Product } from "@/lib/portfolio-types";
+import { PlusIcon } from "@/components/icons/Icons";
+import type { AssetAllocation, CatalogProduct, Category, Product } from "@/lib/portfolio-types";
 
 /**
  * Not a Next.js route file (no `page`/`layout`/`route` export constraints
@@ -165,6 +166,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
   const [name, setName] = useState("");
   const [category, setCategory] = useState<Category>("inversiones_directas");
   const [enrichment, setEnrichment] = useState<EnrichmentFields>(EMPTY_ENRICHMENT);
+  const [underlying, setUnderlying] = useState<{ name: string; percentage: string }[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -182,6 +184,11 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
       liquidity: product.liquidity || "",
       returnRate: product.return_rate || "",
     });
+    setUnderlying(
+      product.underlying.length > 0
+        ? product.underlying.map((a) => ({ name: a.name, percentage: String(a.percentage) }))
+        : [{ name: "", percentage: "" }],
+    );
     setErrorMessage(null);
   }, [product]);
 
@@ -203,6 +210,10 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
+      const underlyingPayload: AssetAllocation[] = underlying
+        .filter((r) => r.name.trim() && r.percentage.trim())
+        .map((r) => ({ name: r.name.trim(), percentage: parseFloat(r.percentage) || 0 }));
+
       const res = await fetchWithAuth("/api/admin/catalog/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -211,6 +222,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
           category,
           asset_class: enrichment.assetClass.trim(),
           geographic_focus: enrichment.geographicFocus.trim(),
+          underlying: underlyingPayload,
           commission: enrichment.commission.trim(),
           currency: enrichment.currency.trim(),
           administrator: enrichment.administrator.trim(),
@@ -283,6 +295,11 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                 <ComparisonRow label="Clase de activo" currentValue={catalogEntry.asset_class} newValue={enrichment.assetClass}>
                   <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
                 </ComparisonRow>
+                <UnderlyingComparisonRow
+                  currentUnderlying={catalogEntry.underlying}
+                  rows={underlying}
+                  onChange={setUnderlying}
+                />
                 <ComparisonRow label="Foco geográfico" currentValue={catalogEntry.geographic_focus} newValue={enrichment.geographicFocus}>
                   <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
                 </ComparisonRow>
@@ -320,6 +337,9 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
               </ModalField>
               <ModalField label="Clase de activo">
                 <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
+              </ModalField>
+              <ModalField label="Composición subyacente">
+                <UnderlyingEditor rows={underlying} onChange={setUnderlying} />
               </ModalField>
               <ModalField label="Foco geográfico">
                 <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
@@ -384,6 +404,107 @@ const ModalField: FC<{ label: string; children: ReactNode }> = ({ label, childre
     {children}
   </label>
 );
+
+function formatUnderlying(items: AssetAllocation[]): string {
+  if (items.length === 0) return "—";
+  return items.map((a) => `${a.name} ${a.percentage}%`).join(", ");
+}
+
+type UnderlyingRow = { name: string; percentage: string };
+
+const UnderlyingEditor: FC<{
+  rows: UnderlyingRow[];
+  onChange: (rows: UnderlyingRow[]) => void;
+}> = ({ rows, onChange }) => {
+  const update = (i: number, field: "name" | "percentage", value: string) => {
+    const next = [...rows];
+    next[i] = { ...next[i], [field]: value };
+    onChange(next);
+  };
+  const remove = (i: number) => onChange(rows.filter((_, idx) => idx !== i));
+  const add = () => onChange([...rows, { name: "", percentage: "" }]);
+  const total = rows.reduce((s, r) => s + (parseFloat(r.percentage) || 0), 0);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rows.map((row, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            placeholder="Nombre"
+            value={row.name}
+            onChange={(e) => update(i, "name", e.target.value)}
+            className={`${modalInputClass} flex-1`}
+          />
+          <input
+            placeholder="%"
+            value={row.percentage}
+            onChange={(e) => update(i, "percentage", e.target.value)}
+            className={`${modalInputClass} w-16 text-right`}
+          />
+          {rows.length > 1 && (
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-400 hover:bg-red-50 hover:text-red-500"
+            >
+              <XIcon size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={add}
+          className="flex items-center gap-1 text-xs font-medium text-sabbi-primary hover:underline"
+        >
+          <PlusIcon size={12} />
+          Agregar
+        </button>
+        <span className={`text-xs font-medium ${Math.abs(total - 100) < 0.5 ? "text-emerald-600" : "text-amber-600"}`}>
+          {total.toFixed(1)}%
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const UnderlyingComparisonRow: FC<{
+  currentUnderlying: AssetAllocation[];
+  rows: UnderlyingRow[];
+  onChange: (rows: UnderlyingRow[]) => void;
+}> = ({ currentUnderlying, rows, onChange }) => {
+  const currentStr = formatUnderlying(currentUnderlying);
+  const newItems = rows.filter((r) => r.name.trim() && r.percentage.trim());
+  const newStr = newItems.length > 0
+    ? newItems.map((r) => `${r.name.trim()} ${parseFloat(r.percentage) || 0}%`).join(", ")
+    : "—";
+  const hasChanged = currentStr !== newStr;
+
+  return (
+    <div
+      className={`grid grid-cols-2 gap-4 px-5 py-3 transition-colors ${
+        hasChanged ? "border-l-3 border-l-amber-400 bg-amber-50/40" : ""
+      }`}
+    >
+      <div className="flex flex-col gap-1">
+        <span className="flex items-center gap-2 text-xs font-medium text-sabbi-neutral-500">
+          Composición subyacente
+          {hasChanged && (
+            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">
+              Modificado
+            </span>
+          )}
+        </span>
+        <UnderlyingEditor rows={rows} onChange={onChange} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-sabbi-neutral-500">Valor actual</span>
+        <span className="text-sm text-sabbi-neutral-600">{currentStr}</span>
+      </div>
+    </div>
+  );
+};
 
 const ComparisonRow: FC<{
   label: string;

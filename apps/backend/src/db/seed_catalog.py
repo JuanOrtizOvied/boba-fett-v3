@@ -7,6 +7,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import sys
 
@@ -15,6 +16,7 @@ from openpyxl import load_workbook
 from db.connection import close_pool, get_pool
 
 _ZW_RE = re.compile(r"[​‌‍﻿]")
+_PCT_RE = re.compile(r"(.+?)\s+([\d.]+)%")
 
 
 def _clean(value: object) -> str:
@@ -22,6 +24,23 @@ def _clean(value: object) -> str:
         return ""
     text = str(value).strip()
     return _ZW_RE.sub("", text)
+
+
+def _parse_underlying(text: str) -> str:
+    """Parse 'Name1 X%, Name2 Y%' into JSON array of {name, percentage}."""
+    cleaned = _clean(text)
+    if not cleaned:
+        return "[]"
+    parts = [p.strip() for p in re.split(r",(?![^(]*\))", cleaned) if p.strip()]
+    result = []
+    for part in parts:
+        part = part.strip().rstrip(",")
+        m = _PCT_RE.match(part)
+        if m:
+            name = m.group(1).strip().rstrip(",")
+            pct = float(m.group(2))
+            result.append({"name": name, "percentage": pct})
+    return json.dumps(result)
 
 
 async def seed(path: str) -> int:
@@ -38,24 +57,27 @@ async def seed(path: str) -> int:
 
         count = 0
         for row in rows:
-            if not row or not row[0]:
+            if not row or not row[1]:
+                continue
+            name = _clean(row[1])
+            if not name:
                 continue
             await conn.execute(
                 """INSERT INTO product_catalog
                    (name, geographic_focus, asset_class, underlying,
                     commission, currency, administrator, manager,
                     liquidity, return_rate)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
-                _clean(row[0]),
-                _clean(row[1]),
+                   VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)""",
+                name,
                 _clean(row[2]),
                 _clean(row[3]),
-                _clean(row[4]),
+                _parse_underlying(row[4]),
                 _clean(row[5]),
                 _clean(row[6]),
                 _clean(row[7]),
                 _clean(row[8]),
                 _clean(row[9]),
+                _clean(row[10]) if len(row) > 10 else "",
             )
             count += 1
 

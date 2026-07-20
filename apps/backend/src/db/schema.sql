@@ -77,6 +77,15 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Backfill: copy underlying from source products into catalog entries that have none
+UPDATE product_catalog pc
+SET underlying = p.underlying
+FROM products p
+WHERE pc.approved_from_product_id = p.id
+  AND (pc.underlying IS NULL OR pc.underlying = '[]'::jsonb)
+  AND p.underlying IS NOT NULL
+  AND p.underlying != '[]'::jsonb;
+
 CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
 CREATE INDEX IF NOT EXISTS idx_products_catalog_product_id ON products (catalog_product_id);
 
