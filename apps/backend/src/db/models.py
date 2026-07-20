@@ -3,11 +3,11 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AssetAllocation(BaseModel):
-    name: str = Field(description="Asset class name, e.g. 'Deuda privada'")
+    name: str = Field(description="Canonical subcategory leaf, e.g. 'Deuda Privada', 'Renta Variable US Large Cap'")
     percentage: float = Field(ge=0, le=100)
 
 
@@ -50,6 +50,14 @@ class ProductCreate(BaseModel):
     return_rate: str = ""
     catalog_product_id: int | None = None
 
+    @model_validator(mode="after")
+    def _composition_sums_to_100(self) -> ProductCreate:
+        if self.composition:
+            total = sum(a.percentage for a in self.composition)
+            if abs(total - 100) >= 0.5:
+                raise ValueError(f"Composition must sum to 100% (got {total:.1f}%)")
+        return self
+
 
 class ProductUpdate(BaseModel):
     name: str | None = None
@@ -68,6 +76,14 @@ class ProductUpdate(BaseModel):
     liquidity: str | None = None
     return_rate: str | None = None
     catalog_product_id: int | None = None
+
+    @model_validator(mode="after")
+    def _composition_sums_to_100(self) -> ProductUpdate:
+        if self.composition is not None and self.composition:
+            total = sum(a.percentage for a in self.composition)
+            if abs(total - 100) >= 0.5:
+                raise ValueError(f"Composition must sum to 100% (got {total:.1f}%)")
+        return self
 
 
 class SnapshotCreate(BaseModel):

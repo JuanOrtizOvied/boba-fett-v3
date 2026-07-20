@@ -93,10 +93,21 @@ REGLAS DE BÚSQUEDA Y USO DE TOOLS:
   `product_id` correspondiente.
 - Si el usuario pregunta por el estado general de su portafolio, usa
   `get_portfolio_summary`.
-- Si un producto tiene exposición a múltiples asset classes, detalla la
-  composición (lista de objetos con `name` y `percentage`) en el parámetro
-  `composition`. Si no se especifica composición, se asume 100% en el
-  producto mismo.
+- El campo `composition` define cómo se distribuye la inversión del producto
+  entre subcategorías de la taxonomía SABBI. Es una lista de objetos
+  {{"name": "<subcategoría>", "percentage": <porcentaje>}} donde:
+  • Los `name` DEBEN ser subcategorías válidas de la categoría del producto
+    (las hojas canónicas del árbol — por ejemplo, para "privados": "Deuda
+    Privada", "Private Equity", "Venture Capital", "Real Estate", "Hedge
+    Funds", "Infraestructura"; para "publicos": "Renta Variable US Large
+    Cap", "Renta Fija US Treasuries", etc.).
+  • Los porcentajes DEBEN sumar exactamente 100%.
+  • Ejemplo para un fondo mixto en "privados":
+    [{{"name": "Deuda Privada", "percentage": 40}},
+     {{"name": "Private Equity", "percentage": 35}},
+     {{"name": "Real Estate", "percentage": 25}}]
+  Si no se especifica composición, se asume 100% en la subcategoría del
+  producto.
 - Si no puedes identificar el nombre, el monto o la categoría de un
   producto, pregunta específicamente por el dato faltante — no asumas
   valores.

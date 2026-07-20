@@ -91,6 +91,7 @@ export interface EnrichedProposedProduct extends ProposedProduct {
   return_rate?: string;
   geographic_focus?: string;
   subcategory?: string;
+  composition?: { name: string; percentage: number }[];
   catalog_product_id?: number | null;
   primary_source?: FieldSource;
   provenance?: ProvenanceMap;

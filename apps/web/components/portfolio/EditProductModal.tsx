@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, type FC, type ReactNode } from "react";
-import { PlusIcon, XIcon } from "@/components/icons/Icons";
+import { XIcon } from "@/components/icons/Icons";
 import { useToast } from "@/components/ui/Toast";
-import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
+import { CATEGORY_META, CATEGORY_ORDER, CATEGORY_SUBCATEGORIES } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { AssetAllocation, Category, Product } from "@/lib/portfolio-types";
 
@@ -26,21 +26,24 @@ interface CompositionRow {
 
 let rowKeySeq = 0;
 const nextRowKey = () => `row-${++rowKeySeq}`;
-const emptyRow = (): CompositionRow => ({ key: nextRowKey(), name: "", percentage: "" });
+
+interface SubcategoryOption {
+  value: string;
+  group: string;
+}
+
+function getSubcategoryLeaves(category: Category): SubcategoryOption[] {
+  return (CATEGORY_SUBCATEGORIES[category] ?? []).flatMap(({ group, leaves }) =>
+    leaves.map((leaf) => ({
+      value: leaf === group ? leaf : `${group} ${leaf}`,
+      group,
+    })),
+  );
+}
 
 const inputClass =
   "rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
 
-/**
- * Two-column overlay modal for creating/editing a product. Closes on
- * Escape or overlay click without persisting changes. Validates required
- * fields and shows a real-time (non-blocking) percentage-total indicator.
- * `product-cards-crud.spec.md` → "Editar producto abre modal de dos columnas",
- * "Validación de porcentajes en modal de edición", "Agregar/Eliminar asset
- * class en modal de edición", "Guardar cambios en modal de edición",
- * "Cancelar edición en modal", "Validación de campos requeridos al guardar",
- * "Agregar producto manualmente", "CRUD manual via REST API (sin LLM)".
- */
 export const EditProductModal: FC<EditProductModalProps> = ({
   isOpen,
   product,
@@ -55,7 +58,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   const [provider, setProvider] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<Category>(defaultCategory ?? "directas");
-  const [rows, setRows] = useState<CompositionRow[]>([emptyRow()]);
+  const [rows, setRows] = useState<CompositionRow[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -74,14 +77,14 @@ export const EditProductModal: FC<EditProductModalProps> = ({
               name: a.name,
               percentage: String(a.percentage),
             }))
-          : [emptyRow()],
+          : [],
       );
     } else {
       setName("");
       setProvider("");
       setAmount("");
       setCategory(defaultCategory ?? "directas");
-      setRows([emptyRow()]);
+      setRows([]);
     }
   }, [isOpen, product, defaultCategory]);
 
@@ -97,23 +100,42 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   if (!isOpen) return null;
 
   const total = rows.reduce((sum, row) => sum + (parseFloat(row.percentage) || 0), 0);
-  const isTotalValid = Math.abs(total - 100) < 0.01;
+  const isTotalValid = rows.length > 0 && Math.abs(total - 100) < 0.5;
 
   const updateRow = (key: string, patch: Partial<CompositionRow>) => {
     setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   };
 
-  const addRow = () => setRows((prev) => [...prev, emptyRow()]);
-  const removeRow = (key: string) =>
-    setRows((prev) => (prev.length > 1 ? prev.filter((row) => row.key !== key) : prev));
+  const removeRow = (key: string) => setRows((prev) => prev.filter((row) => row.key !== key));
+
+  const allLeaves = getSubcategoryLeaves(category);
+  const usedNames = new Set(rows.map((r) => r.name));
+  const selectableLeaves = allLeaves.filter((l) => !usedNames.has(l.value));
+
+  const groupedSelectable = selectableLeaves.reduce<Record<string, SubcategoryOption[]>>(
+    (acc, leaf) => {
+      (acc[leaf.group] ??= []).push(leaf);
+      return acc;
+    },
+    {},
+  );
+
+  const addLeaf = (value: string) => {
+    setRows((prev) => [...prev, { key: nextRowKey(), name: value, percentage: "" }]);
+  };
+
+  const handleCategoryChange = (next: Category) => {
+    setCategory(next);
+    setRows([]);
+  };
 
   const handleSave = async () => {
     setFormError(null);
     const trimmedName = name.trim();
     const parsedAmount = parseFloat(amount);
     const composition: AssetAllocation[] = rows
-      .filter((row) => row.name.trim() && parseFloat(row.percentage) > 0)
-      .map((row) => ({ name: row.name.trim(), percentage: parseFloat(row.percentage) }));
+      .filter((row) => parseFloat(row.percentage) > 0)
+      .map((row) => ({ name: row.name, percentage: parseFloat(row.percentage) }));
 
     if (!trimmedName) {
       setFormError("Ingresa un nombre");
@@ -124,7 +146,12 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       return;
     }
     if (composition.length === 0) {
-      setFormError("Agrega al menos un asset class");
+      setFormError("Agrega al menos una subcategoría a la composición");
+      return;
+    }
+    const compositionTotal = composition.reduce((s, c) => s + c.percentage, 0);
+    if (Math.abs(compositionTotal - 100) >= 0.5) {
+      setFormError(`La composición debe sumar 100% (actual: ${compositionTotal.toFixed(1)}%)`);
       return;
     }
 
@@ -214,7 +241,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
             <Field label="Categoría">
               <select
                 value={category}
-                onChange={(event) => setCategory(event.target.value as Category)}
+                onChange={(event) => handleCategoryChange(event.target.value as Category)}
                 className={inputClass}
               >
                 {CATEGORY_ORDER.map((cat) => (
@@ -228,52 +255,80 @@ export const EditProductModal: FC<EditProductModalProps> = ({
 
           <div className="flex flex-col gap-3">
             <p className="text-xs font-semibold tracking-wide text-sabbi-neutral-600 uppercase">
-              Composición por asset class
+              Composición por subcategoría
             </p>
-            <div className="flex flex-col gap-2">
-              {rows.map((row) => (
-                <div key={row.key} className="flex items-center gap-2">
-                  <input
-                    placeholder="Nombre"
-                    value={row.name}
-                    onChange={(event) => updateRow(row.key, { name: event.target.value })}
-                    className={`${inputClass} flex-1`}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="%"
-                    value={row.percentage}
-                    onChange={(event) =>
-                      updateRow(row.key, { percentage: event.target.value })
-                    }
-                    className={`${inputClass} w-20`}
-                  />
-                  <button
-                    type="button"
-                    aria-label="Eliminar fila"
-                    onClick={() => removeRow(row.key)}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100"
-                  >
-                    <XIcon size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={addRow}
-              className="flex w-fit items-center gap-1.5 rounded-lg border border-dashed border-sabbi-neutral-300 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-600 hover:border-sabbi-primary hover:text-sabbi-primary"
-            >
-              <PlusIcon size={14} />
-              Agregar asset class
-            </button>
-            <p
-              className={`text-sm font-medium ${isTotalValid ? "text-emerald-600" : "text-red-600"}`}
-            >
-              Total: {total.toFixed(1)}%
-            </p>
+
+            {selectableLeaves.length > 0 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) addLeaf(e.target.value);
+                }}
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  Agregar subcategoría...
+                </option>
+                {Object.entries(groupedSelectable).map(([group, leaves]) => (
+                  <optgroup key={group} label={group}>
+                    {leaves.map((leaf) => (
+                      <option key={leaf.value} value={leaf.value}>
+                        {leaf.value}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            )}
+
+            {rows.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {rows.map((row) => (
+                  <div key={row.key} className="flex items-center gap-2">
+                    <span className="flex-1 truncate text-sm font-medium text-sabbi-neutral-900">
+                      {row.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="any"
+                        placeholder="%"
+                        value={row.percentage}
+                        onChange={(event) =>
+                          updateRow(row.key, { percentage: event.target.value })
+                        }
+                        className={`${inputClass} w-20 text-right`}
+                      />
+                      <span className="text-xs text-sabbi-neutral-500">%</span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Eliminar ${row.name}`}
+                      onClick={() => removeRow(row.key)}
+                      className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100"
+                    >
+                      <XIcon size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {rows.length === 0 && (
+              <p className="text-xs text-sabbi-neutral-500">
+                Selecciona subcategorías para definir la composición del producto.
+              </p>
+            )}
+
+            {rows.length > 0 && (
+              <p
+                className={`text-sm font-medium ${isTotalValid ? "text-emerald-600" : "text-red-600"}`}
+              >
+                Total: {total.toFixed(1)}%
+              </p>
+            )}
           </div>
         </div>
 

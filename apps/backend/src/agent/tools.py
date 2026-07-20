@@ -138,7 +138,13 @@ async def propose_product(
         category: Category key, one of: directas, privados, club,
             publicos, otros, cash.
         provider: Provider or fund manager name.
-        composition: List of {name, percentage} asset class allocations.
+        composition: List of {name, percentage} subcategory allocations.
+            Names MUST be canonical subcategory leaves from the CATEGORIES
+            taxonomy for the chosen category. Use the leaf name when it equals
+            the group name (e.g. 'Deuda Privada', 'Private Equity') or
+            '{group} {leaf}' when they differ (e.g. 'Renta Variable US Large
+            Cap', 'Renta Fija US Treasuries', 'RE Perú Residencial').
+            Percentages MUST sum to 100.
         asset_class: Asset class, from search_product if available.
         currency: Currency, from search_product if available.
         commission: Commission/fee, from search_product if available.
@@ -166,7 +172,7 @@ async def propose_product(
             "amount": amount,
             "category": _normalize_category_key(category),
             "provider": provider,
-            "composition": composition or [{"name": name, "percentage": 100}],
+            "composition": composition or [{"name": subcategory or name, "percentage": 100}],
             "asset_class": asset_class,
             "currency": currency,
             "commission": commission,
@@ -213,8 +219,13 @@ async def add_product(
         category: Category key, one of: directas, privados, club,
             publicos, otros, cash.
         provider: Provider or fund manager name.
-        composition: List of {name, percentage} asset class allocations. When
-            omitted, the product is treated as 100% allocated to itself.
+        composition: List of {name, percentage} subcategory allocations.
+            Names MUST be canonical subcategory leaves from the CATEGORIES
+            taxonomy for the chosen category. Use the leaf name when it equals
+            the group name (e.g. 'Deuda Privada') or '{group} {leaf}' when
+            they differ (e.g. 'Renta Variable US Large Cap').
+            Percentages MUST sum to 100. When omitted, defaults to 100%
+            allocated to the subcategory if provided.
         subcategory: Taxonomy leaf subcategory (e.g. 'Real Estate Extranjero').
         asset_class: Asset class, from search_product if available.
         currency: Currency, from search_product if available.
@@ -230,7 +241,7 @@ async def add_product(
     """
     repo = await _repository()
     user_id = _user_id(config)
-    comp = _to_composition(composition or [{"name": name, "percentage": 100}])
+    comp = _to_composition(composition or [{"name": subcategory or name, "percentage": 100}])
     product = await repo.create(
         user_id,
         ProductCreate(

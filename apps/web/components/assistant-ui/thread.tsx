@@ -835,6 +835,20 @@ export function ProposalBatchProvider({ children }: { children: React.ReactNode 
 const proposalInputClass =
   "w-full rounded-md border border-sabbi-neutral-200 bg-white px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none transition-colors focus:border-sabbi-primary";
 
+interface SubcategoryOption {
+  value: string;
+  group: string;
+}
+
+function getSubcategoryLeaves(category: Category): SubcategoryOption[] {
+  return (CATEGORY_SUBCATEGORIES[category] ?? []).flatMap(({ group, leaves }) =>
+    leaves.map((leaf) => ({
+      value: leaf === group ? leaf : `${group} ${leaf}`,
+      group,
+    })),
+  );
+}
+
 const RELIABILITY_BADGE: Record<string, { label: string; className: string }> = {
   verified: {
     label: "Catálogo SABBI ✓",
@@ -926,29 +940,66 @@ export function ProposeProductCard({
   const [provider, setProvider] = useState(product?.provider ?? "");
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
   const [category, setCategory] = useState<Category>(resolveCategoryKey(product?.category ?? "cash"));
-  const [subcategory, setSubcategory] = useState(product?.subcategory ?? "");
+  const [compRows, setCompRows] = useState<{ key: string; name: string; percentage: string }[]>(() => {
+    if (product?.composition && Array.isArray(product.composition) && product.composition.length > 0) {
+      return product.composition.map((c: { name: string; percentage: number }, i: number) => ({
+        key: `row-${i}`,
+        name: c.name,
+        percentage: String(c.percentage),
+      }));
+    }
+    if (product?.subcategory) {
+      return [{ key: "row-0", name: product.subcategory, percentage: "100" }];
+    }
+    return [];
+  });
+  let compRowSeq = useRef(compRows.length);
   const catalogProductId = product?.catalog_product_id;
+
+  const compTotal = compRows.reduce((s, r) => s + (parseFloat(r.percentage) || 0), 0);
+  const isCompValid = compRows.length > 0 && Math.abs(compTotal - 100) < 0.5;
+
+  const allLeaves = getSubcategoryLeaves(category);
+  const usedNames = new Set(compRows.map((r) => r.name));
+  const selectableLeaves = allLeaves.filter((l) => !usedNames.has(l.value));
+  const groupedSelectable = selectableLeaves.reduce<Record<string, SubcategoryOption[]>>(
+    (acc, leaf) => {
+      (acc[leaf.group] ??= []).push(leaf);
+      return acc;
+    },
+    {},
+  );
+
+  const addCompLeaf = (value: string) => {
+    compRowSeq.current += 1;
+    setCompRows((prev) => [...prev, { key: `row-${compRowSeq.current}`, name: value, percentage: "" }]);
+  };
+  const updateCompRow = (key: string, patch: Partial<{ name: string; percentage: string }>) => {
+    setCompRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  };
+  const removeCompRow = (key: string) => setCompRows((prev) => prev.filter((r) => r.key !== key));
 
   const parsedAmount = parseFloat(amount);
   const missingFields: string[] = [];
   if (!name.trim()) missingFields.push("nombre");
   if (isNaN(parsedAmount) || parsedAmount <= 0) missingFields.push("monto");
-  if (!subcategory.trim()) missingFields.push("subcategoría");
+  if (!isCompValid) missingFields.push("composición (debe sumar 100%)");
   const isValid = missingFields.length === 0;
 
   const handleConfirm = useCallback(() => {
     const amt = parseFloat(amount);
-    if (!name.trim() || isNaN(amt) || amt <= 0 || !subcategory.trim()) return;
+    if (!name.trim() || isNaN(amt) || amt <= 0 || !isCompValid) return;
     setLocalResponded("yes");
     _globalRespondedIds.add(cardId);
     _globalResponses.set(cardId, "yes");
     batchRef.current?.respondedIds.add(cardId);
     const categoryLabel = CATEGORY_META[category]?.label ?? category;
+    const compStr = compRows.map((r) => `${r.name}: ${r.percentage}%`).join(", ");
     const parts: string[] = [
       `nombre: ${name}`,
       `monto: ${amt}`,
       `categoría: ${categoryLabel}`,
-      `subcategory: ${subcategory}`,
+      `composición: [${compStr}]`,
     ];
     if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
     if (catalogProductId != null) parts.push(`catalog_product_id: ${catalogProductId}`);
@@ -956,7 +1007,7 @@ export function ProposeProductCard({
       role: "user",
       content: [{ type: "text", text: `Sí, agregar al portafolio con: ${parts.join(", ")}.` }],
     });
-  }, [name, amount, category, subcategory, provider, catalogProductId, runtime, cardId]);
+  }, [name, amount, category, compRows, isCompValid, provider, catalogProductId, runtime, cardId]);
 
   const handleReject = () => {
     setLocalResponded("no");
@@ -980,7 +1031,7 @@ export function ProposeProductCard({
       name,
       amount: parsedAmount,
       category,
-      subcategory,
+      subcategory: compRows.length === 1 ? compRows[0].name : "",
       provider,
       isValid,
       missingFields,
@@ -990,14 +1041,15 @@ export function ProposeProductCard({
       markDone: () => setLocalResponded("yes"),
       getText: () => {
         const catLabel = CATEGORY_META[category]?.label ?? category;
-        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${catLabel}`, `subcategory: ${subcategory}`];
+        const compStr = compRows.map((r) => `${r.name}: ${r.percentage}%`).join(", ");
+        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${catLabel}`, `composición: [${compStr}]`];
         if (provider.trim()) p.push(`proveedor: ${provider.trim()}`);
         if (catalogProductId != null) p.push(`catalog_product_id: ${catalogProductId}`);
         return p.join(", ");
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, product, name, parsedAmount, category, subcategory, provider, catalogProductId, isValid, responded]);
+  }, [cardId, product, name, parsedAmount, category, compRows, isCompValid, provider, catalogProductId, isValid, responded]);
 
   if (!product) return null;
 
@@ -1006,12 +1058,11 @@ export function ProposeProductCard({
 
   const provenance = product.provenance;
   const autoClassified = Boolean(product.subcategory);
-  const subcategoryGroups = CATEGORY_SUBCATEGORIES[category] ?? [];
   const enrichedFields = ENRICHED_FIELDS.filter(({ key }) => product[key]);
 
   const handleCategoryChange = (next: Category) => {
     setCategory(next);
-    setSubcategory("");
+    setCompRows([]);
   };
 
   const editable = responded === null;
@@ -1109,9 +1160,9 @@ export function ProposeProductCard({
           </label>
         </div>
 
-        <label className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           <span className="flex items-center gap-1.5 text-[11px] font-medium text-sabbi-neutral-500">
-            Subcategoría
+            Composición por subcategoría
             {autoClassified ? (
               <span className="rounded-full bg-sabbi-primary-soft px-1.5 py-0.5 text-[9px] font-semibold text-sabbi-primary">
                 Auto-clasificado
@@ -1119,31 +1170,76 @@ export function ProposeProductCard({
             ) : null}
           </span>
           {editable ? (
-            <select
-              value={subcategory}
-              onChange={(e) => setSubcategory(e.target.value)}
-              className={`${proposalInputClass} ${!subcategory.trim() ? "ring-2 ring-amber-400" : ""}`}
-            >
-              <option value="" disabled>
-                Seleccionar subcategoría
-              </option>
-              {subcategoryGroups.map(({ group, leaves }) => (
-                <optgroup key={group} label={group}>
-                  {leaves.map((leaf) => {
-                    const val = leaf === group ? leaf : `${group} ${leaf}`;
-                    return (
-                      <option key={leaf} value={val}>
-                        {val}
-                      </option>
-                    );
-                  })}
-                </optgroup>
-              ))}
-            </select>
+            <>
+              {selectableLeaves.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => { if (e.target.value) addCompLeaf(e.target.value); }}
+                  className={`${proposalInputClass} ${compRows.length === 0 ? "ring-2 ring-amber-400" : ""}`}
+                >
+                  <option value="" disabled>Agregar subcategoría...</option>
+                  {Object.entries(groupedSelectable).map(([group, leaves]) => (
+                    <optgroup key={group} label={group}>
+                      {leaves.map((leaf) => (
+                        <option key={leaf.value} value={leaf.value}>{leaf.value}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              )}
+              {compRows.length > 0 && (
+                <div className="flex flex-col gap-1.5 pt-1">
+                  {compRows.map((row) => (
+                    <div key={row.key} className="flex items-center gap-1.5">
+                      <span className="flex-1 truncate text-xs font-medium text-sabbi-neutral-800">{row.name}</span>
+                      <div className="flex items-center gap-0.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="any"
+                          placeholder="%"
+                          value={row.percentage}
+                          onChange={(e) => updateCompRow(row.key, { percentage: e.target.value })}
+                          className={`${proposalInputClass} w-16 text-right`}
+                        />
+                        <span className="text-[10px] text-sabbi-neutral-500">%</span>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Eliminar ${row.name}`}
+                        onClick={() => removeCompRow(row.key)}
+                        className="flex size-5 shrink-0 items-center justify-center rounded text-sabbi-neutral-400 hover:bg-sabbi-neutral-100 hover:text-sabbi-neutral-600"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <p className={`text-xs font-medium ${isCompValid ? "text-emerald-600" : "text-red-500"}`}>
+                    Total: {compTotal.toFixed(1)}%
+                  </p>
+                </div>
+              )}
+              {compRows.length === 0 && (
+                <p className="text-[10px] text-sabbi-neutral-400">
+                  Selecciona subcategorías para definir la composición.
+                </p>
+              )}
+            </>
           ) : (
-            <span className="text-sm text-sabbi-neutral-700">{subcategory || "—"}</span>
+            <div className="flex flex-col gap-0.5">
+              {compRows.length > 0 ? (
+                compRows.map((row) => (
+                  <span key={row.key} className="text-sm text-sabbi-neutral-700">
+                    {row.name}: {row.percentage}%
+                  </span>
+                ))
+              ) : (
+                <span className="text-sm text-sabbi-neutral-700">—</span>
+              )}
+            </div>
           )}
-        </label>
+        </div>
 
         {enrichedFields.length > 0 ? (
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-sabbi-neutral-100 pt-2.5">
