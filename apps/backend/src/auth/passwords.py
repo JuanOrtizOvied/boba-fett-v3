@@ -8,13 +8,15 @@ only `hash_password()` output is stored in `users.password_hash`
 
 from __future__ import annotations
 
+import os
+
 import bcrypt
+
+BCRYPT_ROUNDS = int(os.environ.get("BCRYPT_ROUNDS", "10"))
 
 
 def hash_password(plain_password: str) -> str:
-    """Hash a plaintext password with bcrypt, returning a UTF-8 string
-    suitable for storage in `users.password_hash`."""
-    salt = bcrypt.gensalt()
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     hashed = bcrypt.hashpw(plain_password.encode("utf-8"), salt)
     return hashed.decode("utf-8")
 
