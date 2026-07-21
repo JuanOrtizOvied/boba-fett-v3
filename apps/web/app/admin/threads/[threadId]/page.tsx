@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FC } from "react";
+import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -128,6 +128,92 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+// -- Product confirmation table (mirrors thread.tsx UserTextPart) ----------
+
+type ParsedProduct = {
+  nombre: string;
+  monto: string;
+  categoría: string;
+  proveedor?: string;
+};
+
+function parseProductLine(line: string): ParsedProduct | null {
+  const fields: Record<string, string> = {};
+  for (const pair of line.split(/,\s*/)) {
+    const idx = pair.indexOf(":");
+    if (idx === -1) continue;
+    fields[pair.slice(0, idx).trim().toLowerCase()] = pair.slice(idx + 1).trim();
+  }
+  if (!fields.nombre || !fields.monto) return null;
+  return {
+    nombre: fields.nombre,
+    monto: fields.monto,
+    categoría: fields["categoría"] ?? "",
+    proveedor: fields.proveedor,
+  };
+}
+
+function formatAmount(raw: string): string {
+  const num = parseFloat(raw);
+  if (isNaN(num)) return raw;
+  return `$${num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function categoryCssVars(cat: string) {
+  const key = cat.toLowerCase().trim();
+  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  if (!meta) return { bg: "rgba(255,255,255,0.15)", text: "white" };
+  return { bg: `var(${meta.bgCssVar})`, text: `var(${meta.textCssVar})` };
+}
+
+function categoryShortLabel(cat: string): string {
+  const key = cat.toLowerCase().trim();
+  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  return meta?.shortLabel ?? cat;
+}
+
+const PortfolioConfirmTable: FC<{ products: ParsedProduct[]; header: string }> = ({ products, header }) => (
+  <div className="flex flex-col gap-2">
+    <span className="text-sm font-medium">{header}</span>
+    <div className="overflow-hidden rounded-lg border border-white/20 bg-white/[.08]">
+      {products.map((p, i) => {
+        const vars = categoryCssVars(p.categoría);
+        return (
+          <div
+            key={i}
+            className={`flex items-center gap-3 px-3 py-2 text-xs ${i > 0 ? "border-t border-white/10" : ""}`}
+          >
+            <span
+              className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight"
+              style={{ backgroundColor: vars.bg, color: vars.text }}
+            >
+              {categoryShortLabel(p.categoría)}
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">{p.nombre}</span>
+            <span className="shrink-0 tabular-nums font-semibold">{formatAmount(p.monto)}</span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+function renderUserText(text: string): React.ReactNode {
+  const bulkMatch = text.match(/^(Sí, agregar todos al portafolio):\n([\s\S]+)/);
+  if (bulkMatch) {
+    const products = bulkMatch[2].split("\n").map(parseProductLine).filter(Boolean) as ParsedProduct[];
+    if (products.length > 0) return <PortfolioConfirmTable products={products} header={bulkMatch[1]} />;
+  }
+
+  const singleMatch = text.match(/^(Sí, agregar al portafolio) con: (.+)\.$/);
+  if (singleMatch) {
+    const product = parseProductLine(singleMatch[2]);
+    if (product) return <PortfolioConfirmTable products={[product]} header={singleMatch[1]} />;
+  }
+
+  return <p className="whitespace-pre-wrap text-sm">{text}</p>;
+}
+
 // -- Content extraction ---------------------------------------------------
 
 function extractTextBlocks(content: AdminThreadMessage["content"]): string {
@@ -150,22 +236,6 @@ function extractThinking(content: AdminThreadMessage["content"]): string {
     .filter((b) => b.type === "thinking" && b.thinking)
     .map((b) => b.thinking!)
     .join("\n");
-}
-
-function getAttachmentLabels(content: AdminThreadMessage["content"]): string[] {
-  if (!Array.isArray(content)) return [];
-  const labels: string[] = [];
-  for (const b of content) {
-    if (b.type === "image") labels.push(b.title ?? "Imagen");
-    else if (b.type === "document")
-      labels.push(b.title ?? b.source?.media_type ?? "Documento");
-    else if (b.type === "file") labels.push(b.title ?? "Archivo");
-    else if (b.type === "text" && b.text?.startsWith("[Archivo adjunto")) {
-      const match = b.text.match(/\[Archivo adjunto: (.+)\]/);
-      labels.push(match?.[1] ?? "Archivo");
-    }
-  }
-  return labels;
 }
 
 function parseJson<T>(raw: unknown): T | null {
@@ -277,37 +347,87 @@ type ProposeToolResult =
 
 // -- Sub-components -------------------------------------------------------
 
+type ExtractedMedia = {
+  type: "image" | "file";
+  src: string;
+  mimeType: string;
+  title: string;
+};
+
+function extractMedia(content: AdminThreadMessage["content"]): ExtractedMedia[] {
+  if (!Array.isArray(content)) return [];
+  const media: ExtractedMedia[] = [];
+  for (const b of content) {
+    if (b.type === "image" && b.source?.data) {
+      const mime = b.source.media_type ?? "image/png";
+      media.push({
+        type: "image",
+        src: `data:${mime};base64,${b.source.data}`,
+        mimeType: mime,
+        title: b.title ?? "Imagen",
+      });
+    } else if (b.type === "image_url" && typeof b.source === "object") {
+      const url = (b.source as Record<string, unknown>).url;
+      if (typeof url === "string") {
+        media.push({ type: "image", src: url, mimeType: "image/png", title: b.title ?? "Imagen" });
+      }
+    } else if ((b.type === "document" || b.type === "file") && b.source?.data) {
+      const mime = b.source.media_type ?? "application/octet-stream";
+      media.push({
+        type: mime.startsWith("image/") ? "image" : "file",
+        src: `data:${mime};base64,${b.source.data}`,
+        mimeType: mime,
+        title: b.title ?? "Archivo",
+      });
+    }
+  }
+  return media;
+}
+
+const MediaBlock: FC<{ item: ExtractedMedia }> = ({ item }) => {
+  if (item.type === "image") {
+    return <img src={item.src} alt={item.title} className="max-h-48 max-w-full rounded-lg" />;
+  }
+
+  const isPdf = item.mimeType === "application/pdf";
+  return (
+    <div className="w-full max-w-xs overflow-hidden rounded-lg border border-white/20">
+      {isPdf && (
+        <iframe src={item.src} title={item.title} className="pointer-events-none h-44 w-full bg-white" />
+      )}
+      <div className="flex items-center justify-between bg-white/[.12] px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          <span className="truncate text-xs font-medium">{item.title}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.open(item.src, "_blank")}
+          className="shrink-0 text-[10px] font-medium hover:underline"
+        >
+          Abrir
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const UserMessageBubble: FC<{ message: AdminThreadMessage }> = ({
   message,
 }) => {
   const text = extractTextBlocks(message.content);
-  const attachments = getAttachmentLabels(message.content);
+  const media = extractMedia(message.content);
 
   return (
     <div className="ml-auto flex max-w-[85%] flex-col items-end gap-1">
       <div className="flex flex-col gap-2 rounded-[18px_18px_4px_18px] bg-sabbi-primary px-4 py-2.5 text-white">
-        {text && <p className="whitespace-pre-wrap text-sm">{text}</p>}
-        {attachments.map((label, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/[.12] px-2.5 py-1.5 text-xs"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-            <span className="truncate">{label}</span>
-          </div>
+        {media.map((item, i) => (
+          <MediaBlock key={i} item={item} />
         ))}
+        {text && renderUserText(text)}
       </div>
     </div>
   );
@@ -689,6 +809,10 @@ export default function AdminThreadViewPage() {
   const threadId = params.threadId;
   const [messages, setMessages] = useState<AdminThreadMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -817,7 +941,20 @@ export default function AdminThreadViewPage() {
             )}
           </div>
         ))}
+        <div ref={bottomRef} />
       </div>
+
+      <button
+        type="button"
+        onClick={scrollToBottom}
+        className="fixed bottom-6 right-6 flex size-10 items-center justify-center rounded-full border border-sabbi-neutral-200 bg-white shadow-md transition-colors hover:bg-sabbi-neutral-50"
+        title="Ir al final"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="7 13 12 18 17 13" />
+          <polyline points="7 6 12 11 17 6" />
+        </svg>
+      </button>
     </div>
   );
 }

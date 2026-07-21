@@ -260,4 +260,9 @@ async def view_thread(thread_id: str, request: Request) -> dict:
     except Exception:
         return {"messages": []}
 
-    return {"messages": [_serialize_message(m) for m in _state_messages(state)]}
+    messages = _state_messages(state)
+    return {
+        "messages": [_serialize_message(m) for m in messages],
+        "message_count": len(messages),
+        "last_message_at": getattr(state, "created_at", None),
+    }

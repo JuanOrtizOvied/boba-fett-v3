@@ -10,6 +10,8 @@ interface AdminThread {
   email?: string;
   created_at: string | null;
   cost?: number | null;
+  message_count?: number | null;
+  last_message_at?: string | null;
 }
 
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -57,11 +59,16 @@ export default function AdminThreadsPage() {
           data.map(async (t) => {
             try {
               const r = await fetchWithAuth(`/api/admin/threads/${t.thread_id}`);
-              if (!r.ok) return { ...t, cost: null };
-              const { messages } = await r.json();
-              return { ...t, cost: calcThreadCost(messages) };
+              if (!r.ok) return { ...t, cost: null, message_count: null, last_message_at: null };
+              const data = await r.json();
+              return {
+                ...t,
+                cost: calcThreadCost(data.messages),
+                message_count: data.message_count ?? data.messages.length,
+                last_message_at: data.last_message_at ?? null,
+              };
             } catch {
-              return { ...t, cost: null };
+              return { ...t, cost: null, message_count: null, last_message_at: null };
             }
           }),
         );
@@ -89,7 +96,8 @@ export default function AdminThreadsPage() {
               <thead className="bg-sabbi-neutral-50 text-xs font-medium tracking-wide text-sabbi-neutral-600 uppercase">
                 <tr>
                   <th className="px-4 py-2">Usuario</th>
-                  <th className="px-4 py-2">Actualizado</th>
+                  <th className="px-4 py-2 text-right">Mensajes</th>
+                  <th className="px-4 py-2">Último mensaje</th>
                   <th className="px-4 py-2 text-right">Costo</th>
                   <th className="px-4 py-2" />
                 </tr>
@@ -102,8 +110,23 @@ export default function AdminThreadsPage() {
                         <span className="text-sabbi-neutral-400">Sin usuario</span>
                       )}
                     </td>
+                    <td className="px-4 py-2 text-right text-sabbi-neutral-700">
+                      {t.message_count === undefined ? (
+                        <span className="text-sabbi-neutral-400">…</span>
+                      ) : t.message_count === null ? (
+                        <span className="text-sabbi-neutral-400">—</span>
+                      ) : (
+                        t.message_count
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-sabbi-neutral-600">
-                      {t.created_at ? new Date(t.created_at).toLocaleString() : "—"}
+                      {t.last_message_at === undefined ? (
+                        <span className="text-sabbi-neutral-400">…</span>
+                      ) : t.last_message_at ? (
+                        new Date(t.last_message_at).toLocaleString()
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-2 text-right text-sabbi-neutral-700">
                       {t.cost === undefined ? (
