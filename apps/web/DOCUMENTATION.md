@@ -76,8 +76,8 @@ Admin-only section with a sidebar layout. The layout component (`AdminLayout`) p
 | `/admin/portfolios` | `app/admin/portfolios/page.tsx` | All portfolios overview with product count and totals |
 | `/admin/portfolios/[userId]` | `app/admin/portfolios/[userId]/page.tsx` | Read-only view of a single user's portfolio, with a per-card "Aprobar al catálogo" affordance (no edit/delete) |
 | `/admin/catalog` | `app/admin/catalog/page.tsx` | Product catalog entries listing -- sticky-header table with inline edit/delete per entry |
-| `/admin/threads` | `app/admin/threads/page.tsx` | Thread directory across all users |
-| `/admin/threads/[threadId]` | `app/admin/threads/[threadId]/page.tsx` | Read-only message history for a single thread |
+| `/admin/threads` | `app/admin/threads/page.tsx` | Thread directory across all users, with per-thread cost column |
+| `/admin/threads/[threadId]` | `app/admin/threads/[threadId]/page.tsx` | Read-only message history for a single thread, with per-message and aggregate cost tracking |
 
 Admin sidebar navigation links (`NAV_LINKS` in `app/admin/layout.tsx`):
 
@@ -217,7 +217,7 @@ MyAssistant (app/assistant.tsx)
   |-- AssistantInner
         |-- useExternalStoreRuntime (custom store)
         |-- AssistantRuntimeProvider
-              |-- ChatPanel (components/chat/ChatPanel.tsx)
+              |-- ChatPanel (components/chat/ChatPanel.tsx, receives userEmail prop)
                     |-- HistoryLoader (shown while loading history)
                     |-- Thread (components/assistant-ui/thread.tsx)
                           |-- ThreadPrimitive.Viewport
@@ -226,6 +226,14 @@ MyAssistant (app/assistant.tsx)
                           |     |-- ThinkingPanel
                           |-- Composer (input + attachments + send/cancel)
 ```
+
+### User Email in Chat Header
+
+**Files:** `components/chat/ChatPanel.tsx`, `app/assistant.tsx`
+
+`ChatPanel` accepts an optional `userEmail` prop. When provided, it is displayed right-aligned in the chat header bar, next to the "Asistente SABBI / En linea" label. The email is truncated with the `truncate` CSS class and shows the full address in a `title` attribute on hover.
+
+`MyAssistant` in `app/assistant.tsx` passes `user?.email` from `useAuth()` to `ChatPanel` as the `userEmail` prop.
 
 ### Message Streaming (SSE)
 
@@ -544,6 +552,61 @@ Fetches `GET /api/admin/catalog/entries` and renders a sticky-header, horizontal
 ### Wiring -- `app/admin/portfolios/[userId]/page.tsx`
 
 On mount, fetches the portfolio, the admin user list (to resolve the owner's email), and `GET /api/admin/catalog/entries` in parallel. Catalog entries seed `approvedProductIds` (from each entry's `approved_from_product_id`) so already-approved cards render correctly on load, and are also used to resolve `approvingCatalogEntry` -- the matching catalog row (by `catalog_product_id`) passed into `ApproveProductModal` to trigger comparison mode.
+
+---
+
+## Admin Chat Cost Tracking
+
+Cost estimation for AI chat threads, based on Anthropic model token pricing. Available in two admin views: the thread list (aggregate per thread) and the thread detail (per message + summary).
+
+### Model Pricing Table
+
+**Files:** `app/admin/threads/page.tsx`, `app/admin/threads/[threadId]/page.tsx`
+
+Both files define a `MODEL_PRICING` constant with input and output rates per 1M tokens for the supported models:
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) |
+|---|---|---|
+| `claude-sonnet-4` | $3.00 | $15.00 |
+| `claude-haiku-4.5` | $0.80 | $4.00 |
+| `claude-opus-4` | $15.00 | $75.00 |
+
+### Thread Detail -- Per-Message Cost
+
+**File:** `app/admin/threads/[threadId]/page.tsx`
+
+The `AdminThreadMessage` type includes `ResponseMetadata` and `MessageUsage` fields that carry the model identifier and token counts (input/output) for each AI response.
+
+Utilities:
+
+- `calcMessageCost(usage, model)` -- computes USD cost for a single message from its token counts and the model's pricing row
+- `getModelLabel(model)` -- returns a human-readable model name for display badges
+- `formatTokens(count)` -- formats token counts with locale separators
+
+Each AI message bubble (`AssistantMessageBubble`) renders a footer showing:
+
+- Model name badge (e.g. "Sonnet 4")
+- Token count breakdown (input / output)
+- Cost in USD (e.g. "$0.0042")
+
+A **cost summary panel** renders at the top of the thread view via `computeCostSummary()`. It aggregates across all messages and shows:
+
+- Total chat cost in USD
+- Per-model breakdown: message count, total input/output tokens, and cost
+
+The summary panel only renders when `costSummary.totalMessages > 0`.
+
+### Thread List -- Cost Column
+
+**File:** `app/admin/threads/page.tsx`
+
+The `AdminThread` interface includes a `cost` field. After loading the thread list, the page fetches each thread's messages in parallel via `GET /api/admin/threads/{threadId}` and computes per-thread costs using `calcThreadCost()` (same pricing logic as the thread detail).
+
+The table includes a "Costo" column that displays:
+
+- `"..."` while cost data is loading
+- `"$X.XXXX"` when computed
+- `"--"` for threads with zero or null cost
 
 ---
 

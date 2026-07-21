@@ -21,6 +21,8 @@ Both services write to the same `products` table via `db.repository.ProductRepos
 - **FastAPI** >= 0.115 (REST API)
 - **asyncpg** >= 0.29 (PostgreSQL async driver)
 - **PostgreSQL** >= 14 (with `pgcrypto` and `pg_trgm` extensions)
+- **SQLAlchemy** >= 2.0 (Core `Table` definitions for Alembic migration autogeneration — runtime queries still use raw asyncpg)
+- **Alembic** >= 1.13 (schema migrations)
 - **openpyxl** >= 3.1 (server-side Excel export)
 - **bcrypt** >= 4.1 (password hashing)
 - **PyJWT** >= 2.8 (JWT token management)
@@ -30,8 +32,14 @@ Both services write to the same `products` table via `db.repository.ProductRepos
 
 ```
 apps/backend/
+├── alembic.ini                 # Alembic config (prepend_sys_path = src, reads DATABASE_URL from env)
 ├── langgraph.json              # LangGraph server config (graph ID "agent")
-├── package.json                # Yarn workspace scripts (dev, lint, test)
+├── migrations/                 # Alembic migrations directory
+│   ├── env.py                  # Reads DATABASE_URL, converts to postgresql+psycopg://, imports db.tables.metadata
+│   ├── script.py.mako          # Migration template
+│   └── versions/               # Migration version scripts
+│       └── fc163426f0af_initial_schema.py  # Initial migration (7 tables + extensions + indexes)
+├── package.json                # Yarn workspace scripts (dev, lint, test, db:*)
 ├── pyproject.toml               # Python project metadata and dependencies
 ├── requirements.txt            # Runtime pip requirements mirror (pyproject.toml is source of truth)
 ├── src/
@@ -65,7 +73,8 @@ apps/backend/
 │       ├── excel.py            # Server-side .xlsx workbook generation
 │       ├── models.py           # Pydantic domain models (Product, SearchResult, Snapshot, etc.)
 │       ├── repository.py       # ProductRepository (products table CRUD + change-log audit)
-│       ├── schema.sql          # DDL for all tables, indexes, extensions
+│       ├── schema.sql          # DDL for all tables, indexes, extensions (legacy reference — no longer executed at startup)
+│       ├── tables.py           # SQLAlchemy Core Table definitions (7 tables) — single source of truth for Alembic autogeneration
 │       ├── seed_catalog.py     # CLI to populate product_catalog from Excel
 │       └── versioning.py       # VersioningRepository (snapshots, comparison, change log)
 └── tests/                      # pytest test suite
@@ -328,7 +337,7 @@ app = FastAPI(title="SABBI Portfolio API", lifespan=lifespan)
 ### Lifespan
 
 On startup (`lifespan`):
-1. Creates the process-wide `asyncpg.Pool` via `get_pool()` (which also runs `schema.sql` and seeds the admin user)
+1. Creates the process-wide `asyncpg.Pool` via `get_pool()` (which also runs Alembic migrations and seeds the admin user)
 2. Attaches `ProductRepository`, `VersioningRepository`, `UserRepository`, and `CatalogRepository` to `app.state`
 3. Initializes the Postgres-backed chat graph if `POSTGRES_URI` is set (`_init_chat_graph`)
 
@@ -512,6 +521,7 @@ Send a message and stream the agent's response via SSE.
 - **Body:** `ChatMessageRequest` (`{message, attachments?}`)
 - **Response:** `StreamingResponse` (SSE with progress/reasoning/text/final/error/done events)
 - **Attachment handling:** Frontend `{type: "file"}` blocks are normalized to Anthropic's `{type: "image"|"document", source: {type: "base64", ...}}` format, or parsed to text for non-PDF/image formats
+- **Message serialization:** `_serialize_message()` extracts `response_metadata` from LangChain AI messages when available — specifically `model` (string) and `usage` (dict with `input_tokens`, `output_tokens`). This metadata is included in the serialized message output only for AI messages that carry it, enabling the admin frontend to display per-message cost tracking.
 - **Returns 503** if the chat graph was not initialized. For the current FastAPI chat UI, this means `POSTGRES_URI` must be configured.
 
 #### `DELETE /chat/threads/{thread_id}`
@@ -620,9 +630,43 @@ View a specific thread's message history, read-only, using the same `app.state.c
 
 ## Database
 
+### Database Migrations (Alembic)
+
+Schema changes are managed by **Alembic** with autogeneration driven by SQLAlchemy Core `Table` definitions in `src/db/tables.py`.
+
+**Source of truth:** `src/db/tables.py` defines all 7 tables (`users`, `refresh_tokens`, `products`, `product_catalog`, `portfolio_snapshots`, `snapshot_products`, `portfolio_changes`) as SQLAlchemy `Table` objects with their columns, constraints, and indexes (including GIN `gin_trgm_ops` indexes, `DESC` indexes, and partial `WHERE` indexes). These definitions are used exclusively by Alembic for migration autogeneration — runtime queries continue to use raw `asyncpg`.
+
+**Configuration:** `alembic.ini` at `apps/backend/` sets `prepend_sys_path = src` so imports like `db.tables` resolve correctly. The database URL is NOT hardcoded in the ini file — `migrations/env.py` reads `DATABASE_URL` from the environment and converts the `postgresql://` scheme to `postgresql+psycopg://` for the psycopg3 driver that Alembic uses.
+
+**Initial migration:** `migrations/versions/fc163426f0af_initial_schema.py` creates all 7 tables, enables the `pgcrypto` and `pg_trgm` extensions, and builds all indexes.
+
+**Startup behavior:** `db/connection.py` runs `alembic upgrade head` programmatically (via `_run_migrations()`) on the first call to `get_pool()`, ensuring the schema is always current before the application starts serving requests.
+
+**Legacy:** `src/db/schema.sql` remains in the repository as a reference but is no longer executed at startup.
+
+**Common commands:**
+
+```bash
+# Apply all pending migrations
+yarn db:migrate
+
+# Create a new migration from tables.py changes
+yarn db:revision "description of the change"
+
+# Show current migration revision
+yarn db:current
+```
+
+**Workflow for schema changes:**
+
+1. Edit `src/db/tables.py` to add/modify/remove columns, tables, or indexes
+2. Run `yarn db:revision "description"` to autogenerate a migration script
+3. Review the generated file in `migrations/versions/` and adjust if needed
+4. Run `yarn db:migrate` to apply (or let the app apply it automatically on next startup)
+
 ### PostgreSQL Schema
 
-**File:** `src/db/schema.sql`
+**File:** `src/db/schema.sql` (legacy reference — see `src/db/tables.py` for the authoritative definitions)
 
 The schema requires two PostgreSQL extensions:
 - `pgcrypto` — for `gen_random_uuid()` used in primary key generation
@@ -779,7 +823,7 @@ async def get_pool() -> asyncpg.Pool:
 On first call:
 1. Creates a pool with `min_size=2, max_size=10` connections
 2. Reads `DATABASE_URL` from environment (default: `postgresql://postgres:postgres@localhost:5432/sabbi`)
-3. Runs `schema.sql` to ensure all tables/indexes exist
+3. Runs Alembic migrations programmatically (`alembic upgrade head` via `_run_migrations()`) to ensure the schema is up to date — this replaced the earlier `_run_schema()` approach that read and executed raw `schema.sql`
 4. Seeds the admin user via `auth.seed.seed_admin()`
 
 The pool is NOT passed through `RunnableConfig` because `asyncpg.Pool` cannot be serialized across the LangGraph API boundary. Tools call `get_pool()` directly.
@@ -1209,6 +1253,9 @@ This runtime serves the FastAPI routes documented above (`/auth`, `/portfolio`, 
 | `dev:api` | `uvicorn api.routes:app --app-dir src --reload --port 3003 --log-level debug` | FastAPI with hot-reload (prefers a local `.venv/bin/uvicorn` if present, else falls back to the `uvicorn` on `PATH`) |
 | `lint` | `ruff check src/` | Lint with Ruff (same `.venv`-first fallback pattern) |
 | `test` | `pytest -q` | Run test suite (same `.venv`-first fallback pattern) |
+| `db:migrate` | `uv run alembic upgrade head` | Apply all pending Alembic migrations |
+| `db:revision` | `uv run alembic revision --autogenerate -m` | Create a new migration from `tables.py` changes |
+| `db:current` | `uv run alembic current` | Show the current migration revision |
 
 ### CI/CD
 
