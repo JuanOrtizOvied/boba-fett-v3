@@ -17,6 +17,8 @@ dependencies = [
     "bcrypt>=4.1",
     "PyJWT>=2.8",
     "tavily-python>=0.5",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]

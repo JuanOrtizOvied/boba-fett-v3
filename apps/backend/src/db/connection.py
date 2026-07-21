@@ -18,7 +18,7 @@ async def get_pool() -> asyncpg.Pool:
             "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/sabbi"
         )
         _pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
-        await _run_schema(_pool)
+        _run_migrations()
         await _seed_admin(_pool)
     return _pool
 
@@ -30,11 +30,13 @@ async def close_pool() -> None:
         _pool = None
 
 
-async def _run_schema(pool: asyncpg.Pool) -> None:
-    schema_path = Path(__file__).parent / "schema.sql"
-    sql = schema_path.read_text()
-    async with pool.acquire() as conn:
-        await conn.execute(sql)
+def _run_migrations() -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
+    cfg = Config(str(ini_path))
+    command.upgrade(cfg, "head")
 
 
 async def _seed_admin(pool: asyncpg.Pool) -> None:

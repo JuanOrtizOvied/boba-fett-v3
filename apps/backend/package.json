@@ -8,6 +8,9 @@
     "dev:api": "test -x .venv/bin/uvicorn && .venv/bin/uvicorn api.routes:app --app-dir src --reload --port 3003 --log-level debug || uvicorn api.routes:app --app-dir src --reload --port 3003 --log-level debug",
     "build": "echo 'backend has no build step'",
     "lint": "test -x .venv/bin/ruff && .venv/bin/ruff check src/ || ruff check src/",
-    "test": "test -x .venv/bin/pytest && .venv/bin/pytest -q || pytest -q"
+    "test": "test -x .venv/bin/pytest && .venv/bin/pytest -q || pytest -q",
+    "db:migrate": "uv run alembic upgrade head",
+    "db:revision": "uv run alembic revision --autogenerate -m",
+    "db:current": "uv run alembic current"
   }
 }
