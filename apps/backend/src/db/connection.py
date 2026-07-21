@@ -19,7 +19,6 @@ async def get_pool() -> asyncpg.Pool:
         )
         _pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
         _run_migrations()
-        await _seed_admin(_pool)
     return _pool
 
 
@@ -37,12 +36,6 @@ def _run_migrations() -> None:
     ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
     cfg = Config(str(ini_path))
     command.upgrade(cfg, "head")
-
-
-async def _seed_admin(pool: asyncpg.Pool) -> None:
-    from auth.seed import seed_admin
-
-    await seed_admin(pool)
 
 
 def get_repository(pool: asyncpg.Pool | None = None):

@@ -1,10 +1,9 @@
-"""Authentication module: password hashing, JWT tokens, models, and admin seeding."""
+"""Authentication module: password hashing, JWT tokens, and models."""
 
 from __future__ import annotations
 
 from auth.models import LoginRequest, UserCreate, UserResponse
 from auth.passwords import hash_password, verify_password
-from auth.seed import seed_admin
 from auth.tokens import (
     create_access_token,
     create_refresh_token,
@@ -24,5 +23,4 @@ __all__ = [
     "LoginRequest",
     "UserResponse",
     "UserCreate",
-    "seed_admin",
 ]
