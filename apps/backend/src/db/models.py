@@ -23,7 +23,7 @@ class Product(BaseModel):
     )
     underlying: list[AssetAllocation] = Field(default_factory=list)
     asset_class: str = ""
-    geographic_focus: str = ""
+    geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -31,6 +31,13 @@ class Product(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     catalog_product_id: int | None = None
+
+
+def _check_allocation_sum(allocations: list[AssetAllocation], label: str) -> None:
+    if allocations:
+        total = sum(a.percentage for a in allocations)
+        if abs(total - 100) >= 0.5:
+            raise ValueError(f"{label} must sum to 100% (got {total:.1f}%)")
 
 
 class ProductCreate(BaseModel):
@@ -40,7 +47,7 @@ class ProductCreate(BaseModel):
     category: str
     underlying: list[AssetAllocation] = Field(default_factory=list)
     asset_class: str = ""
-    geographic_focus: str = ""
+    geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -50,11 +57,9 @@ class ProductCreate(BaseModel):
     catalog_product_id: int | None = None
 
     @model_validator(mode="after")
-    def _underlying_sums_to_100(self) -> ProductCreate:
-        if self.underlying:
-            total = sum(a.percentage for a in self.underlying)
-            if abs(total - 100) >= 0.5:
-                raise ValueError(f"Underlying must sum to 100% (got {total:.1f}%)")
+    def _allocations_sum_to_100(self) -> ProductCreate:
+        _check_allocation_sum(self.underlying, "Underlying")
+        _check_allocation_sum(self.geographic_focus, "Geographic focus")
         return self
 
 
@@ -65,7 +70,7 @@ class ProductUpdate(BaseModel):
     category: str | None = None
     underlying: list[AssetAllocation] | None = None
     asset_class: str | None = None
-    geographic_focus: str | None = None
+    geographic_focus: list[AssetAllocation] | None = None
     commission: str | None = None
     currency: str | None = None
     administrator: str | None = None
@@ -75,11 +80,11 @@ class ProductUpdate(BaseModel):
     catalog_product_id: int | None = None
 
     @model_validator(mode="after")
-    def _underlying_sums_to_100(self) -> ProductUpdate:
-        if self.underlying is not None and self.underlying:
-            total = sum(a.percentage for a in self.underlying)
-            if abs(total - 100) >= 0.5:
-                raise ValueError(f"Underlying must sum to 100% (got {total:.1f}%)")
+    def _allocations_sum_to_100(self) -> ProductUpdate:
+        if self.underlying is not None:
+            _check_allocation_sum(self.underlying, "Underlying")
+        if self.geographic_focus is not None:
+            _check_allocation_sum(self.geographic_focus, "Geographic focus")
         return self
 
 
@@ -98,7 +103,7 @@ class SnapshotCreate(BaseModel):
 class CatalogProduct(BaseModel):
     id: int
     name: str
-    geographic_focus: str = ""
+    geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     asset_class: str = ""
     underlying: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
@@ -122,7 +127,7 @@ class CatalogProductCreate(BaseModel):
     name: str
     category: str
     asset_class: str = ""
-    geographic_focus: str = ""
+    geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     underlying: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
@@ -139,7 +144,7 @@ class CatalogProductUpdate(BaseModel):
     name: str | None = None
     category: str | None = None
     asset_class: str | None = None
-    geographic_focus: str | None = None
+    geographic_focus: list[AssetAllocation] | None = None
     underlying: list[AssetAllocation] | None = None
     commission: str | None = None
     currency: str | None = None
@@ -159,7 +164,7 @@ class SearchResult(BaseModel):
 
     name: str = ""
     asset_class: str = ""
-    geographic_focus: str = ""
+    geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
     administrator: str = ""

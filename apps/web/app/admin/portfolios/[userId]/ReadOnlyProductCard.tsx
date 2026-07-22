@@ -121,7 +121,6 @@ export function ReadOnlyProductCard({
  */
 interface EnrichmentFields {
   assetClass: string;
-  geographicFocus: string;
   commission: string;
   currency: string;
   administrator: string;
@@ -132,7 +131,6 @@ interface EnrichmentFields {
 
 const EMPTY_ENRICHMENT: EnrichmentFields = {
   assetClass: "",
-  geographicFocus: "",
   commission: "",
   currency: "",
   administrator: "",
@@ -167,6 +165,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
   const [category, setCategory] = useState<Category>("inversiones_directas");
   const [enrichment, setEnrichment] = useState<EnrichmentFields>(EMPTY_ENRICHMENT);
   const [underlying, setUnderlying] = useState<{ name: string; percentage: string }[]>([]);
+  const [geoFocus, setGeoFocus] = useState<{ name: string; percentage: string }[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -176,7 +175,6 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
     setCategory(product.category);
     setEnrichment({
       assetClass: product.asset_class || "",
-      geographicFocus: product.geographic_focus || "",
       commission: product.commission || "",
       currency: product.currency || "",
       administrator: product.administrator || "",
@@ -187,6 +185,11 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
     setUnderlying(
       product.underlying.length > 0
         ? product.underlying.map((a) => ({ name: a.name, percentage: String(a.percentage) }))
+        : [{ name: "", percentage: "" }],
+    );
+    setGeoFocus(
+      product.geographic_focus.length > 0
+        ? product.geographic_focus.map((a) => ({ name: a.name, percentage: String(a.percentage) }))
         : [{ name: "", percentage: "" }],
     );
     setErrorMessage(null);
@@ -210,9 +213,10 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      const underlyingPayload: AssetAllocation[] = underlying
-        .filter((r) => r.name.trim() && r.percentage.trim())
-        .map((r) => ({ name: r.name.trim(), percentage: parseFloat(r.percentage) || 0 }));
+      const toAllocations = (rows: { name: string; percentage: string }[]): AssetAllocation[] =>
+        rows
+          .filter((r) => r.name.trim() && r.percentage.trim())
+          .map((r) => ({ name: r.name.trim(), percentage: parseFloat(r.percentage) || 0 }));
 
       const res = await fetchWithAuth("/api/admin/catalog/approve", {
         method: "POST",
@@ -221,8 +225,8 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
           name: name.trim(),
           category,
           asset_class: enrichment.assetClass.trim(),
-          geographic_focus: enrichment.geographicFocus.trim(),
-          underlying: underlyingPayload,
+          geographic_focus: toAllocations(geoFocus),
+          underlying: toAllocations(underlying),
           commission: enrichment.commission.trim(),
           currency: enrichment.currency.trim(),
           administrator: enrichment.administrator.trim(),
@@ -300,9 +304,12 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                   rows={underlying}
                   onChange={setUnderlying}
                 />
-                <ComparisonRow label="Foco geográfico" currentValue={catalogEntry.geographic_focus} newValue={enrichment.geographicFocus}>
-                  <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
-                </ComparisonRow>
+                <UnderlyingComparisonRow
+                  label="Foco geográfico"
+                  currentUnderlying={catalogEntry.geographic_focus}
+                  rows={geoFocus}
+                  onChange={setGeoFocus}
+                />
                 <ComparisonRow label="Comisión" currentValue={catalogEntry.commission} newValue={enrichment.commission}>
                   <input value={enrichment.commission} onChange={(e) => updateEnrichment({ commission: e.target.value })} className={modalInputClass} />
                 </ComparisonRow>
@@ -342,7 +349,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                 <UnderlyingEditor rows={underlying} onChange={setUnderlying} />
               </ModalField>
               <ModalField label="Foco geográfico">
-                <input value={enrichment.geographicFocus} onChange={(e) => updateEnrichment({ geographicFocus: e.target.value })} className={modalInputClass} />
+                <UnderlyingEditor rows={geoFocus} onChange={setGeoFocus} />
               </ModalField>
               <ModalField label="Comisión">
                 <input value={enrichment.commission} onChange={(e) => updateEnrichment({ commission: e.target.value })} className={modalInputClass} />
@@ -470,10 +477,11 @@ const UnderlyingEditor: FC<{
 };
 
 const UnderlyingComparisonRow: FC<{
+  label?: string;
   currentUnderlying: AssetAllocation[];
   rows: UnderlyingRow[];
   onChange: (rows: UnderlyingRow[]) => void;
-}> = ({ currentUnderlying, rows, onChange }) => {
+}> = ({ label = "Composición subyacente", currentUnderlying, rows, onChange }) => {
   const currentStr = formatUnderlying(currentUnderlying);
   const newItems = rows.filter((r) => r.name.trim() && r.percentage.trim());
   const newStr = newItems.length > 0
@@ -489,7 +497,7 @@ const UnderlyingComparisonRow: FC<{
     >
       <div className="flex flex-col gap-1">
         <span className="flex items-center gap-2 text-xs font-medium text-sabbi-neutral-500">
-          Composición subyacente
+          {label}
           {hasChanged && (
             <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">
               Modificado

@@ -37,6 +37,21 @@ CREATE TABLE IF NOT EXISTS products (
 
 ALTER TABLE products ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS geographic_focus TEXT DEFAULT '';
+
+-- Migration: geographic_focus TEXT -> JSONB
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='products' AND column_name='geographic_focus' AND data_type='text'
+  ) THEN
+    ALTER TABLE products ALTER COLUMN geographic_focus TYPE JSONB
+      USING CASE WHEN geographic_focus IS NOT NULL AND geographic_focus != ''
+        THEN jsonb_build_array(jsonb_build_object('name', geographic_focus, 'percentage', 100))
+        ELSE '[]'::jsonb END;
+    ALTER TABLE products ALTER COLUMN geographic_focus SET DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
+
 ALTER TABLE products ADD COLUMN IF NOT EXISTS commission TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS administrator TEXT DEFAULT '';
@@ -94,7 +109,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE TABLE IF NOT EXISTS product_catalog (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
-    geographic_focus TEXT DEFAULT '',
+    geographic_focus JSONB DEFAULT '[]',
     asset_class TEXT DEFAULT '',
     underlying JSONB DEFAULT '[]',
     commission TEXT DEFAULT '',
@@ -107,6 +122,20 @@ CREATE TABLE IF NOT EXISTS product_catalog (
 );
 
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '';
+
+-- Migration: product_catalog geographic_focus TEXT -> JSONB
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='product_catalog' AND column_name='geographic_focus' AND data_type='text'
+  ) THEN
+    ALTER TABLE product_catalog ALTER COLUMN geographic_focus TYPE JSONB
+      USING CASE WHEN geographic_focus IS NOT NULL AND geographic_focus != ''
+        THEN jsonb_build_array(jsonb_build_object('name', geographic_focus, 'percentage', 100))
+        ELSE '[]'::jsonb END;
+    ALTER TABLE product_catalog ALTER COLUMN geographic_focus SET DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS approved_from_product_id TEXT;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
 

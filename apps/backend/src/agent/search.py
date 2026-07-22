@@ -26,12 +26,13 @@ from agent.state import CATEGORIES
 from db.catalog_repository import CatalogRepository
 from db.models import FieldSource, SearchResult
 
-# Same 12-field set the cascade searches/returns at every level (field parity
+# String fields the cascade searches/returns at every level (field parity
 # — `cascading-search.spec.md`, "Search Field Parity").
+# List-type fields (underlying, geographic_focus) are handled separately in
+# _merge_fields.
 FIELD_NAMES = (
     "name",
     "asset_class",
-    "geographic_focus",
     "commission",
     "currency",
     "administrator",
@@ -67,9 +68,15 @@ liquidity, return_rate, category, underlying.
 or sub-asset (e.g. "Private Debt", "Real Estate", "US Treasuries") and its
 weight in the product. Return an empty list if unknown.
 
+`geographic_focus` is the product's geographic allocation — a list of
+{name, percentage} objects summing to 100%. Each entry names a region
+(e.g. "US", "LatAm", "Europe", "Global") and its weight. Return an empty
+list if unknown.
+
 CRITICAL RULE: if you are not confident about a field, or the information was
 not given to you, leave that field as an empty string (or empty list for
-underlying). NEVER invent, guess, or fabricate a value you cannot verify."""
+underlying and geographic_focus). NEVER invent, guess, or fabricate a value
+you cannot verify."""
 
 
 class _ExtractedAllocation(BaseModel):
@@ -83,7 +90,7 @@ class ExtractedProduct(BaseModel):
 
     name: str = ""
     asset_class: str = ""
-    geographic_focus: str = ""
+    geographic_focus: list[_ExtractedAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
     administrator: str = ""
@@ -109,14 +116,22 @@ def _merge_fields(
             setattr(result, field, new_value)
             result.provenance[field] = source
             filled_any = True
+    from db.models import AssetAllocation
     raw_underlying = new_data.get("underlying") or []
     if not result.underlying and raw_underlying:
-        from db.models import AssetAllocation
         result.underlying = [
             AssetAllocation(**a) if isinstance(a, dict) else a
             for a in raw_underlying
         ]
         result.provenance["underlying"] = source
+        filled_any = True
+    raw_geo = new_data.get("geographic_focus") or []
+    if not result.geographic_focus and raw_geo:
+        result.geographic_focus = [
+            AssetAllocation(**a) if isinstance(a, dict) else a
+            for a in raw_geo
+        ]
+        result.provenance["geographic_focus"] = source
         filled_any = True
     if filled_any and _SOURCE_RANK[source] > _SOURCE_RANK[result.primary_source]:
         result.primary_source = source
@@ -124,11 +139,19 @@ def _merge_fields(
 
 
 def _is_complete(result: SearchResult) -> bool:
-    return all(getattr(result, field) for field in FIELD_NAMES)
+    return (
+        all(getattr(result, field) for field in FIELD_NAMES)
+        and bool(result.underlying)
+        and bool(result.geographic_focus)
+    )
 
 
 def _has_any_data(result: SearchResult) -> bool:
-    return any(getattr(result, field) for field in FIELD_NAMES)
+    return (
+        any(getattr(result, field) for field in FIELD_NAMES)
+        or bool(result.underlying)
+        or bool(result.geographic_focus)
+    )
 
 
 async def _search_catalog(query: str, pool: asyncpg.Pool) -> SearchResult:
@@ -144,6 +167,9 @@ async def _search_catalog(query: str, pool: asyncpg.Pool) -> SearchResult:
     if match.underlying:
         result.underlying = match.underlying
         result.provenance["underlying"] = "catalog"
+    if match.geographic_focus:
+        result.geographic_focus = match.geographic_focus
+        result.provenance["geographic_focus"] = "catalog"
     catalog_data = {field: getattr(match, field) for field in FIELD_NAMES}
     return _merge_fields(result, catalog_data, "catalog")
 
@@ -257,7 +283,7 @@ def _classify(result: SearchResult) -> None:
             [
                 result.name,
                 result.asset_class,
-                result.geographic_focus,
+                " ".join(a.name for a in result.geographic_focus),
             ],
         )
     ).lower()

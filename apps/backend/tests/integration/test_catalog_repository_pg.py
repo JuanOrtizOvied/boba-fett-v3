@@ -19,7 +19,7 @@ def _entry(**overrides) -> CatalogProductCreate:
         "name": "Bono Soberano",
         "category": "mercados_publicos",
         "asset_class": "bonos",
-        "geographic_focus": "LatAm",
+        "geographic_focus": [{"name": "LatAm", "percentage": 100}],
         "commission": "1.5%",
         "currency": "USD",
         "administrator": "Admin Co",

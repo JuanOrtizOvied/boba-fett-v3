@@ -461,6 +461,12 @@ class VersioningRepository:
             "created_at": row["created_at"].isoformat(),
         }
 
+    @staticmethod
+    def _parse_json_allocations(raw: object) -> list[AssetAllocation]:
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        return [AssetAllocation(**a) for a in (raw or [])]
+
     def _row_to_product(self, row: asyncpg.Record) -> Product:
         """Mirrors `ProductRepository._row_to_product` (`db/repository.py`)
         so a materialized snapshot product carries the exact same field
@@ -477,7 +483,7 @@ class VersioningRepository:
             category=row["category"],
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             asset_class=row.get("asset_class", "") or "",
-            geographic_focus=row.get("geographic_focus", "") or "",
+            geographic_focus=self._parse_json_allocations(row.get("geographic_focus")),
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",
             administrator=row.get("administrator", "") or "",

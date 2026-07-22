@@ -118,7 +118,7 @@ async def propose_product(
     manager: str = "",
     liquidity: str = "",
     return_rate: str = "",
-    geographic_focus: str = "",
+    geographic_focus: list[dict[str, Any]] | None = None,
     catalog_product_id: int | None = None,
     primary_source: FieldSource = "catalog",
     provenance: dict[str, FieldSource] | None = None,
@@ -157,7 +157,10 @@ async def propose_product(
         manager: Fund manager, from search_product if available.
         liquidity: Liquidity terms, from search_product if available.
         return_rate: Historical return rate, from search_product if available.
-        geographic_focus: Geographic focus, from search_product if available.
+        geographic_focus: Geographic allocation as a list of {name, percentage}
+            objects summing to 100%. Each entry names a region (e.g. 'US',
+            'LatAm', 'Europe', 'Global') and its weight. From search_product
+            if available.
         catalog_product_id: Source `product_catalog.id` when search_product found
             the product in the SABBI catalog. Forward it unchanged.
         primary_source: Weakest data source used across all fields
@@ -184,7 +187,7 @@ async def propose_product(
             "manager": manager,
             "liquidity": liquidity,
             "return_rate": return_rate,
-            "geographic_focus": geographic_focus,
+            "geographic_focus": geographic_focus or [],
             "catalog_product_id": catalog_product_id,
             "primary_source": primary_source,
             "provenance": resolved_provenance,
@@ -207,7 +210,7 @@ async def add_product(
     manager: str = "",
     liquidity: str = "",
     return_rate: str = "",
-    geographic_focus: str = "",
+    geographic_focus: list[dict[str, Any]] | None = None,
     catalog_product_id: int | None = None,
     *,
     config: RunnableConfig,
@@ -235,13 +238,17 @@ async def add_product(
         manager: Fund manager, from search_product if available.
         liquidity: Liquidity terms, from search_product if available.
         return_rate: Historical return rate, from search_product if available.
-        geographic_focus: Geographic focus, from search_product if available.
+        geographic_focus: Geographic allocation as a list of {name, percentage}
+            objects summing to 100%. Each entry names a region (e.g. 'US',
+            'LatAm', 'Europe', 'Global') and its weight. From search_product
+            if available.
         catalog_product_id: Source `product_catalog.id` when the product came
             from the SABBI catalog. Keep it so admin approval can replace that row.
     """
     repo = await _repository()
     user_id = _user_id(config)
     allocs = _to_allocations(underlying or [{"name": name, "percentage": 100}])
+    geo_allocs = _to_allocations(geographic_focus) if geographic_focus else []
     product = await repo.create(
         user_id,
         ProductCreate(
@@ -251,7 +258,7 @@ async def add_product(
             category=_normalize_category_key(category),
             underlying=allocs,
             asset_class=asset_class,
-            geographic_focus=geographic_focus,
+            geographic_focus=geo_allocs,
             commission=commission,
             currency=currency,
             administrator=administrator,

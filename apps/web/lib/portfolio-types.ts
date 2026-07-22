@@ -26,7 +26,7 @@ export interface Product {
   category: Category;
   underlying: AssetAllocation[];
   asset_class: string;
-  geographic_focus: string;
+  geographic_focus: AssetAllocation[];
   commission: string;
   currency: string;
   administrator: string;
@@ -85,7 +85,7 @@ export interface EnrichedProposedProduct extends ProposedProduct {
   manager?: string;
   liquidity?: string;
   return_rate?: string;
-  geographic_focus?: string;
+  geographic_focus?: AssetAllocation[];
   underlying?: { name: string; percentage: number }[];
   catalog_product_id?: number | null;
   primary_source?: FieldSource;
@@ -102,7 +102,7 @@ export interface EnrichedProposedProduct extends ProposedProduct {
 export interface CatalogProduct {
   id: number;
   name: string;
-  geographic_focus: string;
+  geographic_focus: AssetAllocation[];
   asset_class: string;
   underlying: AssetAllocation[];
   commission: string;
@@ -126,7 +126,7 @@ export interface CatalogProductCreate {
   name: string;
   category: string;
   asset_class?: string;
-  geographic_focus?: string;
+  geographic_focus?: AssetAllocation[];
   underlying?: AssetAllocation[];
   commission?: string;
   currency?: string;

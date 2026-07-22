@@ -266,7 +266,7 @@ function EditCatalogModal({
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
       const val = entry[field.key as keyof CatalogProduct];
-      if (field.key === "underlying" && Array.isArray(val)) {
+      if ((field.key === "underlying" || field.key === "geographic_focus") && Array.isArray(val)) {
         initial[field.key] = val.map((v) => (typeof v === "object" && v && "name" in v ? `${(v as { name: string; percentage: number }).name}: ${(v as { name: string; percentage: number }).percentage}%` : String(v))).join("\n");
       } else {
         initial[field.key] = Array.isArray(val) ? val.join("\n") : String(val ?? "");
@@ -302,13 +302,13 @@ function EditCatalogModal({
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
-        } else if (field.key === "underlying") {
+        } else if (field.key === "underlying" || field.key === "geographic_focus") {
           const lines = (form[field.key] ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
           const current = lines.map((line) => {
             const match = line.match(/^(.+?):\s*(\d+(?:\.\d+)?)%?$/);
             return match ? { name: match[1].trim(), percentage: parseFloat(match[2]) } : { name: line, percentage: 0 };
           });
-          const original = entry.underlying ?? [];
+          const original = entry[field.key as "underlying" | "geographic_focus"] ?? [];
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
@@ -396,7 +396,7 @@ function EditCatalogModal({
                   className={modalInputClass + " resize-y"}
                 />
               </ModalField>
-            ) : field.key === "underlying" ? (
+            ) : field.key === "underlying" || field.key === "geographic_focus" ? (
               <ModalField key={field.key} label={field.label}>
                 <textarea
                   rows={3}

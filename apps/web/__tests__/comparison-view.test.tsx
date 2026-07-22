@@ -14,7 +14,7 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     category: "mercados_privados",
     underlying: [],
     asset_class: "",
-    geographic_focus: "",
+    geographic_focus: [],
     commission: "",
     currency: "",
     administrator: "",

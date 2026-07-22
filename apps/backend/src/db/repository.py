@@ -74,7 +74,7 @@ class ProductRepository:
             data.category,
             json.dumps([a.model_dump() for a in data.underlying]),
             data.asset_class,
-            data.geographic_focus,
+            json.dumps([a.model_dump() for a in data.geographic_focus]),
             data.commission,
             data.currency,
             data.administrator,
@@ -138,6 +138,10 @@ class ProductRepository:
         if "underlying" in updates:
             updates["underlying"] = json.dumps(
                 [a.model_dump() for a in data.underlying]
+            )
+        if "geographic_focus" in updates:
+            updates["geographic_focus"] = json.dumps(
+                [a.model_dump() for a in data.geographic_focus]
             )
         if not updates:
             return before_product
@@ -273,6 +277,12 @@ class ProductRepository:
             ),
         }
 
+    @staticmethod
+    def _parse_json_allocations(raw: object) -> list[AssetAllocation]:
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        return [AssetAllocation(**a) for a in (raw or [])]
+
     def _row_to_product(self, row: asyncpg.Record) -> Product:
         raw = row["underlying"]
         if isinstance(raw, str):
@@ -286,7 +296,7 @@ class ProductRepository:
             category=row["category"],
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             asset_class=row.get("asset_class", "") or "",
-            geographic_focus=row.get("geographic_focus", "") or "",
+            geographic_focus=self._parse_json_allocations(row.get("geographic_focus")),
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",
             administrator=row.get("administrator", "") or "",

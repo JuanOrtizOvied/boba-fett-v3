@@ -21,7 +21,7 @@ const PRODUCT: Product = {
   category: "mercados_publicos",
   underlying: [{ name: "US Treasuries", percentage: 100 }],
   asset_class: "",
-  geographic_focus: "",
+  geographic_focus: [],
   commission: "",
   currency: "",
   administrator: "",
@@ -34,7 +34,7 @@ const PRODUCT: Product = {
 const CATALOG_ENTRY = {
   id: 77,
   name: "Bono Soberano Catálogo",
-  geographic_focus: "LatAm",
+  geographic_focus: [{ name: "LatAm", percentage: 100 }],
   asset_class: "Renta Fija",
   underlying: [{ name: "Bonos", percentage: 100 }],
   commission: "1.5%",

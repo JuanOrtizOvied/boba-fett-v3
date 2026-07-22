@@ -217,7 +217,7 @@ def test_search_tavily_returns_empty_dict_when_search_call_fails(monkeypatch):
 def test_classify_sets_confident_taxonomy_match():
     from agent.search import _classify
 
-    result = SearchResult(asset_class="Renta Fija", geographic_focus="US Treasuries")
+    result = SearchResult(asset_class="Renta Fija", geographic_focus=[{"name": "US Treasuries", "percentage": 100}])
     _classify(result)
 
     assert result.category == "mercados_publicos"
@@ -229,7 +229,7 @@ def test_classify_leaves_empty_on_ambiguous_match():
 
     # "Perú" and "Perú Bonds" are two distinct leaves under `publicos` —
     # this text confidently matches neither.
-    result = SearchResult(geographic_focus="Perú Bonds")
+    result = SearchResult(geographic_focus=[{"name": "Perú Bonds", "percentage": 100}])
     _classify(result)
 
     assert result.category == ""
@@ -263,7 +263,7 @@ def test_cascade_search_stops_after_l1_when_catalog_result_is_complete(monkeypat
     complete = SearchResult(
         name="Vanguard Total World Stock ETF",
         asset_class="Renta Variable",
-        geographic_focus="Global",
+        geographic_focus=[{"name": "Global", "percentage": 100}],
         commission="0.07%",
         currency="USD",
         administrator="Vanguard",

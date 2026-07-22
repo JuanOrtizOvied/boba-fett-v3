@@ -50,7 +50,7 @@ def _enriched_data(**overrides: Any) -> ProductCreate:
             {"name": "Deuda soberana", "percentage": 40},
         ],
         "asset_class": "Renta Fija",
-        "geographic_focus": "Global",
+        "geographic_focus": [{"name": "Global", "percentage": 100}],
         "commission": "0.10%",
         "currency": "USD",
         "administrator": "BlackRock",
@@ -133,7 +133,7 @@ async def test_create_snapshot_materializes_full_product_fields(test_pool, test_
     assert materialized["name"] == "iShares Global Bond ETF"
     assert materialized["asset_class"] == "Renta Fija"
     assert materialized["commission"] == "0.10%"
-    assert materialized["geographic_focus"] == "Global"
+    assert materialized["geographic_focus"] == [{"name": "Global", "percentage": 100}]
     assert materialized["underlying"] == [
         {"name": "Deuda privada", "percentage": 60},
         {"name": "Deuda soberana", "percentage": 40},

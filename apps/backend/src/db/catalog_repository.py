@@ -51,7 +51,7 @@ class CatalogRepository:
             data.name,
             data.category,
             data.asset_class,
-            data.geographic_focus,
+            json.dumps([a.model_dump() for a in data.geographic_focus]),
             json.dumps([a.model_dump() for a in data.underlying]),
             data.commission,
             data.currency,
@@ -94,7 +94,7 @@ class CatalogRepository:
             data.name,
             data.category,
             data.asset_class,
-            data.geographic_focus,
+            json.dumps([a.model_dump() for a in data.geographic_focus]),
             json.dumps([a.model_dump() for a in data.underlying]),
             data.commission,
             data.currency,
@@ -114,6 +114,10 @@ class CatalogRepository:
         if "underlying" in fields:
             fields["underlying"] = json.dumps(
                 [a.model_dump() for a in data.underlying]
+            )
+        if "geographic_focus" in fields:
+            fields["geographic_focus"] = json.dumps(
+                [a.model_dump() for a in data.geographic_focus]
             )
         if not fields:
             row = await self.pool.fetchrow(
@@ -164,6 +168,12 @@ class CatalogRepository:
         )
         return [self._row_to_catalog_product(r) for r in rows]
 
+    @staticmethod
+    def _parse_json_allocations(raw: object) -> list[AssetAllocation]:
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        return [AssetAllocation(**a) for a in (raw or [])]
+
     def _row_to_catalog_product(self, row: asyncpg.Record) -> CatalogProduct:
         raw = row["underlying"]
         if isinstance(raw, str):
@@ -171,7 +181,7 @@ class CatalogRepository:
         return CatalogProduct(
             id=row["id"],
             name=row["name"],
-            geographic_focus=row["geographic_focus"] or "",
+            geographic_focus=self._parse_json_allocations(row["geographic_focus"]),
             asset_class=row["asset_class"] or "",
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             commission=row["commission"] or "",

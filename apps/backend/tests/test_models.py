@@ -168,7 +168,7 @@ def test_search_result_defaults_are_all_empty():
 
     assert result.name == ""
     assert result.asset_class == ""
-    assert result.geographic_focus == ""
+    assert result.geographic_focus == []
     assert result.commission == ""
     assert result.currency == ""
     assert result.administrator == ""

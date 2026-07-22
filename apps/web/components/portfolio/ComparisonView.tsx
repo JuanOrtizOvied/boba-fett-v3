@@ -53,7 +53,7 @@ function formatFieldValue(field: string, value: unknown): string {
   if (field === "category" && typeof value === "string") {
     return CATEGORY_META[value as Category]?.label ?? value;
   }
-  if (field === "underlying") {
+  if (field === "underlying" || field === "geographic_focus") {
     const allocations = value as AssetAllocation[];
     if (!Array.isArray(allocations) || allocations.length === 0) return "—";
     return allocations.map((a) => `${a.name} ${a.percentage}%`).join(", ");

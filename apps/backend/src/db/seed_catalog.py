@@ -67,9 +67,9 @@ async def seed(path: str) -> int:
                    (name, geographic_focus, asset_class, underlying,
                     commission, currency, administrator, manager,
                     liquidity, return_rate)
-                   VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)""",
+                   VALUES ($1, $2::jsonb, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)""",
                 name,
-                _clean(row[2]),
+                _parse_underlying(row[2]),
                 _clean(row[3]),
                 _parse_underlying(row[4]),
                 _clean(row[5]),
