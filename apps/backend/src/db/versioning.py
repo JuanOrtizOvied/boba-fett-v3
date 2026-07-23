@@ -6,6 +6,7 @@ from typing import Any, AsyncIterator
 
 import asyncpg
 
+from db.encryption import decrypt_amount, decrypt_json, encrypt_amount, encrypt_json
 from db.models import AssetAllocation, Product
 
 # Fields excluded from the per-product diff in `compare_snapshots` — they
@@ -133,7 +134,7 @@ class VersioningRepository:
                         latest["id"],
                     )
                     prev_products = {
-                        str(r["product_id"]): self._jsonb(r["product_data"])
+                        str(r["product_id"]): decrypt_json(r["product_data"])
                         for r in prev_rows
                     }
                     if current_products == prev_products:
@@ -142,12 +143,12 @@ class VersioningRepository:
                         )
 
                 product_count = len(rows)
-                total_amount = sum(float(r["amount"]) for r in rows)
+                total_amount = sum(decrypt_amount(r["amount"]) for r in rows)
 
                 cat_totals: dict[str, float] = {}
                 for r in rows:
                     cat = r["category"] or "otros"
-                    cat_totals[cat] = cat_totals.get(cat, 0) + float(r["amount"])
+                    cat_totals[cat] = cat_totals.get(cat, 0) + decrypt_amount(r["amount"])
                 category_summary = sorted(
                     [
                         {"category": c, "percentage": round(a / total_amount * 100, 1) if total_amount else 0}
@@ -166,7 +167,7 @@ class VersioningRepository:
                     name,
                     description,
                     product_count,
-                    total_amount,
+                    encrypt_amount(total_amount),
                     json.dumps(category_summary),
                 )
                 snapshot_id = snapshot_row["id"]
@@ -176,10 +177,10 @@ class VersioningRepository:
                     await conn.execute(
                         """INSERT INTO snapshot_products
                            (snapshot_id, product_id, product_data)
-                           VALUES ($1, $2, $3::jsonb)""",
+                           VALUES ($1, $2, $3)""",
                         snapshot_id,
                         product.id,
-                        json.dumps(product.model_dump()),
+                        encrypt_json(product.model_dump()),
                     )
 
                 return {
@@ -239,7 +240,7 @@ class VersioningRepository:
                 latest["id"],
             )
             prev = {
-                str(r["product_id"]): self._jsonb(r["product_data"])
+                str(r["product_id"]): decrypt_json(r["product_data"])
                 for r in prev_rows
             }
             return current != prev
@@ -270,7 +271,7 @@ class VersioningRepository:
         )
 
         detail = self._row_to_snapshot_summary(snapshot_row)
-        detail["products"] = [self._jsonb(r["product_data"]) for r in product_rows]
+        detail["products"] = [decrypt_json(r["product_data"]) for r in product_rows]
         return detail
 
     async def compare_snapshots(
@@ -317,8 +318,8 @@ class VersioningRepository:
             snapshot_b_id,
         )
 
-        products_a = {r["product_id"]: self._jsonb(r["product_data"]) for r in rows_a}
-        products_b = {r["product_id"]: self._jsonb(r["product_data"]) for r in rows_b}
+        products_a = {r["product_id"]: decrypt_json(r["product_data"]) for r in rows_a}
+        products_b = {r["product_id"]: decrypt_json(r["product_data"]) for r in rows_b}
 
         ids_a = set(products_a.keys())
         ids_b = set(products_b.keys())
@@ -441,8 +442,8 @@ class VersioningRepository:
             "user_id": str(row["user_id"]),
             "product_id": row["product_id"],
             "operation": row["operation"],
-            "before_state": self._jsonb(row["before_state"]),
-            "after_state": self._jsonb(row["after_state"]),
+            "before_state": decrypt_json(row["before_state"]),
+            "after_state": decrypt_json(row["after_state"]),
             "source": row["source"],
             "metadata": self._jsonb(row["metadata"]),
             "snapshot_id": str(row["snapshot_id"]) if row["snapshot_id"] else None,
@@ -456,7 +457,7 @@ class VersioningRepository:
             "name": row["name"],
             "description": row["description"],
             "product_count": row["product_count"],
-            "total_amount": float(row["total_amount"]),
+            "total_amount": decrypt_amount(row["total_amount"]),
             "category_summary": self._jsonb(row["category_summary"]) if row.get("category_summary") else [],
             "created_at": row["created_at"].isoformat(),
         }
@@ -479,7 +480,7 @@ class VersioningRepository:
             user_id=str(row["user_id"]),
             name=row["name"],
             provider=row["provider"],
-            amount=float(row["amount"]),
+            amount=decrypt_amount(row["amount"]),
             category=row["category"],
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             asset_class=row.get("asset_class", "") or "",

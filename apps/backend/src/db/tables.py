@@ -14,7 +14,6 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
-    Numeric,
     Table,
     Text,
     text,
@@ -58,7 +57,7 @@ products = Table(
     Column("user_id", UUID(as_uuid=True), ForeignKey("users.id"), nullable=False),
     Column("name", Text, nullable=False),
     Column("provider", Text, server_default=""),
-    Column("amount", Numeric, nullable=False),
+    Column("amount", Text, nullable=False),
     Column("category", Text, nullable=False),
     Column("underlying", JSONB, server_default=text("'[]'::jsonb")),
     Column("created_at", DateTime(timezone=True), server_default=text("now()")),
@@ -72,7 +71,6 @@ products = Table(
     Column("liquidity", Text, server_default=""),
     Column("return_rate", Text, server_default=""),
     Column("catalog_product_id", Integer),
-    CheckConstraint("amount > 0", name="products_amount_positive"),
     Index("idx_products_user", "user_id"),
     Index("idx_products_catalog_product_id", "catalog_product_id"),
 )
@@ -108,7 +106,7 @@ portfolio_snapshots = Table(
     Column("name", Text, nullable=False),
     Column("description", Text, nullable=False, server_default=""),
     Column("product_count", Integer, nullable=False, server_default=text("0")),
-    Column("total_amount", Numeric, nullable=False, server_default=text("0")),
+    Column("total_amount", Text, nullable=False, server_default=text("0")),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
     Column("category_summary", JSONB, server_default=text("'[]'::jsonb")),
 )
@@ -123,7 +121,7 @@ snapshot_products = Table(
         nullable=False,
     ),
     Column("product_id", Text, nullable=False),
-    Column("product_data", JSONB, nullable=False),
+    Column("product_data", Text, nullable=False),
     Index("idx_snapshot_products_snapshot", "snapshot_id"),
     Index("idx_snapshot_products_product_id", "product_id"),
 )
@@ -138,8 +136,8 @@ portfolio_changes = Table(
     ),
     Column("product_id", Text),
     Column("operation", Text, nullable=False),
-    Column("before_state", JSONB),
-    Column("after_state", JSONB),
+    Column("before_state", Text),
+    Column("after_state", Text),
     Column("source", Text, nullable=False, server_default="api"),
     Column(
         "snapshot_id", UUID(as_uuid=True),

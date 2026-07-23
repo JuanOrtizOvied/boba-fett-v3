@@ -39,6 +39,7 @@ from auth.dependencies import get_current_user
 from auth.repository import UserRepository
 from db.catalog_repository import CatalogRepository
 from db.connection import close_pool, get_pool
+from db.encryption import get_serde
 from db.excel import build_portfolio_workbook, export_filename
 from db.models import ProductCreate, ProductUpdate, SnapshotCreate
 from db.repository import ProductRepository
@@ -74,6 +75,9 @@ async def _init_chat_graph(app: FastAPI, stack: AsyncExitStack) -> None:
     )
     store = await stack.enter_async_context(AsyncPostgresStore.from_conn_string(postgres_uri))
     await checkpointer.setup()
+    serde = get_serde()
+    if serde is not None:
+        checkpointer.serde = serde
     await store.setup()
     app.state.chat_graph = graph_builder.compile(checkpointer=checkpointer, store=store)
 

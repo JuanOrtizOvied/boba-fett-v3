@@ -219,3 +219,43 @@ CREATE INDEX IF NOT EXISTS idx_changes_product
 CREATE INDEX IF NOT EXISTS idx_changes_snapshot
     ON portfolio_changes (snapshot_id)
     WHERE snapshot_id IS NOT NULL;
+
+-- Migration: encrypt amount columns (NUMERIC -> TEXT)
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='products' AND column_name='amount' AND data_type='numeric'
+  ) THEN
+    ALTER TABLE products ALTER COLUMN amount TYPE TEXT USING amount::text;
+    ALTER TABLE products DROP CONSTRAINT IF EXISTS products_amount_positive;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='portfolio_snapshots' AND column_name='total_amount' AND data_type='numeric'
+  ) THEN
+    ALTER TABLE portfolio_snapshots ALTER COLUMN total_amount TYPE TEXT USING total_amount::text;
+  END IF;
+END $$;
+
+-- Migration: encrypt JSONB blobs (JSONB -> TEXT)
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='snapshot_products' AND column_name='product_data' AND data_type='jsonb'
+  ) THEN
+    ALTER TABLE snapshot_products ALTER COLUMN product_data TYPE TEXT USING product_data::text;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='portfolio_changes' AND column_name='before_state' AND data_type='jsonb'
+  ) THEN
+    ALTER TABLE portfolio_changes ALTER COLUMN before_state TYPE TEXT USING before_state::text;
+    ALTER TABLE portfolio_changes ALTER COLUMN after_state TYPE TEXT USING after_state::text;
+  END IF;
+END $$;

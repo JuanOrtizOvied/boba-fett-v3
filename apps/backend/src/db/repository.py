@@ -5,6 +5,7 @@ import uuid
 
 import asyncpg
 
+from db.encryption import decrypt_amount, encrypt_amount, encrypt_json
 from db.models import AssetAllocation, Product, ProductCreate, ProductUpdate
 
 
@@ -70,7 +71,7 @@ class ProductRepository:
             user_id,
             data.name,
             data.provider,
-            data.amount,
+            encrypt_amount(data.amount),
             data.category,
             json.dumps([a.model_dump() for a in data.underlying]),
             data.asset_class,
@@ -143,6 +144,8 @@ class ProductRepository:
             updates["geographic_focus"] = json.dumps(
                 [a.model_dump() for a in data.geographic_focus]
             )
+        if "amount" in updates:
+            updates["amount"] = encrypt_amount(updates["amount"])
         if not updates:
             return before_product
 
@@ -243,12 +246,12 @@ class ProductRepository:
             """INSERT INTO portfolio_changes
                (user_id, product_id, operation, before_state, after_state,
                 source, metadata, snapshot_id)
-               VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8)""",
+               VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)""",
             user_id,
             product_id,
             operation,
-            json.dumps(before_state) if before_state is not None else None,
-            json.dumps(after_state) if after_state is not None else None,
+            encrypt_json(before_state),
+            encrypt_json(after_state),
             source,
             json.dumps(metadata or {}),
             snapshot_id,
@@ -292,7 +295,7 @@ class ProductRepository:
             user_id=str(row["user_id"]),
             name=row["name"],
             provider=row["provider"],
-            amount=float(row["amount"]),
+            amount=decrypt_amount(row["amount"]),
             category=row["category"],
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             asset_class=row.get("asset_class", "") or "",
