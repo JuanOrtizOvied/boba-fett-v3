@@ -1,24 +1,24 @@
 "use client";
 
 import { useState, type FC } from "react";
-import { CategorySection } from "@/components/portfolio/CategorySection";
-import { CategoryTabs } from "@/components/portfolio/CategoryTabs";
+import { AssetClassSection } from "@/components/portfolio/CategorySection";
+import { AssetClassTabs } from "@/components/portfolio/CategoryTabs";
 import { EditProductModal } from "@/components/portfolio/EditProductModal";
 import { SnapshotButton } from "@/components/portfolio/SnapshotButton";
 import { VersioningDrawer } from "@/components/portfolio/VersioningDrawer";
 import { PieIcon } from "@/components/icons/Icons";
 import { useToast } from "@/components/ui/Toast";
-import { CATEGORY_ORDER } from "@/lib/categories";
+import { ASSET_CLASS_ORDER } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { formatAbbreviatedUsd } from "@/lib/format";
-import type { Category, Product } from "@/lib/portfolio-types";
+import type { AssetClass, Product } from "@/lib/portfolio-types";
 import { usePortfolio } from "@/lib/usePortfolio";
 import { usePortfolioVersioning } from "@/lib/usePortfolioVersioning";
 
 /**
- * Right-side panel: metrics, category filter tabs, and per-category product
- * grids, capped off by the shared edit/add modal. Independently scrolling —
- * the topbar and chat panel stay pinned.
+ * Right-side panel: metrics, asset class filter tabs, and per-asset-class
+ * product grids, capped off by the shared edit/add modal. Independently
+ * scrolling — the topbar and chat panel stay pinned.
  * `portfolio-dashboard.spec.md` → "Scroll vertical solo en el panel de
  * portafolio". Design: `design.md` → Frontend Architecture → `PortfolioPanel`.
  */
@@ -29,11 +29,11 @@ export const PortfolioPanel: FC = () => {
     isLoading,
     error,
     refetch,
-    activeCategory,
-    setActiveCategory,
+    activeAssetClass,
+    setActiveAssetClass,
     editingProduct,
     isModalOpen,
-    createCategory,
+    createAssetClass,
     openCreateModal,
     openEditModal,
     closeModal,
@@ -62,24 +62,24 @@ export const PortfolioPanel: FC = () => {
 
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
 
-  const productsByCategory = CATEGORY_ORDER.reduce(
-    (acc, category) => {
-      acc[category] = products.filter((p) => p.category === category);
+  const productsByAssetClass = ASSET_CLASS_ORDER.reduce(
+    (acc, assetClass) => {
+      acc[assetClass] = products.filter((p) => p.asset_class === assetClass);
       return acc;
     },
-    {} as Record<Category, Product[]>,
+    {} as Record<AssetClass, Product[]>,
   );
 
-  const countsByCategory = CATEGORY_ORDER.reduce(
-    (acc, category) => {
-      acc[category] = productsByCategory[category].length;
+  const countsByAssetClass = ASSET_CLASS_ORDER.reduce(
+    (acc, assetClass) => {
+      acc[assetClass] = productsByAssetClass[assetClass].length;
       return acc;
     },
-    {} as Record<Category, number>,
+    {} as Record<AssetClass, number>,
   );
 
-  const visibleCategories =
-    activeCategory === "todos" ? CATEGORY_ORDER : [activeCategory];
+  const visibleAssetClasses =
+    activeAssetClass === "todos" ? ASSET_CLASS_ORDER : [activeAssetClass];
 
   const handleDeleteProduct = async (productId: string) => {
     const res = await fetchWithAuth(`/api/products/${productId}`, { method: "DELETE" });
@@ -118,7 +118,7 @@ export const PortfolioPanel: FC = () => {
           </p>
           <p className="text-sm text-sabbi-neutral-600">
             Comparte tus inversiones con el asistente — por texto, captura, PDF
-            o factsheet — y aparecerán aquí organizadas por categoría.
+            o factsheet — y aparecerán aquí organizadas por clase de activo.
           </p>
           <button
             type="button"
@@ -176,11 +176,11 @@ export const PortfolioPanel: FC = () => {
                 </div>
               </div>
 
-              <CategoryTabs
-                activeCategory={activeCategory}
-                onChange={setActiveCategory}
+              <AssetClassTabs
+                activeAssetClass={activeAssetClass}
+                onChange={setActiveAssetClass}
                 totalCount={productCount}
-                countsByCategory={countsByCategory}
+                countsByAssetClass={countsByAssetClass}
               />
             </div>
           </div>
@@ -193,17 +193,17 @@ export const PortfolioPanel: FC = () => {
             )}
 
             <div className="flex flex-col gap-6">
-              {visibleCategories.map((category) => {
-                const categoryProducts = productsByCategory[category];
-                if (activeCategory === "todos" && categoryProducts.length === 0) {
+              {visibleAssetClasses.map((assetClass) => {
+                const assetClassProducts = productsByAssetClass[assetClass];
+                if (activeAssetClass === "todos" && assetClassProducts.length === 0) {
                   return null;
                 }
                 return (
-                  <CategorySection
-                    key={category}
-                    category={category}
-                    index={CATEGORY_ORDER.indexOf(category)}
-                    products={categoryProducts}
+                  <AssetClassSection
+                    key={assetClass}
+                    assetClass={assetClass}
+                    index={ASSET_CLASS_ORDER.indexOf(assetClass)}
+                    products={assetClassProducts}
                     newProductIds={newProductIds}
                     onEditProduct={openEditModal}
                     onDeleteProduct={handleDeleteProduct}
@@ -219,7 +219,7 @@ export const PortfolioPanel: FC = () => {
       <EditProductModal
         isOpen={isModalOpen}
         product={editingProduct}
-        defaultCategory={createCategory}
+        defaultAssetClass={createAssetClass}
         onClose={closeModal}
         onSaved={refetch}
       />

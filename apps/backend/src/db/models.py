@@ -17,12 +17,11 @@ class Product(BaseModel):
     name: str
     provider: str = ""
     amount: float = Field(gt=0)
-    category: str = Field(
+    underlying: list[AssetAllocation] = Field(default_factory=list)
+    asset_class: str = Field(
         description="One of: inversiones_directas, mercados_privados,"
         " club_deals, mercados_publicos, otros, cash_y_equivalentes"
     )
-    underlying: list[AssetAllocation] = Field(default_factory=list)
-    asset_class: str = ""
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
@@ -44,9 +43,8 @@ class ProductCreate(BaseModel):
     name: str
     provider: str = ""
     amount: float = Field(gt=0)
-    category: str
     underlying: list[AssetAllocation] = Field(default_factory=list)
-    asset_class: str = ""
+    asset_class: str
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
@@ -67,7 +65,6 @@ class ProductUpdate(BaseModel):
     name: str | None = None
     provider: str | None = None
     amount: float | None = None
-    category: str | None = None
     underlying: list[AssetAllocation] | None = None
     asset_class: str | None = None
     geographic_focus: list[AssetAllocation] | None = None
@@ -112,7 +109,6 @@ class CatalogProduct(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
-    category: str = ""
     alternative_names: list[str] = Field(default_factory=list)
     approved_from_product_id: str | None = None
     approved_at: str | None = None
@@ -121,12 +117,11 @@ class CatalogProduct(BaseModel):
 class CatalogProductCreate(BaseModel):
     """Admin-submitted payload to approve a portfolio product into
     `product_catalog` (`sdd/product-catalog-approval/spec` — "Approve
-    Portfolio Product to Catalog"). `name` and `category` are required;
+    Portfolio Product to Catalog"). `name` and `asset_class` are required;
     every other field is optional enrichment."""
 
     name: str
-    category: str
-    asset_class: str = ""
+    asset_class: str
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     underlying: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
@@ -142,7 +137,6 @@ class CatalogProductCreate(BaseModel):
 
 class CatalogProductUpdate(BaseModel):
     name: str | None = None
-    category: str | None = None
     asset_class: str | None = None
     geographic_focus: list[AssetAllocation] | None = None
     underlying: list[AssetAllocation] | None = None
@@ -171,7 +165,6 @@ class SearchResult(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
-    category: str = ""
     underlying: list[AssetAllocation] = Field(default_factory=list)
     catalog_product_id: int | None = None
     primary_source: FieldSource = "catalog"

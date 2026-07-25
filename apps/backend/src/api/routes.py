@@ -154,7 +154,7 @@ async def portfolio_summary(user: dict = Depends(get_current_user)) -> dict:
 @app.get("/portfolio/me/export")
 async def export_portfolio(user: dict = Depends(get_current_user)) -> StreamingResponse:
     """Stream a server-generated .xlsx for the portfolio ("Portafolio Final"
-    summary sheet + one sheet per category), built straight from Postgres —
+    summary sheet + one sheet per asset class), built straight from Postgres —
     no client-side spreadsheet dependency (`portfolio-dashboard.spec.md` →
     "Exportar portafolio a Excel").
     """

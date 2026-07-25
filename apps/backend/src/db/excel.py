@@ -1,9 +1,9 @@
 """Server-side .xlsx export for the SABBI portfolio.
 
 Builds the workbook directly from Postgres data (via `ProductRepository`) —
-no client-side spreadsheet library involved. One sheet per category with its
-products, plus a "Portafolio Final" summary sheet consolidating all
-categories, matching `portfolio-dashboard.spec.md` → "Exportar portafolio a
+no client-side spreadsheet library involved. One sheet per asset class with
+its products, plus a "Portafolio Final" summary sheet consolidating all
+asset classes, matching `portfolio-dashboard.spec.md` → "Exportar portafolio a
 Excel".
 """
 
@@ -23,9 +23,9 @@ HEADER_FONT = Font(color="FFFFFF", bold=True)
 CURRENCY_FORMAT = '"$"#,##0'
 PERCENT_FORMAT = "0.0%"
 
-# Kept in sync with `apps/web/lib/categories.ts` (`CATEGORY_META`) and the
-# `CATEGORIES` taxonomy in `agent/state.py`.
-CATEGORY_ORDER: list[str] = [
+# Kept in sync with `apps/web/lib/categories.ts` (`ASSET_CLASS_META`) and the
+# `ASSET_CLASSES` taxonomy in `agent/state.py`.
+ASSET_CLASS_ORDER: list[str] = [
     "inversiones_directas",
     "mercados_privados",
     "club_deals",
@@ -33,7 +33,7 @@ CATEGORY_ORDER: list[str] = [
     "otros",
     "cash_y_equivalentes",
 ]
-CATEGORY_LABELS: dict[str, str] = {
+ASSET_CLASS_LABELS: dict[str, str] = {
     "inversiones_directas": "Inversiones directas",
     "mercados_privados": "Mercados privados",
     "club_deals": "Club deals",
@@ -60,15 +60,15 @@ def _underlying_summary(product: Product) -> str:
     return ", ".join(f"{a.name} {a.percentage:.0f}%" for a in product.underlying)
 
 
-def _group_by_category(products: list[Product]) -> dict[str, list[Product]]:
-    by_category: dict[str, list[Product]] = {}
+def _group_by_asset_class(products: list[Product]) -> dict[str, list[Product]]:
+    by_asset_class: dict[str, list[Product]] = {}
     for product in products:
-        by_category.setdefault(product.category, []).append(product)
-    return by_category
+        by_asset_class.setdefault(product.asset_class, []).append(product)
+    return by_asset_class
 
 
-def _write_category_sheet(wb: Workbook, category: str, products: list[Product]) -> None:
-    label = CATEGORY_LABELS.get(category, category)
+def _write_asset_class_sheet(wb: Workbook, asset_class: str, products: list[Product]) -> None:
+    label = ASSET_CLASS_LABELS.get(asset_class, asset_class)
     ws = wb.create_sheet(title=label[:31])
     headers = ["Nombre", "Proveedor", "Monto (USD)", "Underlying"]
     _style_header_row(ws, headers)
@@ -93,26 +93,26 @@ def _write_category_sheet(wb: Workbook, category: str, products: list[Product]) 
 
 def _write_summary_sheet(wb: Workbook, products: list[Product]) -> None:
     ws = wb.create_sheet(title="Portafolio Final", index=0)
-    headers = ["Categoría", "Monto (USD)", "% del portafolio", "# Productos"]
+    headers = ["Clase de activo", "Monto (USD)", "% del portafolio", "# Productos"]
     _style_header_row(ws, headers)
 
     total = sum(p.amount for p in products)
-    by_category = _group_by_category(products)
+    by_asset_class = _group_by_asset_class(products)
 
     row = 2
-    for category in CATEGORY_ORDER:
-        category_products = by_category.get(category, [])
-        if not category_products:
+    for asset_class in ASSET_CLASS_ORDER:
+        asset_class_products = by_asset_class.get(asset_class, [])
+        if not asset_class_products:
             continue
-        category_total = sum(p.amount for p in category_products)
-        ws.cell(row=row, column=1, value=CATEGORY_LABELS.get(category, category))
-        amount_cell = ws.cell(row=row, column=2, value=category_total)
+        asset_class_total = sum(p.amount for p in asset_class_products)
+        ws.cell(row=row, column=1, value=ASSET_CLASS_LABELS.get(asset_class, asset_class))
+        amount_cell = ws.cell(row=row, column=2, value=asset_class_total)
         amount_cell.number_format = CURRENCY_FORMAT
         percent_cell = ws.cell(
-            row=row, column=3, value=(category_total / total if total else 0)
+            row=row, column=3, value=(asset_class_total / total if total else 0)
         )
         percent_cell.number_format = PERCENT_FORMAT
-        ws.cell(row=row, column=4, value=len(category_products))
+        ws.cell(row=row, column=4, value=len(asset_class_products))
         row += 1
 
     total_label_cell = ws.cell(row=row, column=1, value="Total")
@@ -131,7 +131,7 @@ def _write_summary_sheet(wb: Workbook, products: list[Product]) -> None:
 
 def build_portfolio_workbook(products: list[Product]) -> io.BytesIO:
     """Build the SABBI export workbook: a "Portafolio Final" summary sheet
-    (index 0) followed by one sheet per category that has at least one
+    (index 0) followed by one sheet per asset class that has at least one
     product, and return it as an in-memory buffer ready for streaming.
     """
     wb = Workbook()
@@ -139,11 +139,11 @@ def build_portfolio_workbook(products: list[Product]) -> io.BytesIO:
 
     _write_summary_sheet(wb, products)
 
-    by_category = _group_by_category(products)
-    for category in CATEGORY_ORDER:
-        category_products = by_category.get(category)
-        if category_products:
-            _write_category_sheet(wb, category, category_products)
+    by_asset_class = _group_by_asset_class(products)
+    for asset_class in ASSET_CLASS_ORDER:
+        asset_class_products = by_asset_class.get(asset_class)
+        if asset_class_products:
+            _write_asset_class_sheet(wb, asset_class, asset_class_products)
 
     buffer = io.BytesIO()
     wb.save(buffer)

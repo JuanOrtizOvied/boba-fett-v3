@@ -1,8 +1,8 @@
-import type { Category } from "@/lib/portfolio-types";
+import type { AssetClass } from "@/lib/portfolio-types";
 
-export interface CategoryMeta {
-  key: Category;
-  /** Full label — section headers, modal category dropdown. */
+export interface AssetClassMeta {
+  key: AssetClass;
+  /** Full label — section headers, modal asset class dropdown. */
   label: string;
   /** Short label — tabs, card badges. Matches `portfolio-dashboard.spec.md`. */
   shortLabel: string;
@@ -14,7 +14,7 @@ export interface CategoryMeta {
   textCssVar: string;
 }
 
-export const CATEGORY_ORDER: Category[] = [
+export const ASSET_CLASS_ORDER: AssetClass[] = [
   "inversiones_directas",
   "mercados_privados",
   "club_deals",
@@ -23,7 +23,7 @@ export const CATEGORY_ORDER: Category[] = [
   "cash_y_equivalentes",
 ];
 
-export const CATEGORY_META: Record<Category, CategoryMeta> = {
+export const ASSET_CLASS_META: Record<AssetClass, AssetClassMeta> = {
   inversiones_directas: {
     key: "inversiones_directas",
     label: "Inversiones directas",
@@ -80,13 +80,13 @@ export interface SubcategoryGroup {
 }
 
 /**
- * 3-level subcategory taxonomy (category -> group -> leaf), mirroring the
- * backend's `CATEGORIES` in `apps/backend/src/agent/state.py`. Hardcoded here
+ * 3-level subcategory taxonomy (asset class -> group -> leaf), mirroring the
+ * backend's `ASSET_CLASSES` in `apps/backend/src/agent/state.py`. Hardcoded here
  * rather than fetched — the taxonomy rarely changes and there is no endpoint
  * exposing it (`multi-level-search` design: "Frontend display" — the tool
  * result is already the data contract, no new endpoints).
  */
-export const CATEGORY_SUBCATEGORIES: Record<Category, SubcategoryGroup[]> = {
+export const ASSET_CLASS_SUBCATEGORIES: Record<AssetClass, SubcategoryGroup[]> = {
   inversiones_directas: [
     { group: "RE Perú", leaves: ["Residencial", "Oficinas", "Comercial/Industrial"] },
     { group: "RE Extranjero", leaves: ["RE Extranjero"] },
@@ -128,9 +128,9 @@ export const CATEGORY_SUBCATEGORIES: Record<Category, SubcategoryGroup[]> = {
   cash_y_equivalentes: [{ group: "Cash", leaves: ["Depósitos a plazo", "Fondos de Money Market"] }],
 };
 
-const LABEL_TO_KEY: Record<string, Category> = {
+const LABEL_TO_KEY: Record<string, AssetClass> = {
   ...Object.fromEntries(
-    Object.entries(CATEGORY_META).map(([key, meta]) => [meta.label.toLowerCase(), key as Category]),
+    Object.entries(ASSET_CLASS_META).map(([key, meta]) => [meta.label.toLowerCase(), key as AssetClass]),
   ),
   "real estate directo": "inversiones_directas",
   "mercados privados": "mercados_privados",
@@ -145,19 +145,19 @@ const LABEL_TO_KEY: Record<string, Category> = {
   "cash": "cash_y_equivalentes",
 };
 
-export function resolveCategoryKey(value: string): Category {
-  if (value in CATEGORY_META) return value as Category;
+export function resolveAssetClassKey(value: string): AssetClass {
+  if (value in ASSET_CLASS_META) return value as AssetClass;
   return LABEL_TO_KEY[value.toLowerCase()] ?? "otros";
 }
 
-export function categoryColorVar(category: Category): string {
-  return `var(${CATEGORY_META[category].cssVar})`;
+export function assetClassColorVar(assetClass: AssetClass): string {
+  return `var(${ASSET_CLASS_META[assetClass].cssVar})`;
 }
 
-export function categoryBgVar(category: Category): string {
-  return `var(${CATEGORY_META[category].bgCssVar})`;
+export function assetClassBgVar(assetClass: AssetClass): string {
+  return `var(${ASSET_CLASS_META[assetClass].bgCssVar})`;
 }
 
-export function categoryTextVar(category: Category): string {
-  return `var(${CATEGORY_META[category].textCssVar})`;
+export function assetClassTextVar(assetClass: AssetClass): string {
+  return `var(${ASSET_CLASS_META[assetClass].textCssVar})`;
 }

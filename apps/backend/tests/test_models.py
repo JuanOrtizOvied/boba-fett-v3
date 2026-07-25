@@ -37,7 +37,7 @@ def test_product_valid_generates_default_id():
         user_id="usr_123",
         name="BlackRock Private Credit Fund",
         amount=50000,
-        category="mercados_privados",
+        asset_class="mercados_privados",
     )
 
     assert product.id.startswith("prod_")
@@ -55,7 +55,7 @@ def test_product_accepts_explicit_underlying():
         user_id="usr_123",
         name="Multi-asset fund",
         amount=10000,
-        category="mercados_publicos",
+        asset_class="mercados_publicos",
         underlying=[
             AssetAllocation(name="RV US Large Cap", percentage=60),
             AssetAllocation(name="RF Corporate", percentage=40),
@@ -71,10 +71,10 @@ def test_product_rejects_non_positive_amount(amount):
     from db.models import Product
 
     with pytest.raises(ValidationError):
-        Product(user_id="usr_123", name="Fund", amount=amount, category="cash_y_equivalentes")
+        Product(user_id="usr_123", name="Fund", amount=amount, asset_class="cash_y_equivalentes")
 
 
-def test_product_requires_name_and_category():
+def test_product_requires_name_and_asset_class():
     from db.models import Product
 
     with pytest.raises(ValidationError):
@@ -84,7 +84,7 @@ def test_product_requires_name_and_category():
 def test_product_create_valid():
     from db.models import ProductCreate
 
-    data = ProductCreate(name="Fund A", amount=1000, category="inversiones_directas")
+    data = ProductCreate(name="Fund A", amount=1000, asset_class="inversiones_directas")
 
     assert data.name == "Fund A"
     assert data.provider == ""
@@ -97,14 +97,14 @@ def test_product_create_rejects_non_positive_amount(amount):
     from db.models import ProductCreate
 
     with pytest.raises(ValidationError):
-        ProductCreate(name="Fund A", amount=amount, category="inversiones_directas")
+        ProductCreate(name="Fund A", amount=amount, asset_class="inversiones_directas")
 
 
 def test_product_create_requires_name():
     from db.models import ProductCreate
 
     with pytest.raises(ValidationError):
-        ProductCreate(amount=100, category="inversiones_directas")
+        ProductCreate(amount=100, asset_class="inversiones_directas")
 
 
 def test_product_update_all_fields_optional():
@@ -115,17 +115,17 @@ def test_product_update_all_fields_optional():
     assert update.name is None
     assert update.provider is None
     assert update.amount is None
-    assert update.category is None
+    assert update.asset_class is None
     assert update.underlying is None
 
 
 def test_product_update_partial_fields():
     from db.models import ProductUpdate
 
-    update = ProductUpdate(amount=2500, category="cash_y_equivalentes")
+    update = ProductUpdate(amount=2500, asset_class="cash_y_equivalentes")
 
     assert update.amount == 2500
-    assert update.category == "cash_y_equivalentes"
+    assert update.asset_class == "cash_y_equivalentes"
     assert update.name is None
 
 
@@ -141,24 +141,24 @@ def test_product_update_underlying_replaces_full_list():
     assert update.underlying[0].name == "Cripto"
 
 
-def test_catalog_product_category_defaults_empty():
+def test_catalog_product_asset_class_defaults_empty():
     from db.models import CatalogProduct
 
     product = CatalogProduct(id=1, name="Vanguard Total World Stock ETF")
 
-    assert product.category == ""
+    assert product.asset_class == ""
 
 
-def test_catalog_product_accepts_explicit_category():
+def test_catalog_product_accepts_explicit_asset_class():
     from db.models import CatalogProduct
 
     product = CatalogProduct(
         id=2,
         name="US Treasury Bond Fund",
-        category="mercados_publicos",
+        asset_class="mercados_publicos",
     )
 
-    assert product.category == "mercados_publicos"
+    assert product.asset_class == "mercados_publicos"
 
 
 def test_search_result_defaults_are_all_empty():
@@ -175,7 +175,6 @@ def test_search_result_defaults_are_all_empty():
     assert result.manager == ""
     assert result.liquidity == ""
     assert result.return_rate == ""
-    assert result.category == ""
     assert result.catalog_product_id is None
     assert result.primary_source == "catalog"
     assert result.provenance == {}

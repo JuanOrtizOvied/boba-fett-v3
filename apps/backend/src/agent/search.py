@@ -22,7 +22,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
-from agent.state import CATEGORIES
+from agent.state import ASSET_CLASSES
 from db.catalog_repository import CatalogRepository
 from db.models import FieldSource, SearchResult
 
@@ -39,7 +39,6 @@ FIELD_NAMES = (
     "manager",
     "liquidity",
     "return_rate",
-    "category",
 )
 
 # Rank of trust for each source, lowest = most trusted. `primary_source`
@@ -61,7 +60,7 @@ an investment portfolio platform.
 
 Extract these fields for the requested product: name, asset_class,
 geographic_focus, commission, currency, administrator, manager,
-liquidity, return_rate, category, underlying.
+liquidity, return_rate, underlying.
 
 `underlying` is the product's underlying asset composition — a list of
 {name, percentage} objects summing to 100%. Each entry names an asset class
@@ -97,7 +96,6 @@ class ExtractedProduct(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
-    category: str = ""
     underlying: list[_ExtractedAllocation] = Field(default_factory=list)
 
 
@@ -236,7 +234,7 @@ async def _search_tavily(query: str) -> dict[str, str]:
     )
 
 
-_LEGACY_CATEGORY_LABELS: set[str] = {
+_LEGACY_ASSET_CLASS_LABELS: set[str] = {
     "real estate directo",
     "mercados privados",
     "mercados privado",
@@ -252,29 +250,29 @@ _LEGACY_CATEGORY_LABELS: set[str] = {
 }
 
 
-def _is_valid_category(value: str) -> bool:
+def _is_valid_asset_class(value: str) -> bool:
     v = value.strip().lower()
-    for key, info in CATEGORIES.items():
+    for key, info in ASSET_CLASSES.items():
         if v == key.lower() or v == str(info["label"]).lower():
             return True
-    return v in _LEGACY_CATEGORY_LABELS
+    return v in _LEGACY_ASSET_CLASS_LABELS
 
 
 def _sanitize_taxonomy(result: SearchResult) -> None:
-    """Clear category values that don't match the SABBI taxonomy.
+    """Clear asset_class values that don't match the SABBI taxonomy.
     Invalid values (e.g. "Diversificado" from a catalog entry) are wiped so
     _classify can re-attempt auto-classification or the agent asks the user."""
-    if result.category and not _is_valid_category(result.category):
-        result.category = ""
-        result.provenance.pop("category", None)
+    if result.asset_class and not _is_valid_asset_class(result.asset_class):
+        result.asset_class = ""
+        result.provenance.pop("asset_class", None)
 
 
 def _classify(result: SearchResult) -> None:
-    """Auto-classify into category from `CATEGORIES` when the already-known
-    fields confidently match exactly one taxonomy leaf. Leaves category empty
-    on no match or ambiguous (multiple leaf) matches so the agent asks the
-    user to classify manually."""
-    if result.category:
+    """Auto-classify into asset_class from `ASSET_CLASSES` when the
+    already-known fields confidently match exactly one taxonomy leaf. Leaves
+    asset_class empty on no match or ambiguous (multiple leaf) matches so the
+    agent asks the user to classify manually."""
+    if result.asset_class:
         return
 
     haystack = " ".join(
@@ -282,7 +280,6 @@ def _classify(result: SearchResult) -> None:
             None,
             [
                 result.name,
-                result.asset_class,
                 " ".join(a.name for a in result.geographic_focus),
             ],
         )
@@ -291,18 +288,18 @@ def _classify(result: SearchResult) -> None:
         return
 
     matches: set[tuple[str, str, str]] = set()
-    for category_key, info in CATEGORIES.items():
+    for asset_class_key, info in ASSET_CLASSES.items():
         for group_name, leaves in info["groups"].items():
             for leaf in leaves:
                 if leaf and leaf.lower() in haystack:
-                    matches.add((category_key, group_name, leaf))
+                    matches.add((asset_class_key, group_name, leaf))
 
     if len(matches) != 1:
         return
 
-    category_key, group_name, leaf = next(iter(matches))
-    result.category = category_key
-    result.provenance["category"] = result.primary_source
+    asset_class_key, group_name, leaf = next(iter(matches))
+    result.asset_class = asset_class_key
+    result.provenance["asset_class"] = result.primary_source
 
 
 async def cascade_search(query: str, pool: asyncpg.Pool) -> SearchResult | None:

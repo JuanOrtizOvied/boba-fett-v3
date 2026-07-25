@@ -23,13 +23,13 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from agent.search import cascade_search
-from agent.state import CATEGORIES
+from agent.state import ASSET_CLASSES
 from db.connection import get_pool, get_repository
 from db.models import AssetAllocation, FieldSource, ProductCreate, ProductUpdate
 from db.repository import ProductRepository
 from db.versioning import VersioningRepository
 
-_KEY_TO_LABEL: dict[str, str] = {k: str(v["label"]) for k, v in CATEGORIES.items()}
+_KEY_TO_LABEL: dict[str, str] = {k: str(v["label"]) for k, v in ASSET_CLASSES.items()}
 _LABEL_TO_KEY: dict[str, str] = {v.lower(): k for k, v in _KEY_TO_LABEL.items()}
 
 _LEGACY_ALIASES: dict[str, str] = {
@@ -51,8 +51,8 @@ _LEGACY_ALIASES: dict[str, str] = {
 _LABEL_TO_KEY.update(_LEGACY_ALIASES)
 
 
-def _normalize_category_key(key_or_label: str) -> str:
-    """Normalize a category value to its canonical key (e.g. 'Cash y
+def _normalize_asset_class_key(key_or_label: str) -> str:
+    """Normalize an asset_class value to its canonical key (e.g. 'Cash y
     Equivalentes' -> 'cash_y_equivalentes', 'privados' ->
     'mercados_privados'). Falls back to 'otros' for unknown values."""
     if key_or_label in _KEY_TO_LABEL:
@@ -108,10 +108,9 @@ def _to_allocations(items: list[dict[str, Any]]) -> list[AssetAllocation]:
 async def propose_product(
     name: str,
     amount: float,
-    category: str,
+    asset_class: str,
     provider: str = "",
     underlying: list[dict[str, Any]] | None = None,
-    asset_class: str = "",
     currency: str = "",
     commission: str = "",
     administrator: str = "",
@@ -139,18 +138,17 @@ async def propose_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Category key, one of: inversiones_directas,
+        asset_class: Asset class key, one of: inversiones_directas,
             mercados_privados, club_deals, mercados_publicos, otros,
             cash_y_equivalentes.
         provider: Provider or fund manager name.
         underlying: List of {name, percentage} subcategory allocations.
-            Names MUST be canonical subcategory leaves from the CATEGORIES
-            taxonomy for the chosen category. Use the leaf name when it equals
-            the group name (e.g. 'Deuda Privada', 'Private Equity') or
+            Names MUST be canonical subcategory leaves from the ASSET_CLASSES
+            taxonomy for the chosen asset_class. Use the leaf name when it
+            equals the group name (e.g. 'Deuda Privada', 'Private Equity') or
             '{group} {leaf}' when they differ (e.g. 'Renta Variable US Large
             Cap', 'Renta Fija US Treasuries', 'RE Perú Residencial').
             Percentages MUST sum to 100.
-        asset_class: Asset class, from search_product if available.
         currency: Currency, from search_product if available.
         commission: Commission/fee, from search_product if available.
         administrator: Fund administrator, from search_product if available.
@@ -177,10 +175,9 @@ async def propose_product(
         "product": {
             "name": name,
             "amount": amount,
-            "category": _normalize_category_key(category),
+            "asset_class": _normalize_asset_class_key(asset_class),
             "provider": provider,
             "underlying": underlying or [{"name": name, "percentage": 100}],
-            "asset_class": asset_class,
             "currency": currency,
             "commission": commission,
             "administrator": administrator,
@@ -200,10 +197,9 @@ async def propose_product(
 async def add_product(
     name: str,
     amount: float,
-    category: str,
+    asset_class: str,
     provider: str = "",
     underlying: list[dict[str, Any]] | None = None,
-    asset_class: str = "",
     currency: str = "",
     commission: str = "",
     administrator: str = "",
@@ -220,18 +216,17 @@ async def add_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        category: Category key, one of: inversiones_directas,
+        asset_class: Asset class key, one of: inversiones_directas,
             mercados_privados, club_deals, mercados_publicos, otros,
             cash_y_equivalentes.
         provider: Provider or fund manager name.
         underlying: List of {name, percentage} subcategory allocations.
-            Names MUST be canonical subcategory leaves from the CATEGORIES
-            taxonomy for the chosen category. Use the leaf name when it equals
-            the group name (e.g. 'Deuda Privada') or '{group} {leaf}' when
-            they differ (e.g. 'Renta Variable US Large Cap').
+            Names MUST be canonical subcategory leaves from the ASSET_CLASSES
+            taxonomy for the chosen asset_class. Use the leaf name when it
+            equals the group name (e.g. 'Deuda Privada') or '{group} {leaf}'
+            when they differ (e.g. 'Renta Variable US Large Cap').
             Percentages MUST sum to 100. When omitted, defaults to 100%
             allocated to the product name.
-        asset_class: Asset class, from search_product if available.
         currency: Currency, from search_product if available.
         commission: Commission/fee, from search_product if available.
         administrator: Fund administrator, from search_product if available.
@@ -255,9 +250,8 @@ async def add_product(
             name=name,
             provider=provider,
             amount=amount,
-            category=_normalize_category_key(category),
             underlying=allocs,
-            asset_class=asset_class,
+            asset_class=_normalize_asset_class_key(asset_class),
             geographic_focus=geo_allocs,
             commission=commission,
             currency=currency,
@@ -279,7 +273,7 @@ async def update_product(
     name: str | None = None,
     provider: str | None = None,
     amount: float | None = None,
-    category: str | None = None,
+    asset_class: str | None = None,
     underlying: list[dict[str, Any]] | None = None,
     *,
     config: RunnableConfig,
@@ -291,7 +285,7 @@ async def update_product(
         name: New product name, if changed.
         provider: New provider name, if changed.
         amount: New amount in USD, if changed.
-        category: New category, if changed.
+        asset_class: New asset class, if changed.
         underlying: New underlying allocation list, if changed.
     """
     del config  # unused — product_id already scopes the update, no portfolio lookup needed
@@ -303,7 +297,7 @@ async def update_product(
             name=name,
             provider=provider,
             amount=amount,
-            category=_normalize_category_key(category) if category else None,
+            asset_class=_normalize_asset_class_key(asset_class) if asset_class else None,
             underlying=allocs,
         ),
         source="agent",

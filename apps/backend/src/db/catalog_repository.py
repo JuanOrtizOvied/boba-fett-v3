@@ -20,19 +20,17 @@ class CatalogRepository:
     ) -> CatalogProduct | None:
         """Insert a new catalog entry unless a normalized match already
         exists (`sdd/product-catalog-approval/design` — "Duplicate Detection
-        SQL"). Matching is on name + category + asset_class, trimmed and
+        SQL"). Matching is on name + asset_class, trimmed and
         case-insensitive. Returns `None` when a duplicate is found instead
         of inserting."""
         existing = await self.pool.fetchrow(
             """
             SELECT id FROM product_catalog
             WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
-              AND LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM($2))
-              AND LOWER(TRIM(COALESCE(asset_class, ''))) = LOWER(TRIM($3))
+              AND LOWER(TRIM(COALESCE(asset_class, ''))) = LOWER(TRIM($2))
             LIMIT 1
             """,
             data.name,
-            data.category,
             data.asset_class,
         )
         if existing is not None:
@@ -41,15 +39,14 @@ class CatalogRepository:
         row = await self.pool.fetchrow(
             """
             INSERT INTO product_catalog
-                (name, category, asset_class, geographic_focus,
+                (name, asset_class, geographic_focus,
                  underlying, commission, currency, administrator, manager,
                  liquidity, return_rate, approved_from_product_id,
                  alternative_names, approved_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
             RETURNING *
             """,
             data.name,
-            data.category,
             data.asset_class,
             json.dumps([a.model_dump() for a in data.geographic_focus]),
             json.dumps([a.model_dump() for a in data.underlying]),
@@ -71,19 +68,18 @@ class CatalogRepository:
             """
             UPDATE product_catalog
             SET name = $2,
-                category = $3,
-                asset_class = $4,
-                geographic_focus = $5,
-                underlying = $6,
-                commission = $7,
-                currency = $8,
-                administrator = $9,
-                manager = $10,
-                liquidity = $11,
-                return_rate = $12,
-                approved_from_product_id = $13,
+                asset_class = $3,
+                geographic_focus = $4,
+                underlying = $5,
+                commission = $6,
+                currency = $7,
+                administrator = $8,
+                manager = $9,
+                liquidity = $10,
+                return_rate = $11,
+                approved_from_product_id = $12,
                 alternative_names = CASE
-                    WHEN cardinality($14::text[]) > 0 THEN $14
+                    WHEN cardinality($13::text[]) > 0 THEN $13
                     ELSE alternative_names
                 END,
                 approved_at = now()
@@ -92,7 +88,6 @@ class CatalogRepository:
             """,
             catalog_id,
             data.name,
-            data.category,
             data.asset_class,
             json.dumps([a.model_dump() for a in data.geographic_focus]),
             json.dumps([a.model_dump() for a in data.underlying]),
@@ -190,7 +185,6 @@ class CatalogRepository:
             manager=row["manager"] or "",
             liquidity=row["liquidity"] or "",
             return_rate=row["return_rate"] or "",
-            category=row["category"] or "",
             alternative_names=list(row["alternative_names"] or []),
             approved_from_product_id=row["approved_from_product_id"],
             approved_at=(

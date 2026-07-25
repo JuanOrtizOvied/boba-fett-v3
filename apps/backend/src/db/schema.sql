@@ -29,7 +29,6 @@ CREATE TABLE IF NOT EXISTS products (
     name TEXT NOT NULL,
     provider TEXT DEFAULT '',
     amount NUMERIC NOT NULL CHECK (amount > 0),
-    category TEXT NOT NULL,
     underlying JSONB DEFAULT '[]',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
@@ -60,17 +59,38 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS liquidity TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS return_rate TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_product_id INTEGER;
 
-UPDATE products SET category = 'inversiones_directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas', 'directas');
-UPDATE products SET category = 'mercados_privados' WHERE lower(category) IN ('mercados privados', 'mercados privado', 'privados');
-UPDATE products SET category = 'club_deals' WHERE lower(category) IN ('club deals', 'club');
-UPDATE products SET category = 'mercados_publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos', 'publicos');
-UPDATE products SET category = 'cash_y_equivalentes' WHERE lower(category) IN ('cash y equivalentes', 'cash');
+-- Migration: normalize legacy category labels, backfill into asset_class,
+-- then drop category (asset_class absorbs its role — same taxonomy values).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='products' AND column_name='category'
+  ) THEN
+    UPDATE products SET category = 'inversiones_directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas', 'directas');
+    UPDATE products SET category = 'mercados_privados' WHERE lower(category) IN ('mercados privados', 'mercados privado', 'privados');
+    UPDATE products SET category = 'club_deals' WHERE lower(category) IN ('club deals', 'club');
+    UPDATE products SET category = 'mercados_publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos', 'publicos');
+    UPDATE products SET category = 'cash_y_equivalentes' WHERE lower(category) IN ('cash y equivalentes', 'cash');
+    UPDATE products SET asset_class = category WHERE asset_class IS NULL OR asset_class = '';
+    ALTER TABLE products DROP COLUMN category;
+  END IF;
+END $$;
+ALTER TABLE products ALTER COLUMN asset_class SET NOT NULL;
 
-UPDATE product_catalog SET category = 'inversiones_directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas', 'directas');
-UPDATE product_catalog SET category = 'mercados_privados' WHERE lower(category) IN ('mercados privados', 'mercados privado', 'privados');
-UPDATE product_catalog SET category = 'club_deals' WHERE lower(category) IN ('club deals', 'club');
-UPDATE product_catalog SET category = 'mercados_publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos', 'publicos');
-UPDATE product_catalog SET category = 'cash_y_equivalentes' WHERE lower(category) IN ('cash y equivalentes', 'cash');
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='product_catalog' AND column_name='category'
+  ) THEN
+    UPDATE product_catalog SET category = 'inversiones_directas' WHERE lower(category) IN ('real estate directo', 'inversiones directas', 'directas');
+    UPDATE product_catalog SET category = 'mercados_privados' WHERE lower(category) IN ('mercados privados', 'mercados privado', 'privados');
+    UPDATE product_catalog SET category = 'club_deals' WHERE lower(category) IN ('club deals', 'club');
+    UPDATE product_catalog SET category = 'mercados_publicos' WHERE lower(category) IN ('mercados publicos', 'mercados públicos', 'publicos');
+    UPDATE product_catalog SET category = 'cash_y_equivalentes' WHERE lower(category) IN ('cash y equivalentes', 'cash');
+    UPDATE product_catalog SET asset_class = category WHERE asset_class IS NULL OR asset_class = '';
+    ALTER TABLE product_catalog DROP COLUMN category;
+  END IF;
+END $$;
 
 -- Migration: remove subcategory, merge composition into underlying
 ALTER TABLE products DROP COLUMN IF EXISTS subcategory;
@@ -117,11 +137,8 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     administrator TEXT DEFAULT '',
     manager TEXT DEFAULT '',
     liquidity TEXT DEFAULT '',
-    return_rate TEXT DEFAULT '',
-    category TEXT DEFAULT ''
+    return_rate TEXT DEFAULT ''
 );
-
-ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '';
 
 -- Migration: product_catalog geographic_focus TEXT -> JSONB
 DO $$ BEGIN
@@ -155,29 +172,50 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-ALTER TABLE portfolio_snapshots ADD COLUMN IF NOT EXISTS category_summary JSONB DEFAULT '[]';
+-- Migration: rename category_summary -> asset_class_summary, rewrite JSONB keys
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='portfolio_snapshots' AND column_name='category_summary'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='portfolio_snapshots' AND column_name='asset_class_summary'
+  ) THEN
+    ALTER TABLE portfolio_snapshots RENAME COLUMN category_summary TO asset_class_summary;
+    UPDATE portfolio_snapshots
+    SET asset_class_summary = (
+        SELECT jsonb_agg(
+            jsonb_build_object('asset_class', elem->>'category', 'percentage', elem->'percentage')
+        )
+        FROM jsonb_array_elements(asset_class_summary) AS elem
+    )
+    WHERE asset_class_summary IS NOT NULL AND asset_class_summary != '[]'::jsonb;
+  END IF;
+END $$;
+
+ALTER TABLE portfolio_snapshots ADD COLUMN IF NOT EXISTS asset_class_summary JSONB DEFAULT '[]';
 
 UPDATE portfolio_snapshots ps
-SET category_summary = COALESCE(agg.summary, '[]'::jsonb)
+SET asset_class_summary = COALESCE(agg.summary, '[]'::jsonb)
 FROM (
     SELECT
         sp.snapshot_id,
         jsonb_agg(
-            jsonb_build_object('category', cat, 'percentage', round(cat_total / NULLIF(ps2.total_amount, 0) * 100, 1))
-            ORDER BY cat_total DESC
+            jsonb_build_object('asset_class', ac, 'percentage', round(ac_total / NULLIF(ps2.total_amount, 0) * 100, 1))
+            ORDER BY ac_total DESC
         ) AS summary
     FROM (
         SELECT snapshot_id,
-               COALESCE(product_data->>'category', 'otros') AS cat,
-               SUM((product_data->>'amount')::numeric) AS cat_total
+               COALESCE(product_data->>'asset_class', 'otros') AS ac,
+               SUM((product_data->>'amount')::numeric) AS ac_total
         FROM snapshot_products
-        GROUP BY snapshot_id, cat
+        GROUP BY snapshot_id, ac
     ) sp
     JOIN portfolio_snapshots ps2 ON ps2.id = sp.snapshot_id
     GROUP BY sp.snapshot_id, ps2.total_amount
 ) agg
 WHERE agg.snapshot_id = ps.id
-  AND (ps.category_summary IS NULL OR ps.category_summary = '[]'::jsonb);
+  AND (ps.asset_class_summary IS NULL OR ps.asset_class_summary = '[]'::jsonb);
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_user_created
     ON portfolio_snapshots (user_id, created_at DESC);

@@ -24,8 +24,8 @@ function describeLatestChange(entry: ChangeLogEntry): string {
 }
 
 /**
- * Thin strip between the metrics/category-tabs header and the scrollable
- * category content, showing the current snapshot count, a recent-activity
+ * Thin strip between the metrics/asset-class-tabs header and the scrollable
+ * asset class content, showing the current snapshot count, a recent-activity
  * indicator (AL-008 "Recent activity indicator shows latest mutation"), and
  * a "Ver historial" link that opens `VersioningDrawer` (T-025).
  * `design.md` → Frontend Architecture → "Where components mount".

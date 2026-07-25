@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { CATEGORY_META, categoryColorVar, resolveCategoryKey } from "@/lib/categories";
+import { ASSET_CLASS_META, assetClassColorVar, resolveAssetClassKey } from "@/lib/categories";
 import { formatAbbreviatedUsd, formatDateTime } from "@/lib/format";
 import type { Snapshot, SnapshotDetail } from "@/lib/usePortfolioVersioning";
 
@@ -112,12 +112,12 @@ const SnapshotItem: FC<{
   onView: () => void;
   onToggleCompare: () => void;
 }> = ({ snapshot, isSelectedForCompare, onView, onToggleCompare }) => {
-  const merged = (snapshot.category_summary ?? []).reduce<Record<string, number>>((acc, c) => {
-    const key = resolveCategoryKey(c.category);
+  const merged = (snapshot.asset_class_summary ?? []).reduce<Record<string, number>>((acc, c) => {
+    const key = resolveAssetClassKey(c.asset_class);
     acc[key] = (acc[key] ?? 0) + c.percentage;
     return acc;
   }, {});
-  const categories = Object.entries(merged)
+  const assetClasses = Object.entries(merged)
     .map(([key, percentage]) => ({ key, percentage }))
     .sort((a, b) => b.percentage - a.percentage);
 
@@ -143,27 +143,33 @@ const SnapshotItem: FC<{
           </span>
         </div>
 
-        {categories.length > 0 && (
+        {assetClasses.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <div className="flex h-1.5 overflow-hidden rounded-full bg-sabbi-neutral-100">
-              {categories.map((c) => (
+              {assetClasses.map((c) => (
                 <div
                   key={c.key}
                   style={{
                     width: `${c.percentage}%`,
-                    backgroundColor: categoryColorVar(c.key as import("@/lib/portfolio-types").Category),
+                    backgroundColor: assetClassColorVar(
+                      c.key as import("@/lib/portfolio-types").AssetClass,
+                    ),
                   }}
                 />
               ))}
             </div>
             <div className="flex flex-col gap-0.5">
-              {categories.map((c) => {
-                const meta = CATEGORY_META[c.key as keyof typeof CATEGORY_META];
+              {assetClasses.map((c) => {
+                const meta = ASSET_CLASS_META[c.key as keyof typeof ASSET_CLASS_META];
                 return (
                   <span key={c.key} className="flex items-center gap-1.5 text-xs text-sabbi-neutral-600">
                     <span
                       className="size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: categoryColorVar(c.key as import("@/lib/portfolio-types").Category) }}
+                      style={{
+                        backgroundColor: assetClassColorVar(
+                          c.key as import("@/lib/portfolio-types").AssetClass,
+                        ),
+                      }}
                     />
                     {meta.shortLabel}
                     <span className="ml-auto tabular-nums">{c.percentage.toFixed(0)}%</span>

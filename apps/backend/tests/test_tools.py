@@ -37,7 +37,7 @@ def test_add_product_schema():
     args = add_product.args
     assert "name" in args
     assert "amount" in args
-    assert "category" in args
+    assert "asset_class" in args
     assert "provider" in args
     assert "underlying" in args
     assert "catalog_product_id" in args
@@ -55,7 +55,7 @@ def test_update_product_schema():
     assert "name" in args
     assert "provider" in args
     assert "amount" in args
-    assert "category" in args
+    assert "asset_class" in args
     assert "underlying" in args
     assert "config" not in args
 
@@ -177,10 +177,9 @@ def test_propose_product_schema_exposes_enrichment_fields():
     for field in (
         "name",
         "amount",
-        "category",
+        "asset_class",
         "provider",
         "underlying",
-        "asset_class",
         "currency",
         "commission",
         "administrator",
@@ -204,7 +203,7 @@ def test_propose_product_forwards_enrichment_and_provenance():
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 5000,
-                "category": "mercados_publicos",
+                "asset_class": "mercados_publicos",
                 "commission": "0.45%",
                 "administrator": "BlackRock",
                 "catalog_product_id": 42,
@@ -234,7 +233,7 @@ def test_propose_product_tag_verified_when_all_fields_are_catalog():
             {
                 "name": "Vanguard Total World Stock ETF",
                 "amount": 1000,
-                "category": "mercados_publicos",
+                "asset_class": "mercados_publicos",
                 "provenance": {"name": "catalog", "commission": "catalog"},
             }
         )
@@ -251,7 +250,7 @@ def test_propose_product_tag_verified_when_identity_is_catalog_even_with_enrichm
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 1000,
-                "category": "mercados_publicos",
+                "asset_class": "mercados_publicos",
                 "provenance": {"name": "catalog", "liquidity": "web_search"},
             }
         )
@@ -268,7 +267,7 @@ def test_propose_product_tag_web_when_identity_is_not_catalog_and_web_contribute
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 1000,
-                "category": "mercados_publicos",
+                "asset_class": "mercados_publicos",
                 "provenance": {"name": "claude_knowledge", "liquidity": "web_search"},
             }
         )
@@ -285,7 +284,7 @@ def test_propose_product_tag_unverified_when_no_catalog_or_web_source():
             {
                 "name": "Unknown Widget Corp",
                 "amount": 1000,
-                "category": "otros",
+                "asset_class": "otros",
                 "provenance": {"name": "claude_knowledge"},
             }
         )
@@ -299,7 +298,7 @@ def test_propose_product_tag_unverified_when_provenance_empty():
 
     result = asyncio.run(
         propose_product.ainvoke(
-            {"name": "Unknown Widget Corp", "amount": 1000, "category": "otros"}
+            {"name": "Unknown Widget Corp", "amount": 1000, "asset_class": "otros"}
         )
     )
 
@@ -312,11 +311,11 @@ def test_propose_product_normalizes_legacy_key_to_new_key():
 
     result = asyncio.run(
         propose_product.ainvoke(
-            {"name": "Fondo XYZ", "amount": 1000, "category": "mercados_privados"}
+            {"name": "Fondo XYZ", "amount": 1000, "asset_class": "mercados_privados"}
         )
     )
 
-    assert result["product"]["category"] == "mercados_privados"
+    assert result["product"]["asset_class"] == "mercados_privados"
 
 
 def test_propose_product_normalizes_label_to_new_key():
@@ -324,11 +323,11 @@ def test_propose_product_normalizes_label_to_new_key():
 
     result = asyncio.run(
         propose_product.ainvoke(
-            {"name": "Fondo XYZ", "amount": 1000, "category": "Mercados Privados"}
+            {"name": "Fondo XYZ", "amount": 1000, "asset_class": "Mercados Privados"}
         )
     )
 
-    assert result["product"]["category"] == "mercados_privados"
+    assert result["product"]["asset_class"] == "mercados_privados"
 
 
 def test_key_to_label_all_keys():

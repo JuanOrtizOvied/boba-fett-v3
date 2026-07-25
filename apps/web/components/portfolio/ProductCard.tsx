@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FC } from "react";
 import { EditIcon, TrashIcon, WarningIcon } from "@/components/icons/Icons";
-import { CATEGORY_META, categoryColorVar } from "@/lib/categories";
+import { ASSET_CLASS_META, assetClassColorVar } from "@/lib/categories";
 import { compositionColor } from "@/lib/compositionPalette";
 import { formatUsd } from "@/lib/format";
 import type { Product } from "@/lib/portfolio-types";
@@ -19,7 +19,7 @@ const DELETE_ANIMATION_MS = 300;
 
 /**
  * Product card with two mutually-exclusive states:
- * - `view`: name, provider, amount, composition bar + legend, category badge,
+ * - `view`: name, provider, amount, composition bar + legend, asset class badge,
  *   hover-revealed edit/delete buttons.
  * - `confirm-delete`: replaces the card content inline (no separate dialog)
  *   with a red-bordered confirmation, then fades out before removal.
@@ -41,8 +41,8 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
       return () => clearTimeout(timer);
     }
   }, [isNew]);
-  const meta = CATEGORY_META[product.category];
-  const color = categoryColorVar(product.category);
+  const meta = ASSET_CLASS_META[product.asset_class];
+  const color = assetClassColorVar(product.asset_class);
   const isConfirming = mode === "confirm-delete";
 
   const handleConfirmDelete = async () => {
@@ -88,7 +88,7 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
             </p>
           </div>
           <p className="text-xs text-sabbi-neutral-600">
-            Los porcentajes de la categoría se recalcularán al eliminarlo.
+            Los porcentajes de la clase de activo se recalcularán al eliminarlo.
           </p>
           <div className="rounded-lg bg-sabbi-neutral-50 px-3 py-2 text-sm">
             <p className="font-medium text-sabbi-neutral-900">{product.name}</p>

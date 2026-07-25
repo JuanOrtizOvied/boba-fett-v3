@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
-import { resolveCategoryKey } from "@/lib/categories";
-import type { Category, Product } from "@/lib/portfolio-types";
+import { resolveAssetClassKey } from "@/lib/categories";
+import type { AssetClass, Product } from "@/lib/portfolio-types";
 
-export type CategoryFilter = Category | "todos";
+export type AssetClassFilter = AssetClass | "todos";
 
 export interface LargestPosition {
   product: Product;
@@ -22,19 +22,19 @@ export interface UsePortfolioResult {
   error: string | null;
   refetch: () => Promise<void>;
 
-  activeCategory: CategoryFilter;
-  setActiveCategory: (category: CategoryFilter) => void;
+  activeAssetClass: AssetClassFilter;
+  setActiveAssetClass: (assetClass: AssetClassFilter) => void;
 
   editingProduct: Product | null;
   isModalOpen: boolean;
-  createCategory: Category | null;
-  openCreateModal: (category?: Category) => void;
+  createAssetClass: AssetClass | null;
+  openCreateModal: (assetClass?: AssetClass) => void;
   openEditModal: (product: Product) => void;
   closeModal: () => void;
 
   totalAmount: number;
   productCount: number;
-  categoryDistribution: Record<Category, number>;
+  assetClassDistribution: Record<AssetClass, number>;
   largestPosition: LargestPosition | null;
 
   newProductIds: Set<string>;
@@ -53,10 +53,10 @@ export function usePortfolio(): UsePortfolioResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeCategory, setActiveCategory] = useState<CategoryFilter>("todos");
+  const [activeAssetClass, setActiveAssetClass] = useState<AssetClassFilter>("todos");
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [createCategory, setCreateCategory] = useState<Category | null>(null);
+  const [createAssetClass, setCreateAssetClass] = useState<AssetClass | null>(null);
 
   const isFirstFetchRef = useRef(true);
   const prevIdsRef = useRef<Set<string>>(new Set());
@@ -100,7 +100,7 @@ export function usePortfolio(): UsePortfolioResult {
       setProducts(
         (data.products ?? []).map((p) => ({
           ...p,
-          category: resolveCategoryKey(p.category),
+          asset_class: resolveAssetClassKey(p.asset_class),
         })),
       );
     } catch (err) {
@@ -123,22 +123,22 @@ export function usePortfolio(): UsePortfolioResult {
       window.removeEventListener(PORTFOLIO_REFETCH_EVENT, handleRefetchEvent);
   }, [refetch]);
 
-  const openCreateModal = useCallback((category?: Category) => {
+  const openCreateModal = useCallback((assetClass?: AssetClass) => {
     setEditingProduct(null);
-    setCreateCategory(category ?? null);
+    setCreateAssetClass(assetClass ?? null);
     setIsModalOpen(true);
   }, []);
 
   const openEditModal = useCallback((product: Product) => {
     setEditingProduct(product);
-    setCreateCategory(null);
+    setCreateAssetClass(null);
     setIsModalOpen(true);
   }, []);
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setEditingProduct(null);
-    setCreateCategory(null);
+    setCreateAssetClass(null);
   }, []);
 
   const totalAmount = useMemo(
@@ -148,10 +148,10 @@ export function usePortfolio(): UsePortfolioResult {
 
   const productCount = products.length;
 
-  const categoryDistribution = useMemo(() => {
-    const dist = {} as Record<Category, number>;
+  const assetClassDistribution = useMemo(() => {
+    const dist = {} as Record<AssetClass, number>;
     for (const p of products) {
-      dist[p.category] = (dist[p.category] ?? 0) + p.amount;
+      dist[p.asset_class] = (dist[p.asset_class] ?? 0) + p.amount;
     }
     return dist;
   }, [products]);
@@ -170,17 +170,17 @@ export function usePortfolio(): UsePortfolioResult {
     isLoading,
     error,
     refetch,
-    activeCategory,
-    setActiveCategory,
+    activeAssetClass,
+    setActiveAssetClass,
     editingProduct,
     isModalOpen,
-    createCategory,
+    createAssetClass,
     openCreateModal,
     openEditModal,
     closeModal,
     totalAmount,
     productCount,
-    categoryDistribution,
+    assetClassDistribution,
     largestPosition,
     newProductIds,
   };

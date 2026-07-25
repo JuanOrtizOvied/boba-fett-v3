@@ -17,8 +17,7 @@ from db.models import CatalogProductCreate
 def _entry(**overrides) -> CatalogProductCreate:
     data = {
         "name": "Bono Soberano",
-        "category": "mercados_publicos",
-        "asset_class": "bonos",
+        "asset_class": "mercados_publicos",
         "geographic_focus": [{"name": "LatAm", "percentage": 100}],
         "commission": "1.5%",
         "currency": "USD",
@@ -42,7 +41,7 @@ async def test_insert_if_not_duplicate_rejects_exact_duplicate_case_and_spacing(
     assert first is not None
 
     duplicate = await repo.insert_if_not_duplicate(
-        _entry(name="  bono soberano  ", category="PUBLICOS")
+        _entry(name="  bono soberano  ")
     )
 
     assert duplicate is None
@@ -50,7 +49,7 @@ async def test_insert_if_not_duplicate_rejects_exact_duplicate_case_and_spacing(
 
 async def test_insert_if_not_duplicate_allows_entry_differing_in_asset_class(test_pool):
     """`design.md` scopes the duplicate identity key to
-    name + category + asset_class (enrichment fields like `commission` are
+    name + asset_class (enrichment fields like `commission` are
     intentionally excluded — see deviation note in the apply-progress
     report). An entry differing in `asset_class`, which IS part of the key,
     must be inserted rather than rejected."""

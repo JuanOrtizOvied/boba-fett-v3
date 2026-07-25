@@ -2,9 +2,9 @@
 
 import type { FC, ReactNode } from "react";
 import { XIcon } from "@/components/icons/Icons";
-import { CATEGORY_META } from "@/lib/categories";
+import { ASSET_CLASS_META } from "@/lib/categories";
 import { formatDateTime, formatUsd } from "@/lib/format";
-import type { AssetAllocation, Category, Product } from "@/lib/portfolio-types";
+import type { AssetAllocation, AssetClass, Product } from "@/lib/portfolio-types";
 import type {
   Snapshot,
   SnapshotDiff,
@@ -28,7 +28,6 @@ const FIELD_LABELS: Record<string, string> = {
   name: "Nombre",
   provider: "Proveedor",
   amount: "Monto",
-  category: "Categoría",
   underlying: "Composición",
   asset_class: "Clase de activo",
   geographic_focus: "Foco geográfico",
@@ -44,14 +43,14 @@ const FIELD_LABELS: Record<string, string> = {
 /**
  * Renders one field's before/after value for the inline delta list
  * (CMP-004 "Modified product shows field-level deltas inline"). Amounts use
- * the existing `formatUsd` helper; `category` resolves to its display
+ * the existing `formatUsd` helper; `asset_class` resolves to its display
  * label; `composition` renders as a compact allocation list.
  */
 function formatFieldValue(field: string, value: unknown): string {
   if (value == null || value === "") return "—";
   if (field === "amount") return formatUsd(Number(value));
-  if (field === "category" && typeof value === "string") {
-    return CATEGORY_META[value as Category]?.label ?? value;
+  if (field === "asset_class" && typeof value === "string") {
+    return ASSET_CLASS_META[value as AssetClass]?.label ?? value;
   }
   if (field === "underlying" || field === "geographic_focus") {
     const allocations = value as AssetAllocation[];

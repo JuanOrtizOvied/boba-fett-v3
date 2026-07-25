@@ -28,10 +28,10 @@ def test_state_schema_has_messages_reducer():
     assert "messages" in AgentState.__annotations__
 
 
-def test_categories_taxonomy_has_all_six_sabbi_categories():
-    from agent.state import CATEGORIES
+def test_asset_classes_taxonomy_has_all_six_sabbi_asset_classes():
+    from agent.state import ASSET_CLASSES
 
-    assert set(CATEGORIES.keys()) == {
+    assert set(ASSET_CLASSES.keys()) == {
         "inversiones_directas",
         "mercados_privados",
         "club_deals",
@@ -39,6 +39,6 @@ def test_categories_taxonomy_has_all_six_sabbi_categories():
         "otros",
         "cash_y_equivalentes",
     }
-    for info in CATEGORIES.values():
+    for info in ASSET_CLASSES.values():
         assert info["label"]
         assert info["groups"]

@@ -6,10 +6,11 @@ export interface AddProductButtonProps {
 }
 
 /**
- * Dashed-border card at the end of each category grid. Opens the edit modal
- * pre-scoped to that category.
+ * Dashed-border card at the end of each asset class grid. Opens the edit
+ * modal pre-scoped to that asset class.
  * `product-cards-crud.spec.md` → "Agregar producto manualmente",
- * "Cada categoría tiene botón de agregar producto".
+ * "Cada categoría tiene botón de agregar producto" (spec wording predates
+ * the asset_class rename).
  */
 export const AddProductButton: FC<AddProductButtonProps> = ({ onClick }) => (
   <button

@@ -47,15 +47,15 @@ import {
   SendIcon,
 } from "@/components/icons/Icons";
 import {
-  CATEGORY_META,
-  CATEGORY_ORDER,
-  CATEGORY_SUBCATEGORIES,
-  categoryBgVar,
-  categoryTextVar,
-  resolveCategoryKey,
+  ASSET_CLASS_META,
+  ASSET_CLASS_ORDER,
+  ASSET_CLASS_SUBCATEGORIES,
+  assetClassBgVar,
+  assetClassTextVar,
+  resolveAssetClassKey,
 } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
-import type { Category, EnrichedProposedProduct, FieldSource } from "@/lib/portfolio-types";
+import type { AssetClass, EnrichedProposedProduct, FieldSource } from "@/lib/portfolio-types";
 
 /**
  * Converts a `File` to a base64 data URL, matching the pattern used by
@@ -344,7 +344,7 @@ const messageActionBtn =
 type ParsedProduct = {
   nombre: string;
   monto: string;
-  categoría: string;
+  claseDeActivo: string;
   proveedor?: string;
 };
 
@@ -359,7 +359,7 @@ function parseProductLine(line: string): ParsedProduct | null {
   return {
     nombre: fields.nombre,
     monto: fields.monto,
-    categoría: fields["categoría"] ?? "",
+    claseDeActivo: fields["clase de activo"] ?? "",
     proveedor: fields.proveedor,
   };
 }
@@ -370,15 +370,15 @@ function formatAmount(raw: string): string {
   return `$${num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function categoryShortLabel(cat: string): string {
+function assetClassShortLabel(cat: string): string {
   const key = cat.toLowerCase().trim();
-  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  const meta = ASSET_CLASS_META[key as keyof typeof ASSET_CLASS_META];
   return meta?.shortLabel ?? cat;
 }
 
-function categoryCssVars(cat: string) {
+function assetClassCssVars(cat: string) {
   const key = cat.toLowerCase().trim();
-  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  const meta = ASSET_CLASS_META[key as keyof typeof ASSET_CLASS_META];
   if (!meta) return { bg: "rgba(255,255,255,0.15)", text: "white" };
   return { bg: `var(${meta.bgCssVar})`, text: `var(${meta.textCssVar})` };
 }
@@ -388,7 +388,7 @@ const PortfolioConfirmTable: FC<{ products: ParsedProduct[]; header: string }> =
     <span className="text-sm font-medium">{header}</span>
     <div className="overflow-hidden rounded-lg border border-white/20 bg-white/[.08]">
       {products.map((p, i) => {
-        const vars = categoryCssVars(p.categoría);
+        const vars = assetClassCssVars(p.claseDeActivo);
         return (
           <div
             key={i}
@@ -398,7 +398,7 @@ const PortfolioConfirmTable: FC<{ products: ParsedProduct[]; header: string }> =
               className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight"
               style={{ backgroundColor: vars.bg, color: vars.text }}
             >
-              {categoryShortLabel(p.categoría)}
+              {assetClassShortLabel(p.claseDeActivo)}
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">{p.nombre}</span>
             <span className="shrink-0 tabular-nums font-semibold">{formatAmount(p.monto)}</span>
@@ -546,7 +546,7 @@ const UserReloadButton: FC = () => {
 interface ToolResultProduct {
   name: string;
   amount: number;
-  category: Category;
+  asset_class: AssetClass;
 }
 
 type PortfolioToolResult =
@@ -596,8 +596,8 @@ function ToolResultItem({
   }
 
   const { product } = result;
-  const catKey = resolveCategoryKey(product.category);
-  const meta = CATEGORY_META[catKey];
+  const catKey = resolveAssetClassKey(product.asset_class);
+  const meta = ASSET_CLASS_META[catKey];
   if (!meta) return null;
 
   return (
@@ -605,8 +605,8 @@ function ToolResultItem({
       <span
         className="tool-badge"
         style={{
-          background: categoryBgVar(catKey),
-          color: categoryTextVar(catKey),
+          background: assetClassBgVar(catKey),
+          color: assetClassTextVar(catKey),
         }}
       >
         {meta.shortLabel}
@@ -635,7 +635,7 @@ type ProposalResponse = "yes" | "no";
 export interface ProposalEntry {
   name: string;
   amount: number;
-  category: string;
+  asset_class: string;
   provider: string;
   isValid: boolean;
   missingFields: string[];
@@ -708,7 +708,7 @@ function productsMatch(a: ProposedProduct, b: ToolResultProduct): boolean {
   const aName = normalizeMatchText(a.name);
   const bName = normalizeMatchText(b.name);
   const sameName = aName === bName || aName.includes(bName) || bName.includes(aName);
-  return sameName && (a.category === b.category || amountsMatch(a.amount, b.amount));
+  return sameName && (a.asset_class === b.asset_class || amountsMatch(a.amount, b.amount));
 }
 
 function responseForProduct(text: string, product: ProposedProduct): ProposalResponse | null {
@@ -768,7 +768,7 @@ export function ProposalBatchProvider({ children }: { children: React.ReactNode 
       prev.responded === entry.responded &&
       prev.name === entry.name &&
       prev.amount === entry.amount &&
-      prev.category === entry.category
+      prev.asset_class === entry.asset_class
     ) {
       return;
     }
@@ -836,8 +836,8 @@ interface SubcategoryOption {
   group: string;
 }
 
-function getSubcategoryLeaves(category: Category): SubcategoryOption[] {
-  return (CATEGORY_SUBCATEGORIES[category] ?? []).flatMap(({ group, leaves }) =>
+function getSubcategoryLeaves(assetClass: AssetClass): SubcategoryOption[] {
+  return (ASSET_CLASS_SUBCATEGORIES[assetClass] ?? []).flatMap(({ group, leaves }) =>
     leaves.map((leaf) => ({
       value: leaf === group ? leaf : `${group} ${leaf}`,
       group,
@@ -935,7 +935,9 @@ export function ProposeProductCard({
   const [name, setName] = useState(product?.name ?? "");
   const [provider, setProvider] = useState(product?.provider ?? "");
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
-  const [category, setCategory] = useState<Category>(resolveCategoryKey(product?.category ?? "cash_y_equivalentes"));
+  const [assetClass, setAssetClass] = useState<AssetClass>(
+    resolveAssetClassKey(product?.asset_class ?? "cash_y_equivalentes"),
+  );
   const [compRows, setCompRows] = useState<{ key: string; name: string; percentage: string }[]>(() => {
     if (product?.underlying && Array.isArray(product.underlying) && product.underlying.length > 0) {
       return product.underlying.map((c: { name: string; percentage: number }, i: number) => ({
@@ -952,7 +954,7 @@ export function ProposeProductCard({
   const compTotal = compRows.reduce((s, r) => s + (parseFloat(r.percentage) || 0), 0);
   const isCompValid = compRows.length > 0 && Math.abs(compTotal - 100) < 0.5;
 
-  const allLeaves = getSubcategoryLeaves(category);
+  const allLeaves = getSubcategoryLeaves(assetClass);
   const usedNames = new Set(compRows.map((r) => r.name));
   const selectableLeaves = allLeaves.filter((l) => !usedNames.has(l.value));
   const groupedSelectable = selectableLeaves.reduce<Record<string, SubcategoryOption[]>>(
@@ -986,12 +988,12 @@ export function ProposeProductCard({
     _globalRespondedIds.add(cardId);
     _globalResponses.set(cardId, "yes");
     batchRef.current?.respondedIds.add(cardId);
-    const categoryLabel = CATEGORY_META[category]?.label ?? category;
+    const assetClassLabel = ASSET_CLASS_META[assetClass]?.label ?? assetClass;
     const compStr = compRows.map((r) => `${r.name}: ${r.percentage}%`).join(", ");
     const parts: string[] = [
       `nombre: ${name}`,
       `monto: ${amt}`,
-      `categoría: ${categoryLabel}`,
+      `clase de activo: ${assetClassLabel}`,
       `underlying: [${compStr}]`,
     ];
     if (provider.trim()) parts.push(`proveedor: ${provider.trim()}`);
@@ -1000,7 +1002,7 @@ export function ProposeProductCard({
       role: "user",
       content: [{ type: "text", text: `Sí, agregar al portafolio con: ${parts.join(", ")}.` }],
     });
-  }, [name, amount, category, compRows, isCompValid, provider, catalogProductId, runtime, cardId]);
+  }, [name, amount, assetClass, compRows, isCompValid, provider, catalogProductId, runtime, cardId]);
 
   const handleReject = () => {
     setLocalResponded("no");
@@ -1023,7 +1025,7 @@ export function ProposeProductCard({
     batchRef.current.register(cardId, {
       name,
       amount: parsedAmount,
-      category,
+      asset_class: assetClass,
       provider,
       isValid,
       missingFields,
@@ -1032,27 +1034,27 @@ export function ProposeProductCard({
     batchRef.current.setConfirmFn(cardId, {
       markDone: () => setLocalResponded("yes"),
       getText: () => {
-        const catLabel = CATEGORY_META[category]?.label ?? category;
+        const catLabel = ASSET_CLASS_META[assetClass]?.label ?? assetClass;
         const compStr = compRows.map((r) => `${r.name}: ${r.percentage}%`).join(", ");
-        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `categoría: ${catLabel}`, `underlying: [${compStr}]`];
+        const p = [`nombre: ${name}`, `monto: ${parsedAmount}`, `clase de activo: ${catLabel}`, `underlying: [${compStr}]`];
         if (provider.trim()) p.push(`proveedor: ${provider.trim()}`);
         if (catalogProductId != null) p.push(`catalog_product_id: ${catalogProductId}`);
         return p.join(", ");
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, product, name, parsedAmount, category, compRows, isCompValid, provider, catalogProductId, isValid, responded]);
+  }, [cardId, product, name, parsedAmount, assetClass, compRows, isCompValid, provider, catalogProductId, isValid, responded]);
 
   if (!product) return null;
 
-  const meta = CATEGORY_META[category];
+  const meta = ASSET_CLASS_META[assetClass];
   if (!meta) return null;
 
   const provenance = product.provenance;
   const enrichedFields = ENRICHED_FIELDS.filter(({ key }) => product[key]);
 
-  const handleCategoryChange = (next: Category) => {
-    setCategory(next);
+  const handleAssetClassChange = (next: AssetClass) => {
+    setAssetClass(next);
     setCompRows([]);
   };
 
@@ -1073,8 +1075,8 @@ export function ProposeProductCard({
           <span
             className="tool-badge"
             style={{
-              background: categoryBgVar(category),
-              color: categoryTextVar(category),
+              background: assetClassBgVar(assetClass),
+              color: assetClassTextVar(assetClass),
             }}
           >
             {meta.shortLabel}
@@ -1132,16 +1134,16 @@ export function ProposeProductCard({
           </label>
 
           <label className="flex flex-1 flex-col gap-0.5">
-            <span className="text-[11px] font-medium text-sabbi-neutral-500">Categoría</span>
+            <span className="text-[11px] font-medium text-sabbi-neutral-500">Clase de activo</span>
             {editable ? (
               <select
-                value={category}
-                onChange={(e) => handleCategoryChange(e.target.value as Category)}
+                value={assetClass}
+                onChange={(e) => handleAssetClassChange(e.target.value as AssetClass)}
                 className={proposalInputClass}
               >
-                {CATEGORY_ORDER.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {CATEGORY_META[cat].label}
+                {ASSET_CLASS_ORDER.map((ac) => (
+                  <option key={ac} value={ac}>
+                    {ASSET_CLASS_META[ac].label}
                   </option>
                 ))}
               </select>

@@ -4,7 +4,7 @@
  * `/products/...`).
  */
 
-export type Category =
+export type AssetClass =
   | "inversiones_directas"
   | "mercados_privados"
   | "club_deals"
@@ -23,9 +23,8 @@ export interface Product {
   name: string;
   provider: string;
   amount: number;
-  category: Category;
   underlying: AssetAllocation[];
-  asset_class: string;
+  asset_class: AssetClass;
   geographic_focus: AssetAllocation[];
   commission: string;
   currency: string;
@@ -40,7 +39,7 @@ export interface ProductCreateInput {
   name: string;
   provider?: string;
   amount: number;
-  category: Category;
+  asset_class: AssetClass;
   underlying: AssetAllocation[];
 }
 
@@ -48,7 +47,7 @@ export interface ProductUpdateInput {
   name?: string;
   provider?: string;
   amount?: number;
-  category?: Category;
+  asset_class?: AssetClass;
   underlying?: AssetAllocation[];
 }
 
@@ -66,7 +65,7 @@ export type ProvenanceMap = Record<string, FieldSource>;
 export interface ProposedProduct {
   name: string;
   amount: number;
-  category: Category;
+  asset_class: AssetClass;
   provider?: string;
 }
 
@@ -78,7 +77,6 @@ export interface ProposedProduct {
  * shown by `ProposeProductCard`.
  */
 export interface EnrichedProposedProduct extends ProposedProduct {
-  asset_class?: string;
   currency?: string;
   commission?: string;
   administrator?: string;
@@ -103,7 +101,7 @@ export interface CatalogProduct {
   id: number;
   name: string;
   geographic_focus: AssetAllocation[];
-  asset_class: string;
+  asset_class: AssetClass;
   underlying: AssetAllocation[];
   commission: string;
   currency: string;
@@ -111,7 +109,6 @@ export interface CatalogProduct {
   manager: string;
   liquidity: string;
   return_rate: string;
-  category: string;
   alternative_names: string[];
   approved_from_product_id: string | null;
   approved_at: string | null;
@@ -119,13 +116,12 @@ export interface CatalogProduct {
 
 /**
  * Mirrors `db.models.CatalogProductCreate` — the admin-submitted payload for
- * `POST /admin/catalog/approve`. `name` and `category` are required; the
+ * `POST /admin/catalog/approve`. `name` and `asset_class` are required; the
  * rest are optional enrichment fields.
  */
 export interface CatalogProductCreate {
   name: string;
-  category: string;
-  asset_class?: string;
+  asset_class: AssetClass;
   geographic_focus?: AssetAllocation[];
   underlying?: AssetAllocation[];
   commission?: string;

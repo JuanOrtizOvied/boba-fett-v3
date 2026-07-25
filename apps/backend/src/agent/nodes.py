@@ -37,7 +37,7 @@ Extrae TODOS los productos de inversión que encuentres. Para cada producto iden
 - nombre del producto o fondo
 - institución administradora (provider)
 - monto invertido en USD
-- categoría (una de: inversiones_directas, mercados_privados,
+- clase de activo (una de: inversiones_directas, mercados_privados,
   club_deals, mercados_publicos, otros, cash_y_equivalentes)
 - underlying (distribución por asset class) si está disponible
 

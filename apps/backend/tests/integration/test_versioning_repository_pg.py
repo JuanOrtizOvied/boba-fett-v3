@@ -31,7 +31,7 @@ def _create_data(**overrides: Any) -> ProductCreate:
         "name": "BlackRock Private Credit Fund",
         "provider": "SABBI",
         "amount": 150000,
-        "category": "mercados_privados",
+        "asset_class": "mercados_privados",
     }
     data.update(overrides)
     return ProductCreate(**data)
@@ -44,12 +44,11 @@ def _enriched_data(**overrides: Any) -> ProductCreate:
         "name": "iShares Global Bond ETF",
         "provider": "BlackRock",
         "amount": 87500,
-        "category": "mercados_publicos",
         "underlying": [
             {"name": "Deuda privada", "percentage": 60},
             {"name": "Deuda soberana", "percentage": 40},
         ],
-        "asset_class": "Renta Fija",
+        "asset_class": "mercados_publicos",
         "geographic_focus": [{"name": "Global", "percentage": 100}],
         "commission": "0.10%",
         "currency": "USD",
@@ -453,19 +452,19 @@ async def test_compare_snapshots_per_field_delta_underlying(test_pool, test_user
     ]
 
 
-async def test_compare_snapshots_per_field_delta_category(test_pool, test_user_id):
-    """CMP-003 "Category change moves a product across sections"."""
+async def test_compare_snapshots_per_field_delta_asset_class(test_pool, test_user_id):
+    """CMP-003 "Asset class change moves a product across sections"."""
     repo = ProductRepository(test_pool)
     versioning = VersioningRepository(test_pool)
 
-    product = await repo.create(test_user_id, _create_data(category="mercados_privados"))
+    product = await repo.create(test_user_id, _create_data(asset_class="mercados_privados"))
     snapshot_a = await versioning.create_snapshot(test_user_id, "a")
-    await repo.update(product.id, ProductUpdate(category="club_deals"))
+    await repo.update(product.id, ProductUpdate(asset_class="club_deals"))
     snapshot_b = await versioning.create_snapshot(test_user_id, "b")
 
     diff = await versioning.compare_snapshots(snapshot_a["id"], snapshot_b["id"], test_user_id)
 
-    assert diff["modified"][0]["changes"]["category"] == {
+    assert diff["modified"][0]["changes"]["asset_class"] == {
         "before": "mercados_privados",
         "after": "club_deals",
     }

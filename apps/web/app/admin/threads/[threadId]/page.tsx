@@ -6,13 +6,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import {
-  CATEGORY_META,
-  resolveCategoryKey,
-  categoryBgVar,
-  categoryTextVar,
+  ASSET_CLASS_META,
+  resolveAssetClassKey,
+  assetClassBgVar,
+  assetClassTextVar,
 } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
-import type { Category, FieldSource } from "@/lib/portfolio-types";
+import type { AssetClass, FieldSource } from "@/lib/portfolio-types";
 
 // -- Types ----------------------------------------------------------------
 
@@ -133,7 +133,7 @@ function formatTokens(n: number): string {
 type ParsedProduct = {
   nombre: string;
   monto: string;
-  categoría: string;
+  claseDeActivo: string;
   proveedor?: string;
 };
 
@@ -148,7 +148,7 @@ function parseProductLine(line: string): ParsedProduct | null {
   return {
     nombre: fields.nombre,
     monto: fields.monto,
-    categoría: fields["categoría"] ?? "",
+    claseDeActivo: fields["clase de activo"] ?? "",
     proveedor: fields.proveedor,
   };
 }
@@ -159,16 +159,16 @@ function formatAmount(raw: string): string {
   return `$${num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function categoryCssVars(cat: string) {
+function assetClassCssVars(cat: string) {
   const key = cat.toLowerCase().trim();
-  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  const meta = ASSET_CLASS_META[key as keyof typeof ASSET_CLASS_META];
   if (!meta) return { bg: "rgba(255,255,255,0.15)", text: "white" };
   return { bg: `var(${meta.bgCssVar})`, text: `var(${meta.textCssVar})` };
 }
 
-function categoryShortLabel(cat: string): string {
+function assetClassShortLabel(cat: string): string {
   const key = cat.toLowerCase().trim();
-  const meta = CATEGORY_META[key as keyof typeof CATEGORY_META];
+  const meta = ASSET_CLASS_META[key as keyof typeof ASSET_CLASS_META];
   return meta?.shortLabel ?? cat;
 }
 
@@ -177,7 +177,7 @@ const PortfolioConfirmTable: FC<{ products: ParsedProduct[]; header: string }> =
     <span className="text-sm font-medium">{header}</span>
     <div className="overflow-hidden rounded-lg border border-white/20 bg-white/[.08]">
       {products.map((p, i) => {
-        const vars = categoryCssVars(p.categoría);
+        const vars = assetClassCssVars(p.claseDeActivo);
         return (
           <div
             key={i}
@@ -187,7 +187,7 @@ const PortfolioConfirmTable: FC<{ products: ParsedProduct[]; header: string }> =
               className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight"
               style={{ backgroundColor: vars.bg, color: vars.text }}
             >
-              {categoryShortLabel(p.categoría)}
+              {assetClassShortLabel(p.claseDeActivo)}
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">{p.nombre}</span>
             <span className="shrink-0 tabular-nums font-semibold">{formatAmount(p.monto)}</span>
@@ -317,7 +317,7 @@ const ENRICHED_FIELDS: { key: EnrichedFieldKey; label: string }[] = [
 interface ToolResultProduct {
   name: string;
   amount: number;
-  category: Category;
+  asset_class: AssetClass;
 }
 
 type PortfolioToolResult =
@@ -328,7 +328,7 @@ type PortfolioToolResult =
 interface ProposedProduct {
   name: string;
   amount: number;
-  category: string;
+  asset_class: string;
   provider?: string;
   commission?: string;
   currency?: string;
@@ -437,8 +437,8 @@ const ReadOnlyProposalCard: FC<{
   product: ProposedProduct;
   confirmed: boolean;
 }> = ({ product, confirmed }) => {
-  const catKey = resolveCategoryKey(product.category);
-  const meta = CATEGORY_META[catKey];
+  const catKey = resolveAssetClassKey(product.asset_class);
+  const meta = ASSET_CLASS_META[catKey];
   if (!meta) return null;
 
   const provenance = product.provenance;
@@ -453,8 +453,8 @@ const ReadOnlyProposalCard: FC<{
           <span
             className="tool-badge"
             style={{
-              background: categoryBgVar(catKey),
-              color: categoryTextVar(catKey),
+              background: assetClassBgVar(catKey),
+              color: assetClassTextVar(catKey),
             }}
           >
             {meta.shortLabel}
@@ -494,7 +494,7 @@ const ReadOnlyProposalCard: FC<{
           </div>
           <div className="flex flex-1 flex-col gap-0.5">
             <span className="text-[11px] font-medium text-sabbi-neutral-500">
-              Categoría
+              Clase de activo
             </span>
             <span className="text-sm text-sabbi-neutral-700">
               {meta.label}
@@ -554,8 +554,8 @@ const ToolResultRow: FC<{ result: PortfolioToolResult; args?: Record<string, unk
   }
 
   const { product } = result;
-  const catKey = resolveCategoryKey(product.category);
-  const meta = CATEGORY_META[catKey];
+  const catKey = resolveAssetClassKey(product.asset_class);
+  const meta = ASSET_CLASS_META[catKey];
   if (!meta) return null;
 
   return (
@@ -563,8 +563,8 @@ const ToolResultRow: FC<{ result: PortfolioToolResult; args?: Record<string, unk
       <span
         className="tool-badge"
         style={{
-          background: categoryBgVar(catKey),
-          color: categoryTextVar(catKey),
+          background: assetClassBgVar(catKey),
+          color: assetClassTextVar(catKey),
         }}
       >
         {meta.shortLabel}

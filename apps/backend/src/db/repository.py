@@ -62,17 +62,16 @@ class ProductRepository:
         product_id = f"prod_{uuid.uuid4().hex[:8]}"
         await conn.execute(
             """INSERT INTO products
-               (id, user_id, name, provider, amount, category,
+               (id, user_id, name, provider, amount,
                 underlying, asset_class, geographic_focus,
                 commission, currency, administrator, manager, liquidity,
                 return_rate, catalog_product_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)""",
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
             product_id,
             user_id,
             data.name,
             data.provider,
             encrypt_amount(data.amount),
-            data.category,
             json.dumps([a.model_dump() for a in data.underlying]),
             data.asset_class,
             json.dumps([a.model_dump() for a in data.geographic_focus]),
@@ -260,18 +259,18 @@ class ProductRepository:
     async def get_summary(self, user_id: str) -> dict:
         products = await self.list_by_user(user_id)
         total = sum(p.amount for p in products)
-        by_category: dict[str, list[Product]] = {}
+        by_asset_class: dict[str, list[Product]] = {}
         for p in products:
-            by_category.setdefault(p.category, []).append(p)
+            by_asset_class.setdefault(p.asset_class, []).append(p)
         distribution = {
-            cat: sum(p.amount for p in prods) / total * 100 if total else 0
-            for cat, prods in by_category.items()
+            ac: sum(p.amount for p in prods) / total * 100 if total else 0
+            for ac, prods in by_asset_class.items()
         }
         largest = max(products, key=lambda p: p.amount) if products else None
         return {
             "total_amount": total,
             "product_count": len(products),
-            "categories_used": list(by_category.keys()),
+            "asset_classes_used": list(by_asset_class.keys()),
             "distribution": distribution,
             "largest_position": (
                 {"name": largest.name, "percentage": largest.amount / total * 100}
@@ -296,9 +295,8 @@ class ProductRepository:
             name=row["name"],
             provider=row["provider"],
             amount=decrypt_amount(row["amount"]),
-            category=row["category"],
             underlying=[AssetAllocation(**a) for a in (raw or [])],
-            asset_class=row.get("asset_class", "") or "",
+            asset_class=row["asset_class"],
             geographic_focus=self._parse_json_allocations(row.get("geographic_focus")),
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",

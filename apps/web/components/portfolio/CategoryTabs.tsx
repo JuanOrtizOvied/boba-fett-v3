@@ -1,50 +1,50 @@
 import type { FC, ReactNode } from "react";
-import { CATEGORY_META, CATEGORY_ORDER, categoryColorVar } from "@/lib/categories";
-import type { Category } from "@/lib/portfolio-types";
-import type { CategoryFilter } from "@/lib/usePortfolio";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, assetClassColorVar } from "@/lib/categories";
+import type { AssetClass } from "@/lib/portfolio-types";
+import type { AssetClassFilter } from "@/lib/usePortfolio";
 
-export interface CategoryTabsProps {
-  activeCategory: CategoryFilter;
-  onChange: (category: CategoryFilter) => void;
+export interface AssetClassTabsProps {
+  activeAssetClass: AssetClassFilter;
+  onChange: (assetClass: AssetClassFilter) => void;
   totalCount: number;
-  countsByCategory: Record<Category, number>;
+  countsByAssetClass: Record<AssetClass, number>;
 }
 
 /**
- * "Todos" + one tab per category, each with a count badge. Filters which
- * category sections are visible below.
- * `portfolio-dashboard.spec.md` → "Filtrado por categoría con tabs".
+ * "Todos" + one tab per asset class, each with a count badge. Filters which
+ * asset class sections are visible below.
+ * `portfolio-dashboard.spec.md` → "Filtrado por clase de activo con tabs".
  */
-export const CategoryTabs: FC<CategoryTabsProps> = ({
-  activeCategory,
+export const AssetClassTabs: FC<AssetClassTabsProps> = ({
+  activeAssetClass,
   onChange,
   totalCount,
-  countsByCategory,
+  countsByAssetClass,
 }) => {
   return (
     <div
       className="flex flex-wrap gap-2"
       role="tablist"
-      aria-label="Filtrar por categoría"
+      aria-label="Filtrar por clase de activo"
     >
       <Tab
-        active={activeCategory === "todos"}
+        active={activeAssetClass === "todos"}
         onClick={() => onChange("todos")}
       >
         Todos
-        <Badge active={activeCategory === "todos"}>{totalCount}</Badge>
+        <Badge active={activeAssetClass === "todos"}>{totalCount}</Badge>
       </Tab>
-      {CATEGORY_ORDER.map((category) => {
-        const active = activeCategory === category;
+      {ASSET_CLASS_ORDER.map((assetClass) => {
+        const active = activeAssetClass === assetClass;
         return (
           <Tab
-            key={category}
+            key={assetClass}
             active={active}
-            color={categoryColorVar(category)}
-            onClick={() => onChange(category)}
+            color={assetClassColorVar(assetClass)}
+            onClick={() => onChange(assetClass)}
           >
-            {CATEGORY_META[category].shortLabel}
-            <Badge active={active}>{countsByCategory[category] ?? 0}</Badge>
+            {ASSET_CLASS_META[assetClass].shortLabel}
+            <Badge active={active}>{countsByAssetClass[assetClass] ?? 0}</Badge>
           </Tab>
         );
       })}

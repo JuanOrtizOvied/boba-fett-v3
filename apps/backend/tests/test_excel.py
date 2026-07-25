@@ -14,7 +14,7 @@ def _product(**overrides) -> Product:
         name="Fund A",
         provider="Provider A",
         amount=10_000,
-        category="inversiones_directas",
+        asset_class="inversiones_directas",
         underlying=[AssetAllocation(name="Fund A", percentage=100)],
     )
     defaults.update(overrides)
@@ -24,12 +24,12 @@ def _product(**overrides) -> Product:
 @pytest.fixture
 def sample_products() -> list[Product]:
     return [
-        _product(name="Accionariado XYZ", amount=20_000, category="inversiones_directas"),
-        _product(name="Deuda Privada Fund", amount=15_000, category="mercados_privados"),
+        _product(name="Accionariado XYZ", amount=20_000, asset_class="inversiones_directas"),
+        _product(name="Deuda Privada Fund", amount=15_000, asset_class="mercados_privados"),
         _product(
             name="Multi-asset Fund",
             amount=5_000,
-            category="mercados_publicos",
+            asset_class="mercados_publicos",
             underlying=[
                 AssetAllocation(name="RV US Large Cap", percentage=60),
                 AssetAllocation(name="RF Corporate", percentage=40),
@@ -56,7 +56,7 @@ def test_summary_sheet_is_first_and_named_portafolio_final(sample_products):
     assert wb.sheetnames[0] == "Portafolio Final"
 
 
-def test_sheet_names_include_one_per_used_category(sample_products):
+def test_sheet_names_include_one_per_used_asset_class(sample_products):
     from db.excel import build_portfolio_workbook
 
     buffer = build_portfolio_workbook(sample_products)
@@ -65,13 +65,13 @@ def test_sheet_names_include_one_per_used_category(sample_products):
     assert "Inversiones directas" in wb.sheetnames
     assert "Mercados privados" in wb.sheetnames
     assert "Mercados públicos" in wb.sheetnames
-    # No products in these categories — no sheet should be created
+    # No products in these asset classes — no sheet should be created
     assert "Club deals" not in wb.sheetnames
     assert "Otros" not in wb.sheetnames
     assert "Cash y equivalentes" not in wb.sheetnames
 
 
-def test_category_sheet_row_count_matches_products_plus_total(sample_products):
+def test_asset_class_sheet_row_count_matches_products_plus_total(sample_products):
     from db.excel import build_portfolio_workbook
 
     buffer = build_portfolio_workbook(sample_products)

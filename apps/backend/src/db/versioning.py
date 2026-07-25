@@ -145,14 +145,14 @@ class VersioningRepository:
                 product_count = len(rows)
                 total_amount = sum(decrypt_amount(r["amount"]) for r in rows)
 
-                cat_totals: dict[str, float] = {}
+                asset_class_totals: dict[str, float] = {}
                 for r in rows:
-                    cat = r["category"] or "otros"
-                    cat_totals[cat] = cat_totals.get(cat, 0) + decrypt_amount(r["amount"])
-                category_summary = sorted(
+                    ac = r["asset_class"] or "otros"
+                    asset_class_totals[ac] = asset_class_totals.get(ac, 0) + decrypt_amount(r["amount"])
+                asset_class_summary = sorted(
                     [
-                        {"category": c, "percentage": round(a / total_amount * 100, 1) if total_amount else 0}
-                        for c, a in cat_totals.items()
+                        {"asset_class": ac, "percentage": round(a / total_amount * 100, 1) if total_amount else 0}
+                        for ac, a in asset_class_totals.items()
                     ],
                     key=lambda x: x["percentage"],
                     reverse=True,
@@ -160,7 +160,7 @@ class VersioningRepository:
 
                 snapshot_row = await conn.fetchrow(
                     """INSERT INTO portfolio_snapshots
-                       (user_id, name, description, product_count, total_amount, category_summary)
+                       (user_id, name, description, product_count, total_amount, asset_class_summary)
                        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
                        RETURNING id, created_at""",
                     user_id,
@@ -168,7 +168,7 @@ class VersioningRepository:
                     description,
                     product_count,
                     encrypt_amount(total_amount),
-                    json.dumps(category_summary),
+                    json.dumps(asset_class_summary),
                 )
                 snapshot_id = snapshot_row["id"]
 
@@ -190,7 +190,7 @@ class VersioningRepository:
                     "description": description,
                     "product_count": product_count,
                     "total_amount": float(total_amount),
-                    "category_summary": category_summary,
+                    "asset_class_summary": asset_class_summary,
                     "created_at": snapshot_row["created_at"].isoformat(),
                 }
 
@@ -203,7 +203,7 @@ class VersioningRepository:
         """
         rows = await self.pool.fetch(
             """SELECT id, user_id, name, description, product_count,
-                      total_amount, category_summary, created_at
+                      total_amount, asset_class_summary, created_at
                FROM portfolio_snapshots
                WHERE user_id = $1
                ORDER BY created_at DESC
@@ -256,7 +256,7 @@ class VersioningRepository:
         """
         snapshot_row = await self.pool.fetchrow(
             """SELECT id, user_id, name, description, product_count,
-                      total_amount, category_summary, created_at
+                      total_amount, asset_class_summary, created_at
                FROM portfolio_snapshots
                WHERE id = $1 AND user_id = $2""",
             snapshot_id,
@@ -458,7 +458,7 @@ class VersioningRepository:
             "description": row["description"],
             "product_count": row["product_count"],
             "total_amount": decrypt_amount(row["total_amount"]),
-            "category_summary": self._jsonb(row["category_summary"]) if row.get("category_summary") else [],
+            "asset_class_summary": self._jsonb(row["asset_class_summary"]) if row.get("asset_class_summary") else [],
             "created_at": row["created_at"].isoformat(),
         }
 
@@ -481,9 +481,8 @@ class VersioningRepository:
             name=row["name"],
             provider=row["provider"],
             amount=decrypt_amount(row["amount"]),
-            category=row["category"],
             underlying=[AssetAllocation(**a) for a in (raw or [])],
-            asset_class=row.get("asset_class", "") or "",
+            asset_class=row["asset_class"],
             geographic_focus=self._parse_json_allocations(row.get("geographic_focus")),
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",

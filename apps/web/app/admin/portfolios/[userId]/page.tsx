@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { CATEGORY_META, CATEGORY_ORDER, resolveCategoryKey } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, resolveAssetClassKey } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { CatalogProduct, Product } from "@/lib/portfolio-types";
@@ -42,7 +42,7 @@ export default function AdminPortfolioViewPage() {
         setProducts(
           data.products.map((p) => ({
             ...p,
-            category: resolveCategoryKey(p.category),
+            asset_class: resolveAssetClassKey(p.asset_class),
           })),
         );
 
@@ -73,8 +73,8 @@ export default function AdminPortfolioViewPage() {
     approvingProduct?.catalog_product_id == null
       ? null
       : catalogEntries.find((entry) => entry.id === approvingProduct.catalog_product_id) ?? null;
-  const categoriesUsed = new Set((products ?? []).map((p) => p.category));
-  const isComplete = CATEGORY_ORDER.every((cat) => categoriesUsed.has(cat));
+  const assetClassesUsed = new Set((products ?? []).map((p) => p.asset_class));
+  const isComplete = ASSET_CLASS_ORDER.every((ac) => assetClassesUsed.has(ac));
   const lastUpdated = userInfo?.updated_at
     ? new Date(userInfo.updated_at).toLocaleDateString("es-PE", {
         day: "numeric",
@@ -97,7 +97,7 @@ export default function AdminPortfolioViewPage() {
                 : "bg-amber-100 text-amber-700"
             }`}
           >
-            {isComplete ? "Completo" : `${categoriesUsed.size}/6 categorías`}
+            {isComplete ? "Completo" : `${assetClassesUsed.size}/6 clases de activo`}
           </span>
         </div>
         <div className="flex items-center gap-4 text-sm text-sabbi-neutral-600">
@@ -126,10 +126,10 @@ export default function AdminPortfolioViewPage() {
           Este usuario no tiene productos.
         </p>
       ) : (
-        CATEGORY_ORDER.map((cat) => {
-          const catProducts = (products ?? []).filter((p) => p.category === cat);
+        ASSET_CLASS_ORDER.map((cat) => {
+          const catProducts = (products ?? []).filter((p) => p.asset_class === cat);
           if (catProducts.length === 0) return null;
-          const meta = CATEGORY_META[cat];
+          const meta = ASSET_CLASS_META[cat];
           return (
             <div key={cat} className="flex flex-col gap-3">
               <div className="flex items-center gap-2">

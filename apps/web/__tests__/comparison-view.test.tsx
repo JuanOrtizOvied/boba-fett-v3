@@ -11,9 +11,8 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     name: "BlackRock Fund",
     provider: "BlackRock",
     amount: 100000,
-    category: "mercados_privados",
+    asset_class: "mercados_privados",
     underlying: [],
-    asset_class: "",
     geographic_focus: [],
     commission: "",
     currency: "",
@@ -32,7 +31,7 @@ const SNAPSHOT_A: Snapshot = {
   description: "",
   product_count: 3,
   total_amount: 100000,
-  category_summary: [],
+  asset_class_summary: [],
   created_at: "2026-06-01T00:00:00Z",
 };
 
@@ -42,7 +41,7 @@ const SNAPSHOT_B: Snapshot = {
   description: "",
   product_count: 4,
   total_amount: 130000,
-  category_summary: [],
+  asset_class_summary: [],
   created_at: "2026-07-01T00:00:00Z",
 };
 

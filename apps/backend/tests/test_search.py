@@ -70,7 +70,6 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
         name="Vanguard Total World Stock ETF",
         asset_class="Renta Variable",
         commission="0.07%",
-        category="mercados_publicos",
     )
 
     class _FakeCatalogRepository:
@@ -86,7 +85,7 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
 
     assert result.name == "Vanguard Total World Stock ETF"
     assert result.commission == "0.07%"
-    assert result.category == "mercados_publicos"
+    assert result.asset_class == "Renta Variable"
     assert result.catalog_product_id == 1
     assert result.provenance["name"] == "catalog"
     assert result.provenance["commission"] == "catalog"
@@ -217,11 +216,11 @@ def test_search_tavily_returns_empty_dict_when_search_call_fails(monkeypatch):
 def test_classify_sets_confident_taxonomy_match():
     from agent.search import _classify
 
-    result = SearchResult(asset_class="Renta Fija", geographic_focus=[{"name": "US Treasuries", "percentage": 100}])
+    result = SearchResult(geographic_focus=[{"name": "US Treasuries", "percentage": 100}])
     _classify(result)
 
-    assert result.category == "mercados_publicos"
-    assert result.provenance["category"] == result.primary_source
+    assert result.asset_class == "mercados_publicos"
+    assert result.provenance["asset_class"] == result.primary_source
 
 
 def test_classify_leaves_empty_on_ambiguous_match():
@@ -232,8 +231,8 @@ def test_classify_leaves_empty_on_ambiguous_match():
     result = SearchResult(geographic_focus=[{"name": "Perú Bonds", "percentage": 100}])
     _classify(result)
 
-    assert result.category == ""
-    assert "category" not in result.provenance
+    assert result.asset_class == ""
+    assert "asset_class" not in result.provenance
 
 
 def test_classify_leaves_empty_when_no_taxonomy_leaf_matches():
@@ -242,16 +241,16 @@ def test_classify_leaves_empty_when_no_taxonomy_leaf_matches():
     result = SearchResult(name="Unknown Widget Corp")
     _classify(result)
 
-    assert result.category == ""
+    assert result.asset_class == ""
 
 
-def test_classify_skips_when_category_already_set():
+def test_classify_skips_when_asset_class_already_set():
     from agent.search import _classify
 
-    result = SearchResult(category="cash_y_equivalentes")
+    result = SearchResult(asset_class="cash_y_equivalentes")
     _classify(result)
 
-    assert result.category == "cash_y_equivalentes"
+    assert result.asset_class == "cash_y_equivalentes"
 
 
 # --- cascade_search --------------------------------------------------------------
@@ -270,7 +269,6 @@ def test_cascade_search_stops_after_l1_when_catalog_result_is_complete(monkeypat
         manager="Vanguard",
         liquidity="Diaria",
         return_rate="7%",
-        category="mercados_publicos",
         primary_source="catalog",
         provenance={field: "catalog" for field in search_module.FIELD_NAMES},
     )
@@ -341,8 +339,8 @@ def test_cascade_search_falls_through_levels_and_keeps_catalog_authoritative(mon
     assert result.currency == ""
     assert "currency" not in result.provenance
 
-    # never-invent: no taxonomy leaf matched, classification leaves category empty
-    assert result.category == ""
+    # never-invent: no taxonomy leaf matched, classification leaves asset_class empty
+    assert result.asset_class == ""
 
     # field parity — the full field shape is always present
     for field in search_module.FIELD_NAMES:

@@ -168,7 +168,7 @@ def _fake_row(**overrides) -> dict:
         "name": "Fund A",
         "provider": "Provider A",
         "amount": 10000.0,
-        "category": "inversiones_directas",
+        "asset_class": "inversiones_directas",
         "underlying": json.dumps([{"name": "Fund A", "percentage": 100}]),
     }
     row.update(overrides)
@@ -200,7 +200,7 @@ def test_repository_create_inserts_and_returns_product():
     pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
-    data = ProductCreate(name="New Fund", amount=5000, category="cash_y_equivalentes")
+    data = ProductCreate(name="New Fund", amount=5000, asset_class="cash_y_equivalentes")
     product = asyncio.run(repo.create("usr_test", data))
 
     assert product.name == "New Fund"
@@ -312,8 +312,8 @@ def test_repository_get_summary_computes_totals_and_largest_position():
 
     pool = AsyncMock()
     pool.fetch.return_value = [
-        _fake_row(id="p1", amount=7000.0, category="inversiones_directas"),
-        _fake_row(id="p2", amount=3000.0, category="cash_y_equivalentes"),
+        _fake_row(id="p1", amount=7000.0, asset_class="inversiones_directas"),
+        _fake_row(id="p2", amount=3000.0, asset_class="cash_y_equivalentes"),
     ]
 
     repo = ProductRepository(pool)
@@ -321,7 +321,7 @@ def test_repository_get_summary_computes_totals_and_largest_position():
 
     assert summary["total_amount"] == 10000.0
     assert summary["product_count"] == 2
-    assert set(summary["categories_used"]) == {"inversiones_directas", "cash_y_equivalentes"}
+    assert set(summary["asset_classes_used"]) == {"inversiones_directas", "cash_y_equivalentes"}
     assert summary["largest_position"]["name"] == "Fund A"
     assert summary["largest_position"]["percentage"] == 70.0
 

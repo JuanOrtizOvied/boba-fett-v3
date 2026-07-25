@@ -1,27 +1,27 @@
 import type { FC } from "react";
 import { AddProductButton } from "@/components/portfolio/AddProductButton";
 import { ProductCard } from "@/components/portfolio/ProductCard";
-import { CATEGORY_META, categoryColorVar } from "@/lib/categories";
+import { ASSET_CLASS_META, assetClassColorVar } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
-import type { Category, Product } from "@/lib/portfolio-types";
+import type { AssetClass, Product } from "@/lib/portfolio-types";
 
-export interface CategorySectionProps {
-  category: Category;
+export interface AssetClassSectionProps {
+  assetClass: AssetClass;
   index: number;
   products: Product[];
   newProductIds: Set<string>;
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => Promise<void>;
-  onAddProduct: (category: Category) => void;
+  onAddProduct: (assetClass: AssetClass) => void;
 }
 
 /**
- * One category's header (numbered badge + title + total) and its cards grid,
- * ending with the "Agregar producto" button.
- * `portfolio-dashboard.spec.md` → "Secciones por categoría con header y total".
+ * One asset class's header (numbered badge + title + total) and its cards
+ * grid, ending with the "Agregar producto" button.
+ * `portfolio-dashboard.spec.md` → "Secciones por clase de activo con header y total".
  */
-export const CategorySection: FC<CategorySectionProps> = ({
-  category,
+export const AssetClassSection: FC<AssetClassSectionProps> = ({
+  assetClass,
   index,
   products,
   newProductIds,
@@ -29,9 +29,9 @@ export const CategorySection: FC<CategorySectionProps> = ({
   onDeleteProduct,
   onAddProduct,
 }) => {
-  const meta = CATEGORY_META[category];
+  const meta = ASSET_CLASS_META[assetClass];
   const total = products.reduce((sum, p) => sum + p.amount, 0);
-  const color = categoryColorVar(category);
+  const color = assetClassColorVar(assetClass);
 
   return (
     <section className="flex flex-col gap-3">
@@ -60,7 +60,7 @@ export const CategorySection: FC<CategorySectionProps> = ({
             onDelete={onDeleteProduct}
           />
         ))}
-        <AddProductButton onClick={() => onAddProduct(category)} />
+        <AddProductButton onClick={() => onAddProduct(assetClass)} />
       </div>
     </section>
   );

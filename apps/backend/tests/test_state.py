@@ -1,8 +1,8 @@
-"""Tests for the agent state schema and SABBI category taxonomy (`agent.state`)."""
+"""Tests for the agent state schema and SABBI asset_class taxonomy (`agent.state`)."""
 
 from __future__ import annotations
 
-EXPECTED_CATEGORIES = {
+EXPECTED_ASSET_CLASSES = {
     "inversiones_directas",
     "mercados_privados",
     "club_deals",
@@ -11,7 +11,7 @@ EXPECTED_CATEGORIES = {
     "cash_y_equivalentes",
 }
 
-# category -> group -> leaves, mirrors the table in
+# asset_class -> group -> leaves, mirrors the table in
 # openspec/changes/multi-level-search/specs/taxonomy.spec.md
 EXPECTED_TAXONOMY = {
     "inversiones_directas": {
@@ -85,46 +85,46 @@ def test_agent_state_has_only_messages_field():
     assert set(AgentState.__annotations__.keys()) == {"messages"}
 
 
-def test_categories_has_all_six_sabbi_categories():
-    from agent.state import CATEGORIES
+def test_asset_classes_has_all_six_sabbi_asset_classes():
+    from agent.state import ASSET_CLASSES
 
-    assert set(CATEGORIES.keys()) == EXPECTED_CATEGORIES
+    assert set(ASSET_CLASSES.keys()) == EXPECTED_ASSET_CLASSES
 
 
-def test_each_category_has_label_and_groups():
-    from agent.state import CATEGORIES
+def test_each_asset_class_has_label_and_groups():
+    from agent.state import ASSET_CLASSES
 
-    for key, info in CATEGORIES.items():
+    for key, info in ASSET_CLASSES.items():
         assert isinstance(info["label"], str) and info["label"], f"{key} missing label"
         assert isinstance(info["groups"], dict) and info["groups"], f"{key} missing groups"
 
 
-def test_categories_labels_are_unique():
-    from agent.state import CATEGORIES
+def test_asset_classes_labels_are_unique():
+    from agent.state import ASSET_CLASSES
 
-    labels = [info["label"] for info in CATEGORIES.values()]
+    labels = [info["label"] for info in ASSET_CLASSES.values()]
     assert len(labels) == len(set(labels))
 
 
 def test_every_group_exposes_at_least_one_leaf():
-    from agent.state import CATEGORIES
+    from agent.state import ASSET_CLASSES
 
-    for category_key, info in CATEGORIES.items():
+    for asset_class_key, info in ASSET_CLASSES.items():
         for group_name, leaves in info["groups"].items():
             assert isinstance(leaves, list) and leaves, (
-                f"{category_key} -> {group_name} missing leaves"
+                f"{asset_class_key} -> {group_name} missing leaves"
             )
             assert all(isinstance(leaf, str) and leaf for leaf in leaves)
 
 
 def test_taxonomy_matches_spec_table_exactly():
-    from agent.state import CATEGORIES
+    from agent.state import ASSET_CLASSES
 
-    assert CATEGORIES == EXPECTED_TAXONOMY
+    assert ASSET_CLASSES == EXPECTED_TAXONOMY
 
 
 def test_publicos_exposes_renta_fija_group_with_us_treasuries_leaf():
-    from agent.state import CATEGORIES
+    from agent.state import ASSET_CLASSES
 
-    assert "Renta Fija" in CATEGORIES["mercados_publicos"]["groups"]
-    assert "US Treasuries" in CATEGORIES["mercados_publicos"]["groups"]["Renta Fija"]
+    assert "Renta Fija" in ASSET_CLASSES["mercados_publicos"]["groups"]
+    assert "US Treasuries" in ASSET_CLASSES["mercados_publicos"]["groups"]["Renta Fija"]

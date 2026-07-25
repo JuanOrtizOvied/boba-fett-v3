@@ -2,13 +2,12 @@
 
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
-import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { Category, CatalogProduct } from "@/lib/portfolio-types";
+import type { CatalogProduct } from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
-  { key: "category", label: "Categoría" },
   { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
@@ -235,7 +234,6 @@ function ConfirmDeleteDialog({
 
 const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: "name", label: "Nombre" },
-  { key: "category", label: "Categoría" },
   { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
@@ -372,16 +370,16 @@ function EditCatalogModal({
 
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
           {EDITABLE_FIELDS.map((field) =>
-            field.key === "category" ? (
+            field.key === "asset_class" ? (
               <ModalField key={field.key} label={field.label}>
                 <select
                   value={form[field.key] ?? ""}
                   onChange={(e) => updateField(field.key, e.target.value)}
                   className={modalInputClass}
                 >
-                  {CATEGORY_ORDER.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {CATEGORY_META[cat].label}
+                  {ASSET_CLASS_ORDER.map((ac) => (
+                    <option key={ac} value={ac}>
+                      {ASSET_CLASS_META[ac].label}
                     </option>
                   ))}
                 </select>

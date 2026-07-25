@@ -1,4 +1,4 @@
-"""Agent state schema and portfolio category taxonomy.
+"""Agent state schema and portfolio asset_class taxonomy.
 
 Portfolio data does NOT live in `AgentState` — it is persisted in PostgreSQL
 (see `db.repository.ProductRepository`) so it survives across chat threads,
@@ -25,15 +25,15 @@ class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 
 
-# SABBI category taxonomy. Shared by the system prompt, the tools' category
-# validation, the cascading search classifier (multi-level-search), and the
-# Excel export so there is a single source of truth for valid
-# categories/subcategory groups/leaves.
+# SABBI asset_class taxonomy. Shared by the system prompt, the tools'
+# asset_class validation, the cascading search classifier
+# (multi-level-search), and the Excel export so there is a single source of
+# truth for valid asset classes/subcategory groups/leaves.
 #
-# 3-level hierarchy: category -> subcategory group -> leaf. Groups with no
+# 3-level hierarchy: asset_class -> subcategory group -> leaf. Groups with no
 # further breakdown (e.g. "RE Extranjero") use their own name as the single
 # leaf, so every group always exposes at least one leaf.
-CATEGORIES: dict[str, dict[str, object]] = {
+ASSET_CLASSES: dict[str, dict[str, object]] = {
     "inversiones_directas": {
         "label": "Inversiones directas",
         "groups": {

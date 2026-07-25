@@ -29,7 +29,7 @@ vi.mock("@assistant-ui/react", () => {
 type ProductInput = {
   name?: string;
   amount?: number;
-  category?: string;
+  asset_class?: string;
   underlying?: { name: string; percentage: number }[];
   provider?: string;
 };
@@ -86,7 +86,7 @@ describe("ProposeProductCard rendering", () => {
         {...cardProps({
           name: "BlackRock Fund",
           amount: 1000,
-          category: "mercados_publicos",
+          asset_class: "mercados_publicos",
           underlying: [{ name: "Renta Fija US Treasuries", percentage: 100 }],
         })}
       />,
@@ -94,7 +94,7 @@ describe("ProposeProductCard rendering", () => {
 
     expect(screen.getByLabelText("Nombre")).toHaveValue("BlackRock Fund");
     expect(screen.getByLabelText("Monto (USD)")).toHaveValue(1000);
-    expect(screen.getByLabelText("Categoría")).toHaveValue("mercados_publicos");
+    expect(screen.getByLabelText("Clase de activo")).toHaveValue("mercados_publicos");
     expect(screen.getByText("Merc. públicos")).toBeInTheDocument();
     expect(screen.queryByText(/Completa:/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sí, agregar" })).not.toBeDisabled();
@@ -106,7 +106,7 @@ describe("ProposeProductCard rendering", () => {
         {...cardProps({
           name: "Fondo X",
           amount: 500,
-          category: "cash_y_equivalentes",
+          asset_class: "cash_y_equivalentes",
           underlying: undefined,
         })}
       />,
@@ -130,7 +130,7 @@ describe("ProposeProductCard field editing", () => {
         {...cardProps({
           name: "Fondo X",
           amount: 0,
-          category: "cash_y_equivalentes",
+          asset_class: "cash_y_equivalentes",
           underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
         })}
       />,
@@ -156,7 +156,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
         {...cardProps({
           name: "BlackRock Fund",
           amount: 1000,
-          category: "mercados_publicos",
+          asset_class: "mercados_publicos",
           underlying: [{ name: "Renta Fija", percentage: 100 }],
         })}
       />,
@@ -170,7 +170,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
       content: [
         {
           type: "text",
-          text: "Sí, agregar al portafolio con: nombre: BlackRock Fund, monto: 1000, categoría: Mercados públicos, underlying: [Renta Fija: 100%].",
+          text: "Sí, agregar al portafolio con: nombre: BlackRock Fund, monto: 1000, clase de activo: Mercados públicos, underlying: [Renta Fija: 100%].",
         },
       ],
     });
@@ -184,7 +184,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
         {...cardProps({
           name: "",
           amount: 1000,
-          category: "cash_y_equivalentes",
+          asset_class: "cash_y_equivalentes",
           underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
         })}
       />,
@@ -206,7 +206,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
         {...cardProps({
           name: "Fondo Y",
           amount: 500,
-          category: "cash_y_equivalentes",
+          asset_class: "cash_y_equivalentes",
           underlying: undefined,
         })}
       />,
@@ -233,7 +233,7 @@ describe("ProposeProductCard registration in ProposalBatchProvider", () => {
           {...cardProps({
             name: "BlackRock Fund",
             amount: 1000,
-            category: "mercados_publicos",
+            asset_class: "mercados_publicos",
             underlying: [{ name: "Renta Fija", percentage: 100 }],
           })}
         />
@@ -254,7 +254,7 @@ describe("ProposeProductCard registration in ProposalBatchProvider", () => {
     const product: ProductInput = {
       name: "BlackRock Fund",
       amount: 1000,
-      category: "mercados_publicos",
+      asset_class: "mercados_publicos",
       underlying: [{ name: "Renta Fija", percentage: 100 }],
     };
 
@@ -284,7 +284,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fund B",
         amount: 800,
-        category: "cash_y_equivalentes",
+        asset_class: "cash_y_equivalentes",
       },
       [
         {
@@ -293,7 +293,7 @@ describe("ProposeProductCard persisted response state", () => {
           content: [
             {
               type: "text",
-              text: "Sí, agregar todos al portafolio:\nnombre: Fund B, monto: 800, categoría: cash_y_equivalentes, underlying: [Fondos de Money Market: 100%]",
+              text: "Sí, agregar todos al portafolio:\nnombre: Fund B, monto: 800, clase de activo: cash_y_equivalentes, underlying: [Fondos de Money Market: 100%]",
             },
           ],
         },
@@ -308,7 +308,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fondo Visión Largo Plazo Global B",
         amount: 125000.4,
-        category: "mercados_privados",
+        asset_class: "mercados_privados",
       },
       [
         {
@@ -329,7 +329,7 @@ describe("ProposeProductCard persisted response state", () => {
                 product: {
                   name: "Fondo Vision Largo Plazo Global B",
                   amount: 125000,
-                  category: "mercados_privados",
+                  asset_class: "mercados_privados",
                 },
               },
             },
@@ -346,7 +346,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fund C",
         amount: 900,
-        category: "cash_y_equivalentes",
+        asset_class: "cash_y_equivalentes",
       },
       [
         {
@@ -384,7 +384,7 @@ describe("ProposeProductCard persisted response state", () => {
                     product: {
                       name: "Fondo Edifica Core VI B",
                       amount: 55001.56,
-                      category: "club_deals",
+                      asset_class: "club_deals",
                     },
                   },
                 },
@@ -401,7 +401,7 @@ describe("ProposeProductCard persisted response state", () => {
           {
             name: "Fondo Edífica Core VI B",
             amount: 55001.56,
-            category: "club_deals",
+            asset_class: "club_deals",
           },
           "tc_existing",
         )}
@@ -417,7 +417,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fondo Edífica Core VI B",
         amount: 55001.56,
-        category: "club_deals",
+        asset_class: "club_deals",
       },
       [
         {
@@ -433,7 +433,7 @@ describe("ProposeProductCard persisted response state", () => {
                 product: {
                   name: "Fondo Edifica Core VI B",
                   amount: 55002,
-                  category: "club_deals",
+                  asset_class: "club_deals",
                 },
               },
             },

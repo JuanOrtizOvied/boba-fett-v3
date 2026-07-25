@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC } from "react";
-import { CATEGORY_ORDER } from "@/lib/categories";
+import { ASSET_CLASS_ORDER } from "@/lib/categories";
 import { formatAbbreviatedUsd } from "@/lib/format";
 import type { LargestPosition } from "@/lib/usePortfolio";
 
@@ -9,17 +9,17 @@ export interface MetricsRowProps {
   totalAmount: number;
   productCount: number;
   largestPosition: LargestPosition | null;
-  categoriesUsedCount: number;
+  assetClassesUsedCount: number;
 }
 
 export const MetricsRow: FC<MetricsRowProps> = ({
   totalAmount,
   productCount,
   largestPosition,
-  categoriesUsedCount,
+  assetClassesUsedCount,
 }) => {
-  const totalCategories = CATEGORY_ORDER.length;
-  const isComplete = categoriesUsedCount === totalCategories;
+  const totalAssetClasses = ASSET_CLASS_ORDER.length;
+  const isComplete = assetClassesUsedCount === totalAssetClasses;
   const isReady = productCount > 0;
 
   return (
@@ -35,8 +35,8 @@ export const MetricsRow: FC<MetricsRowProps> = ({
         subtext={largestPosition?.product.name ?? "Sin productos"}
       />
       <MetricCard
-        label="Categorías"
-        value={`${categoriesUsedCount} de ${totalCategories}`}
+        label="Clases de activo"
+        value={`${assetClassesUsedCount} de ${totalAssetClasses}`}
         subtext={isComplete ? "Completo" : "Incompleto"}
       />
       <MetricCard

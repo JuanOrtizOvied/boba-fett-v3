@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { CATEGORY_META, CATEGORY_ORDER, categoryColorVar } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, assetClassColorVar } from "@/lib/categories";
 import type { Product } from "@/lib/portfolio-types";
 
 export interface SummaryTableProps {
@@ -7,16 +7,16 @@ export interface SummaryTableProps {
   totalAmount: number;
 }
 
-interface CategoryGroupData {
-  categoryKey: (typeof CATEGORY_ORDER)[number];
+interface AssetClassGroupData {
+  assetClassKey: (typeof ASSET_CLASS_ORDER)[number];
   products: Product[];
-  categoryTotal: number;
+  assetClassTotal: number;
 }
 
 /**
- * Consolidated resumen-final table: one highlighted row per category (badge +
+ * Consolidated resumen-final table: one highlighted row per asset class (badge +
  * label + actual % of the whole portfolio) followed by one indented row per
- * product (actual % + progress bar relative to its own category), and a bold
+ * product (actual % + progress bar relative to its own asset class), and a bold
  * total row whose "Actual" column sums to 100.0%.
  *
  * "Retorno" and "Deseado %" are not sourced anywhere yet (no return/target
@@ -24,15 +24,15 @@ interface CategoryGroupData {
  * `portfolio-dashboard.spec.md` → "Tabla consolidada del resumen".
  */
 export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) => {
-  const groups: CategoryGroupData[] = CATEGORY_ORDER.map((categoryKey) => {
-    const categoryProducts = products.filter((p) => p.category === categoryKey);
-    const categoryTotal = categoryProducts.reduce((sum, p) => sum + p.amount, 0);
-    return { categoryKey, products: categoryProducts, categoryTotal };
+  const groups: AssetClassGroupData[] = ASSET_CLASS_ORDER.map((assetClassKey) => {
+    const assetClassProducts = products.filter((p) => p.asset_class === assetClassKey);
+    const assetClassTotal = assetClassProducts.reduce((sum, p) => sum + p.amount, 0);
+    return { assetClassKey, products: assetClassProducts, assetClassTotal };
   }).filter((group) => group.products.length > 0);
 
   const totalActualPercent =
     totalAmount > 0
-      ? groups.reduce((sum, group) => sum + (group.categoryTotal / totalAmount) * 100, 0)
+      ? groups.reduce((sum, group) => sum + (group.assetClassTotal / totalAmount) * 100, 0)
       : 0;
 
   return (
@@ -40,7 +40,7 @@ export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) =
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="bg-sabbi-neutral-50 text-xs font-medium text-sabbi-neutral-600">
-            <th className="px-4 py-2 text-left">Categoría</th>
+            <th className="px-4 py-2 text-left">Clase de activo</th>
             <th className="px-4 py-2 text-right">Actual %</th>
             <th className="px-4 py-2 text-right">Retorno</th>
             <th className="px-4 py-2 text-right">Deseado %</th>
@@ -48,17 +48,17 @@ export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) =
         </thead>
         <tbody>
           {groups.map((group, index) => {
-            const meta = CATEGORY_META[group.categoryKey];
-            const categoryPercent =
-              totalAmount > 0 ? (group.categoryTotal / totalAmount) * 100 : 0;
+            const meta = ASSET_CLASS_META[group.assetClassKey];
+            const assetClassPercent =
+              totalAmount > 0 ? (group.assetClassTotal / totalAmount) * 100 : 0;
             return (
-              <CategoryRows
-                key={group.categoryKey}
+              <AssetClassRows
+                key={group.assetClassKey}
                 index={index}
                 label={meta.label}
-                color={categoryColorVar(group.categoryKey)}
-                categoryPercent={categoryPercent}
-                categoryTotal={group.categoryTotal}
+                color={assetClassColorVar(group.assetClassKey)}
+                assetClassPercent={assetClassPercent}
+                assetClassTotal={group.assetClassTotal}
                 products={group.products}
               />
             );
@@ -77,10 +77,10 @@ export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) =
   );
 };
 
-function aggregateUnderlying(products: Product[], categoryTotal: number) {
+function aggregateUnderlying(products: Product[], assetClassTotal: number) {
   const map = new Map<string, number>();
   for (const p of products) {
-    const weight = categoryTotal > 0 ? p.amount / categoryTotal : 0;
+    const weight = assetClassTotal > 0 ? p.amount / assetClassTotal : 0;
     for (const a of p.underlying) {
       map.set(a.name, (map.get(a.name) ?? 0) + weight * a.percentage);
     }
@@ -90,15 +90,15 @@ function aggregateUnderlying(products: Product[], categoryTotal: number) {
     .map(([name, pct]) => ({ name, percentage: pct }));
 }
 
-const CategoryRows: FC<{
+const AssetClassRows: FC<{
   index: number;
   label: string;
   color: string;
-  categoryPercent: number;
-  categoryTotal: number;
+  assetClassPercent: number;
+  assetClassTotal: number;
   products: Product[];
-}> = ({ index, label, color, categoryPercent, categoryTotal, products }) => {
-  const compositionRows = aggregateUnderlying(products, categoryTotal);
+}> = ({ index, label, color, assetClassPercent, assetClassTotal, products }) => {
+  const compositionRows = aggregateUnderlying(products, assetClassTotal);
   return (
     <>
       <tr className="bg-sabbi-neutral-100/70">
@@ -114,7 +114,7 @@ const CategoryRows: FC<{
           </div>
         </td>
         <td className="px-4 py-2 text-right font-medium text-sabbi-neutral-900">
-          {categoryPercent.toFixed(1)}%
+          {assetClassPercent.toFixed(1)}%
         </td>
         <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>
         <td className="px-4 py-2 text-right text-sabbi-neutral-500">—</td>

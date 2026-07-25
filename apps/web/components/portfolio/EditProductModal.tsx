@@ -3,16 +3,16 @@
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { XIcon } from "@/components/icons/Icons";
 import { useToast } from "@/components/ui/Toast";
-import { CATEGORY_META, CATEGORY_ORDER, CATEGORY_SUBCATEGORIES } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, ASSET_CLASS_SUBCATEGORIES } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { AssetAllocation, Category, Product } from "@/lib/portfolio-types";
+import type { AssetAllocation, AssetClass, Product } from "@/lib/portfolio-types";
 
 export interface EditProductModalProps {
   isOpen: boolean;
   /** `null` when adding a new product. */
   product: Product | null;
-  /** Pre-selected category when adding from a specific section. */
-  defaultCategory: Category | null;
+  /** Pre-selected asset class when adding from a specific section. */
+  defaultAssetClass: AssetClass | null;
   onClose: () => void;
   /** Called after a successful save, before the modal closes. Should refetch. */
   onSaved: () => void | Promise<void>;
@@ -32,8 +32,8 @@ interface SubcategoryOption {
   group: string;
 }
 
-function getSubcategoryLeaves(category: Category): SubcategoryOption[] {
-  return (CATEGORY_SUBCATEGORIES[category] ?? []).flatMap(({ group, leaves }) =>
+function getSubcategoryLeaves(assetClass: AssetClass): SubcategoryOption[] {
+  return (ASSET_CLASS_SUBCATEGORIES[assetClass] ?? []).flatMap(({ group, leaves }) =>
     leaves.map((leaf) => ({
       value: leaf === group ? leaf : `${group} ${leaf}`,
       group,
@@ -47,7 +47,7 @@ const inputClass =
 export const EditProductModal: FC<EditProductModalProps> = ({
   isOpen,
   product,
-  defaultCategory,
+  defaultAssetClass,
   onClose,
   onSaved,
 }) => {
@@ -57,7 +57,9 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<Category>(defaultCategory ?? "inversiones_directas");
+  const [assetClass, setAssetClass] = useState<AssetClass>(
+    defaultAssetClass ?? "inversiones_directas",
+  );
   const [rows, setRows] = useState<CompositionRow[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,7 +71,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setName(product.name);
       setProvider(product.provider);
       setAmount(String(product.amount));
-      setCategory(product.category);
+      setAssetClass(product.asset_class);
       setRows(
         product.underlying.length
           ? product.underlying.map((a) => ({
@@ -83,10 +85,10 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setName("");
       setProvider("");
       setAmount("");
-      setCategory(defaultCategory ?? "inversiones_directas");
+      setAssetClass(defaultAssetClass ?? "inversiones_directas");
       setRows([]);
     }
-  }, [isOpen, product, defaultCategory]);
+  }, [isOpen, product, defaultAssetClass]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -108,7 +110,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
 
   const removeRow = (key: string) => setRows((prev) => prev.filter((row) => row.key !== key));
 
-  const allLeaves = getSubcategoryLeaves(category);
+  const allLeaves = getSubcategoryLeaves(assetClass);
   const usedNames = new Set(rows.map((r) => r.name));
   const selectableLeaves = allLeaves.filter((l) => !usedNames.has(l.value));
 
@@ -124,8 +126,8 @@ export const EditProductModal: FC<EditProductModalProps> = ({
     setRows((prev) => [...prev, { key: nextRowKey(), name: value, percentage: "" }]);
   };
 
-  const handleCategoryChange = (next: Category) => {
-    setCategory(next);
+  const handleAssetClassChange = (next: AssetClass) => {
+    setAssetClass(next);
     setRows([]);
   };
 
@@ -161,7 +163,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
         name: trimmedName,
         provider: provider.trim(),
         amount: parsedAmount,
-        category,
+        asset_class: assetClass,
         underlying: composition,
       };
       const res = isEditing
@@ -238,15 +240,15 @@ export const EditProductModal: FC<EditProductModalProps> = ({
                 className={inputClass}
               />
             </Field>
-            <Field label="Categoría">
+            <Field label="Clase de activo">
               <select
-                value={category}
-                onChange={(event) => handleCategoryChange(event.target.value as Category)}
+                value={assetClass}
+                onChange={(event) => handleAssetClassChange(event.target.value as AssetClass)}
                 className={inputClass}
               >
-                {CATEGORY_ORDER.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {CATEGORY_META[cat].label}
+                {ASSET_CLASS_ORDER.map((ac) => (
+                  <option key={ac} value={ac}>
+                    {ASSET_CLASS_META[ac].label}
                   </option>
                 ))}
               </select>

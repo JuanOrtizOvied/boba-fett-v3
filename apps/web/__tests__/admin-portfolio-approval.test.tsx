@@ -6,7 +6,7 @@ import {
   ReadOnlyProductCard,
 } from "@/app/admin/portfolios/[userId]/ReadOnlyProductCard";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { Product } from "@/lib/portfolio-types";
+import type { CatalogProduct, Product } from "@/lib/portfolio-types";
 
 vi.mock("@/lib/fetchWithAuth", () => ({
   fetchWithAuth: vi.fn(),
@@ -18,9 +18,8 @@ const PRODUCT: Product = {
   name: "Bono Soberano",
   provider: "BCP",
   amount: 10000,
-  category: "mercados_publicos",
+  asset_class: "mercados_publicos",
   underlying: [{ name: "US Treasuries", percentage: 100 }],
-  asset_class: "",
   geographic_focus: [],
   commission: "",
   currency: "",
@@ -31,11 +30,11 @@ const PRODUCT: Product = {
   catalog_product_id: null,
 };
 
-const CATALOG_ENTRY = {
+const CATALOG_ENTRY: CatalogProduct = {
   id: 77,
   name: "Bono Soberano Catálogo",
   geographic_focus: [{ name: "LatAm", percentage: 100 }],
-  asset_class: "Renta Fija",
+  asset_class: "mercados_publicos",
   underlying: [{ name: "Bonos", percentage: 100 }],
   commission: "1.5%",
   currency: "USD",
@@ -43,7 +42,6 @@ const CATALOG_ENTRY = {
   manager: "Manager Co",
   liquidity: "T+2",
   return_rate: "8%",
-  category: "mercados_publicos",
   alternative_names: [],
   approved_from_product_id: null,
   approved_at: null,
@@ -76,12 +74,11 @@ describe("ReadOnlyProductCard approval affordance", () => {
 });
 
 describe("ApproveProductModal pre-fill", () => {
-  test("pre-fills name and category, leaves enrichment fields empty", () => {
+  test("pre-fills name and asset class, leaves enrichment fields empty", () => {
     render(<ApproveProductModal product={PRODUCT} onClose={vi.fn()} />);
 
     expect(screen.getByLabelText("Nombre")).toHaveValue("Bono Soberano");
-    expect(screen.getByLabelText("Categoría")).toHaveValue("mercados_publicos");
-    expect(screen.getByLabelText("Clase de activo")).toHaveValue("");
+    expect(screen.getByLabelText("Clase de activo")).toHaveValue("mercados_publicos");
     expect(screen.getByLabelText("Comisión")).toHaveValue("");
   });
 
@@ -143,7 +140,7 @@ describe("ApproveProductModal confirm", () => {
       />,
     );
 
-    await user.type(screen.getByLabelText("Clase de activo"), "Renta Fija");
+    await user.selectOptions(screen.getByLabelText("Clase de activo"), "otros");
     await user.click(screen.getByRole("button", { name: "Aprobar" }));
 
     await waitFor(() => {
@@ -154,8 +151,7 @@ describe("ApproveProductModal confirm", () => {
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body).toMatchObject({
       name: "Bono Soberano",
-      category: "mercados_publicos",
-      asset_class: "Renta Fija",
+      asset_class: "otros",
       approved_from_product_id: "prod-1",
       catalog_product_id: null,
     });

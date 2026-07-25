@@ -2,9 +2,9 @@
 
 import { useMemo, type FC } from "react";
 import { SummaryTable } from "@/components/portfolio/SummaryTable";
-import { CATEGORY_META, CATEGORY_ORDER, categoryColorVar } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, assetClassColorVar } from "@/lib/categories";
 import { formatAbbreviatedUsd } from "@/lib/format";
-import type { Category } from "@/lib/portfolio-types";
+import type { AssetClass } from "@/lib/portfolio-types";
 import { usePortfolio } from "@/lib/usePortfolio";
 
 const DONUT_SIZE = 220;
@@ -12,15 +12,15 @@ const DONUT_STROKE = 28;
 const DONUT_RADIUS = (DONUT_SIZE - DONUT_STROKE) / 2;
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 
-interface CategorySlice {
-  category: Category;
+interface AssetClassSlice {
+  assetClass: AssetClass;
   amount: number;
   percentage: number;
 }
 
 /**
  * Full-width "Resumen final" view — the equivalent of the "Portafolio Final"
- * Excel sheet: a pure-SVG donut chart with a per-category legend, plus the
+ * Excel sheet: a pure-SVG donut chart with a per-asset-class legend, plus the
  * consolidated table. Uses its own `usePortfolio()` call (rather than lifted
  * state) so the builder and resumen views can be mounted independently; the
  * hook's 5s poll keeps both in sync with the same Postgres-backed portfolio.
@@ -30,13 +30,13 @@ interface CategorySlice {
 export const PortfolioSummary: FC = () => {
   const { products, isLoading, error, totalAmount, productCount } = usePortfolio();
 
-  const slices = useMemo<CategorySlice[]>(() => {
-    return CATEGORY_ORDER.map((category) => {
+  const slices = useMemo<AssetClassSlice[]>(() => {
+    return ASSET_CLASS_ORDER.map((assetClass) => {
       const amount = products
-        .filter((p) => p.category === category)
+        .filter((p) => p.asset_class === assetClass)
         .reduce((sum, p) => sum + p.amount, 0);
       return {
-        category,
+        assetClass,
         amount,
         percentage: totalAmount > 0 ? (amount / totalAmount) * 100 : 0,
       };
@@ -84,7 +84,7 @@ export const PortfolioSummary: FC = () => {
                 height={DONUT_SIZE}
                 viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
                 role="img"
-                aria-label="Distribución del portafolio por categoría"
+                aria-label="Distribución del portafolio por clase de activo"
               >
                 <circle
                   cx={DONUT_SIZE / 2}
@@ -101,12 +101,12 @@ export const PortfolioSummary: FC = () => {
                   cumulativePercent += slice.percentage;
                   return (
                     <circle
-                      key={slice.category}
+                      key={slice.assetClass}
                       cx={DONUT_SIZE / 2}
                       cy={DONUT_SIZE / 2}
                       r={DONUT_RADIUS}
                       fill="none"
-                      stroke={categoryColorVar(slice.category)}
+                      stroke={assetClassColorVar(slice.assetClass)}
                       strokeWidth={DONUT_STROKE}
                       strokeDasharray={dashArray}
                       strokeDashoffset={dashOffset}
@@ -127,12 +127,12 @@ export const PortfolioSummary: FC = () => {
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               {slices.map((slice) => {
-                const meta = CATEGORY_META[slice.category];
+                const meta = ASSET_CLASS_META[slice.assetClass];
                 return (
-                  <div key={slice.category} className="flex items-center gap-2 text-sm">
+                  <div key={slice.assetClass} className="flex items-center gap-2 text-sm">
                     <span
                       className="size-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: categoryColorVar(slice.category) }}
+                      style={{ backgroundColor: assetClassColorVar(slice.assetClass) }}
                     />
                     <span className="truncate text-sabbi-neutral-700">{meta.label}</span>
                     <span className="ml-auto font-medium text-sabbi-neutral-900">

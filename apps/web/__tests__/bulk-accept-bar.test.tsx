@@ -25,7 +25,7 @@ vi.mock("@assistant-ui/react", () => {
 type ProductInput = {
   name?: string;
   amount?: number;
-  category?: string;
+  asset_class?: string;
   underlying?: { name: string; percentage: number }[];
   provider?: string;
 };
@@ -42,21 +42,21 @@ function cardProps(product: ProductInput) {
 const FUND_A: ProductInput = {
   name: "Fund A",
   amount: 500,
-  category: "cash_y_equivalentes",
+  asset_class: "cash_y_equivalentes",
   underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
 };
 
 const FUND_B_VALID: ProductInput = {
   name: "Fund B",
   amount: 800,
-  category: "cash_y_equivalentes",
+  asset_class: "cash_y_equivalentes",
   underlying: [{ name: "Fondos de Money Market", percentage: 100 }],
 };
 
 const FUND_B_INCOMPLETE: ProductInput = {
   name: "Fund B",
   amount: 800,
-  category: "cash_y_equivalentes",
+  asset_class: "cash_y_equivalentes",
   underlying: undefined,
 };
 
@@ -149,8 +149,8 @@ describe("BulkAcceptBar combined confirmation", () => {
           type: "text",
           text:
             "Sí, agregar todos al portafolio:\n" +
-            "nombre: Fund A, monto: 500, categoría: Cash y equivalentes, underlying: [Depósitos a plazo: 100%]\n" +
-            "nombre: Fund B, monto: 800, categoría: Cash y equivalentes, underlying: [Fondos de Money Market: 100%]",
+            "nombre: Fund A, monto: 500, clase de activo: Cash y equivalentes, underlying: [Depósitos a plazo: 100%]\n" +
+            "nombre: Fund B, monto: 800, clase de activo: Cash y equivalentes, underlying: [Fondos de Money Market: 100%]",
         },
       ],
     });

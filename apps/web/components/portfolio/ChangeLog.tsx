@@ -2,7 +2,7 @@
 
 import type { FC } from "react";
 import { EditIcon, RobotIcon, WarningIcon } from "@/components/icons/Icons";
-import { CATEGORY_META, categoryColorVar, resolveCategoryKey } from "@/lib/categories";
+import { ASSET_CLASS_META, assetClassColorVar, resolveAssetClassKey } from "@/lib/categories";
 import { formatAbbreviatedUsd, formatRelativeTime } from "@/lib/format";
 import type { ChangeLogEntry, ChangeOperation, ChangeSource } from "@/lib/usePortfolioVersioning";
 
@@ -81,9 +81,9 @@ function describeChanges(entry: ChangeLogEntry): string | null {
   const a = entry.after_state;
   if (b.amount !== a.amount)
     diffs.push(`${formatAbbreviatedUsd(b.amount)} → ${formatAbbreviatedUsd(a.amount)}`);
-  if (b.category !== a.category) {
-    const from = CATEGORY_META[resolveCategoryKey(b.category)].shortLabel;
-    const to = CATEGORY_META[resolveCategoryKey(a.category)].shortLabel;
+  if (b.asset_class !== a.asset_class) {
+    const from = ASSET_CLASS_META[resolveAssetClassKey(b.asset_class)].shortLabel;
+    const to = ASSET_CLASS_META[resolveAssetClassKey(a.asset_class)].shortLabel;
     diffs.push(`${from} → ${to}`);
   }
   if (b.name !== a.name) diffs.push(`"${b.name}" → "${a.name}"`);
@@ -96,8 +96,8 @@ const ChangeLogItem: FC<{ entry: ChangeLogEntry }> = ({ entry }) => {
   const product = entry.after_state ?? entry.before_state;
   const productName = product?.name ?? "Producto";
   const amount = product?.amount;
-  const categoryKey = product?.category ? resolveCategoryKey(product.category) : null;
-  const catMeta = categoryKey ? CATEGORY_META[categoryKey] : null;
+  const assetClassKey = product?.asset_class ? resolveAssetClassKey(product.asset_class) : null;
+  const assetClassMeta = assetClassKey ? ASSET_CLASS_META[assetClassKey] : null;
   const changes = describeChanges(entry);
 
   const provider = product?.provider;
@@ -133,12 +133,12 @@ const ChangeLogItem: FC<{ entry: ChangeLogEntry }> = ({ entry }) => {
       </div>
 
       <div className="mt-2.5 flex items-center gap-3 text-xs text-sabbi-neutral-500">
-        {catMeta && (
+        {assetClassMeta && (
           <span
             className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
-            style={{ backgroundColor: categoryColorVar(categoryKey!) }}
+            style={{ backgroundColor: assetClassColorVar(assetClassKey!) }}
           >
-            {catMeta.shortLabel}
+            {assetClassMeta.shortLabel}
           </span>
         )}
         <span className="flex items-center gap-1" title={`Origen: ${source.label}`}>

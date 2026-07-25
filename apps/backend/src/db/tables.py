@@ -58,11 +58,10 @@ products = Table(
     Column("name", Text, nullable=False),
     Column("provider", Text, server_default=""),
     Column("amount", Text, nullable=False),
-    Column("category", Text, nullable=False),
     Column("underlying", JSONB, server_default=text("'[]'::jsonb")),
     Column("created_at", DateTime(timezone=True), server_default=text("now()")),
     Column("updated_at", DateTime(timezone=True), server_default=text("now()")),
-    Column("asset_class", Text, server_default=""),
+    Column("asset_class", Text, nullable=False),
     Column("geographic_focus", JSONB, server_default=text("'[]'::jsonb")),
     Column("commission", Text, server_default=""),
     Column("currency", Text, server_default=""),
@@ -89,7 +88,6 @@ product_catalog = Table(
     Column("manager", Text, server_default=""),
     Column("liquidity", Text, server_default=""),
     Column("return_rate", Text, server_default=""),
-    Column("category", Text, server_default=""),
     Column("approved_from_product_id", Text),
     Column("approved_at", DateTime(timezone=True)),
     Column("alternative_names", ARRAY(Text), server_default=text("'{}'::text[]")),
@@ -108,7 +106,7 @@ portfolio_snapshots = Table(
     Column("product_count", Integer, nullable=False, server_default=text("0")),
     Column("total_amount", Text, nullable=False, server_default=text("0")),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
-    Column("category_summary", JSONB, server_default=text("'[]'::jsonb")),
+    Column("asset_class_summary", JSONB, server_default=text("'[]'::jsonb")),
 )
 
 snapshot_products = Table(

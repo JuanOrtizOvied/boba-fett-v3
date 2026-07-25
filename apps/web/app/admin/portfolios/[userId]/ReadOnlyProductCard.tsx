@@ -2,12 +2,12 @@
 
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { CheckIcon, XIcon } from "@/components/icons/Icons";
-import { CATEGORY_META, CATEGORY_ORDER } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER } from "@/lib/categories";
 import { compositionColor } from "@/lib/compositionPalette";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { formatUsd } from "@/lib/format";
 import { PlusIcon } from "@/components/icons/Icons";
-import type { AssetAllocation, CatalogProduct, Category, Product } from "@/lib/portfolio-types";
+import type { AssetAllocation, AssetClass, CatalogProduct, Product } from "@/lib/portfolio-types";
 
 /**
  * Not a Next.js route file (no `page`/`layout`/`route` export constraints
@@ -32,7 +32,7 @@ export function ReadOnlyProductCard({
   onApprove: (product: Product) => void;
   isApproved?: boolean;
 }) {
-  const meta = CATEGORY_META[product.category];
+  const meta = ASSET_CLASS_META[product.asset_class];
 
   return (
     <div
@@ -116,11 +116,10 @@ export function ReadOnlyProductCard({
 
 /**
  * Enrichment fields the backend accepts on `POST /admin/catalog/approve`
- * beyond the product's own identifying fields, per
+ * beyond the product's own identifying fields (`name`/`asset_class`), per
  * `apps/backend/src/db/models.py::CatalogProductCreate`.
  */
 interface EnrichmentFields {
-  assetClass: string;
   commission: string;
   currency: string;
   administrator: string;
@@ -130,7 +129,6 @@ interface EnrichmentFields {
 }
 
 const EMPTY_ENRICHMENT: EnrichmentFields = {
-  assetClass: "",
   commission: "",
   currency: "",
   administrator: "",
@@ -149,9 +147,9 @@ export interface ApproveProductModalProps {
 
 /**
  * "Approve to catalog" modal (`admin-panel/spec.md` -> "Approve to Catalog
- * Affordance on Portfolio View"). Pre-fills `name`/`category` from the source
- * product and leaves every enrichment field empty for the admin to fill in.
- * Cancel closes with no side effects. Confirm posts to
+ * Affordance on Portfolio View"). Pre-fills `name`/`asset_class` from the
+ * source product and leaves every enrichment field empty for the admin to
+ * fill in. Cancel closes with no side effects. Confirm posts to
  * `POST /api/admin/catalog/approve`; successful approval notifies the parent
  * and closes the modal, while duplicate/error responses stay inline.
  */
@@ -162,7 +160,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
   onApproved,
 }) => {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState<Category>("inversiones_directas");
+  const [assetClass, setAssetClass] = useState<AssetClass>("inversiones_directas");
   const [enrichment, setEnrichment] = useState<EnrichmentFields>(EMPTY_ENRICHMENT);
   const [underlying, setUnderlying] = useState<{ name: string; percentage: string }[]>([]);
   const [geoFocus, setGeoFocus] = useState<{ name: string; percentage: string }[]>([]);
@@ -172,9 +170,8 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
   useEffect(() => {
     if (!product) return;
     setName(product.name);
-    setCategory(product.category);
+    setAssetClass(product.asset_class);
     setEnrichment({
-      assetClass: product.asset_class || "",
       commission: product.commission || "",
       currency: product.currency || "",
       administrator: product.administrator || "",
@@ -223,8 +220,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          category,
-          asset_class: enrichment.assetClass.trim(),
+          asset_class: assetClass,
           geographic_focus: toAllocations(geoFocus),
           underlying: toAllocations(underlying),
           commission: enrichment.commission.trim(),
@@ -289,15 +285,12 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                 <ComparisonRow label="Nombre" currentValue={catalogEntry.name} newValue={name}>
                   <input value={name} onChange={(e) => setName(e.target.value)} className={modalInputClass} />
                 </ComparisonRow>
-                <ComparisonRow label="Categoría" currentValue={catalogEntry.category} newValue={category}>
-                  <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className={modalInputClass}>
-                    {CATEGORY_ORDER.map((cat) => (
-                      <option key={cat} value={cat}>{CATEGORY_META[cat].label}</option>
+                <ComparisonRow label="Clase de activo" currentValue={catalogEntry.asset_class} newValue={assetClass}>
+                  <select value={assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)} className={modalInputClass}>
+                    {ASSET_CLASS_ORDER.map((ac) => (
+                      <option key={ac} value={ac}>{ASSET_CLASS_META[ac].label}</option>
                     ))}
                   </select>
-                </ComparisonRow>
-                <ComparisonRow label="Clase de activo" currentValue={catalogEntry.asset_class} newValue={enrichment.assetClass}>
-                  <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
                 </ComparisonRow>
                 <UnderlyingComparisonRow
                   currentUnderlying={catalogEntry.underlying}
@@ -335,15 +328,12 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
               <ModalField label="Nombre">
                 <input value={name} onChange={(e) => setName(e.target.value)} className={modalInputClass} />
               </ModalField>
-              <ModalField label="Categoría">
-                <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className={modalInputClass}>
-                  {CATEGORY_ORDER.map((cat) => (
-                    <option key={cat} value={cat}>{CATEGORY_META[cat].label}</option>
+              <ModalField label="Clase de activo">
+                <select value={assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)} className={modalInputClass}>
+                  {ASSET_CLASS_ORDER.map((ac) => (
+                    <option key={ac} value={ac}>{ASSET_CLASS_META[ac].label}</option>
                   ))}
                 </select>
-              </ModalField>
-              <ModalField label="Clase de activo">
-                <input value={enrichment.assetClass} onChange={(e) => updateEnrichment({ assetClass: e.target.value })} className={modalInputClass} />
               </ModalField>
               <ModalField label="Composición subyacente">
                 <UnderlyingEditor rows={underlying} onChange={setUnderlying} />

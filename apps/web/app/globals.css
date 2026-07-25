@@ -41,7 +41,9 @@
   --sabbi-gold: #D4A843;
   --sabbi-cream: #F2EDE4;
 
-  /* Portfolio category taxonomy (6 categories) — accent / badge bg / badge text */
+  /* Portfolio asset class taxonomy (6 asset classes) — accent / badge bg / badge text.
+     Custom property names keep the `--sabbi-cat-*` prefix (ADR-3: rename in-place, not
+     a visual/CSS scope change). */
   --sabbi-cat-inversiones_directas: #c2410c; /* Inversiones directas */
   --sabbi-cat-inversiones_directas-bg: #fff7ed;
   --sabbi-cat-inversiones_directas-text: #9a3412;

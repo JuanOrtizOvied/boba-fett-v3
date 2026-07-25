@@ -17,8 +17,7 @@ from tests.integration.conftest import fake_user
 def _approve_payload(**overrides) -> dict:
     payload = {
         "name": "Bono Soberano",
-        "category": "mercados_publicos",
-        "asset_class": "bonos",
+        "asset_class": "mercados_publicos",
         "commission": "1.5%",
     }
     payload.update(overrides)
@@ -42,7 +41,7 @@ async def test_approve_creates_catalog_entry(admin_api_client, test_pool):
         "SELECT * FROM product_catalog WHERE id = $1", body["id"]
     )
     assert row is not None
-    assert row["category"] == "mercados_publicos"
+    assert row["asset_class"] == "mercados_publicos"
 
 
 async def test_approve_missing_required_field_returns_422_and_no_insert(
@@ -51,12 +50,12 @@ async def test_approve_missing_required_field_returns_422_and_no_insert(
     _app, client = admin_api_client
 
     response = await client.post(
-        "/admin/catalog/approve", json={"category": "mercados_publicos"}  # missing "name"
+        "/admin/catalog/approve", json={"asset_class": "mercados_publicos"}  # missing "name"
     )
 
     assert response.status_code == 422
     count = await test_pool.fetchval(
-        "SELECT count(*) FROM product_catalog WHERE category = $1", "mercados_publicos"
+        "SELECT count(*) FROM product_catalog WHERE asset_class = $1", "mercados_publicos"
     )
     assert count == 0
 
@@ -87,7 +86,7 @@ async def test_approve_full_flow_create_then_repeat_rejected(admin_api_client, t
     )
     product_id = "prod_test0001"
     await test_pool.execute(
-        """INSERT INTO products (id, user_id, name, amount, category)
+        """INSERT INTO products (id, user_id, name, amount, asset_class)
            VALUES ($1, $2, $3, $4, $5)""",
         product_id,
         user_id,
@@ -212,7 +211,7 @@ async def test_admin_lists_all_products_across_users_with_email(admin_api_client
         "user",
     )
     await test_pool.execute(
-        """INSERT INTO products (id, user_id, name, amount, category)
+        """INSERT INTO products (id, user_id, name, amount, asset_class)
            VALUES ($1, $2, $3, $4, $5)""",
         "prod_cross0001",
         user_id,

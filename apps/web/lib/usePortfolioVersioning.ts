@@ -7,8 +7,8 @@ import { PORTFOLIO_REFETCH_EVENT } from "@/lib/portfolioEvents";
 import type { Product } from "@/lib/portfolio-types";
 
 /** Mirrors `db.versioning.VersioningRepository.create_snapshot`/`list_snapshots`. */
-export interface SnapshotCategorySummary {
-  category: string;
+export interface SnapshotAssetClassSummary {
+  asset_class: string;
   percentage: number;
 }
 
@@ -18,7 +18,7 @@ export interface Snapshot {
   description: string;
   product_count: number;
   total_amount: number;
-  category_summary: SnapshotCategorySummary[];
+  asset_class_summary: SnapshotAssetClassSummary[];
   created_at: string;
 }
 
