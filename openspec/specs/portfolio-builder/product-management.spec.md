@@ -17,13 +17,13 @@ Given existe un producto "BlackRock Private Credit Fund" en el portafolio
 When el inversionista ve el panel de portafolio
 Then la card muestra:
   | elemento              | valor                            |
-  | barra lateral color   | color de la categoría            |
+  | barra lateral color   | color de la clase de activo primaria |
   | nombre                | BlackRock Private Credit Fund    |
   | proveedor             | BDEBT · BlackRock · SABBI        |
   | monto                 | $150,000                         |
   | barra de composición  | segmentos proporcionales         |
   | leyenda composición   | nombre + porcentaje por asset    |
-  | badge categoría       | Merc. privados                   |
+  | badge clase de activo  | Merc. privados (clase primaria)  |
   And los botones de editar y eliminar son invisibles
 When el inversionista hace hover sobre la card
 Then los botones de editar (lápiz) y eliminar (basura) se hacen visibles
@@ -58,13 +58,15 @@ Then se abre un modal centrado con overlay oscuro
   And el modal tiene título "Editar producto"
   And el modal tiene dos columnas:
     | columna izquierda         | columna derecha                  |
-    | Nombre del producto       | Composición por asset class      |
+    | Nombre del producto       | Underlying (composición)         |
     | Proveedor                 | Filas de nombre + porcentaje     |
     | Monto (USD)               | Total con validación             |
-    | Categoría (dropdown)      | Botón agregar asset class        |
+    | Clase de activo (allocs)  | Botón agregar underlying         |
+  And la columna izquierda incluye un editor de asset_class:
+    filas de [{name, percentage}] que suman 100%, con botón "Agregar clase"
   And los campos están pre-poblados con los datos actuales del producto
   And la columna izquierda tiene el label "Datos del producto"
-  And la columna derecha tiene el label "Composición por asset class"
+  And la columna derecha tiene el label "Composición por underlying"
 ```
 
 ---
@@ -114,15 +116,15 @@ Then la fila se elimina
 
 ```gherkin
 Given el modal de edición tiene datos válidos:
-  | campo     | valor              |
-  | nombre    | Empresa Familiar   |
-  | proveedor | Inversión directa  |
-  | monto     | 180,000            |
-  | categoría | directas           |
+  | campo       | valor                                                       |
+  | nombre      | Empresa Familiar                                            |
+  | proveedor   | Inversión directa                                           |
+  | monto       | 180,000                                                     |
+  | asset_class | [{"name": "inversiones_directas", "percentage": 100}]       |
 When el inversionista hace clic en "Guardar producto"
 Then el modal se cierra
   And la card se actualiza con los nuevos datos
-  And si la categoría cambió, la card se mueve a la sección correcta
+  And si la clase de activo primaria cambió, la card se mueve a la sección correcta
   And las métricas del portafolio se recalculan
   And la barra de composición refleja los nuevos porcentajes
 ```
@@ -211,22 +213,22 @@ Given el inversionista está en el panel de portafolio
 When hace clic en el botón "Agregar producto" (card con borde dashed y ícono +)
 Then se abre el modal con título "Agregar producto"
   And todos los campos están vacíos
-  And la categoría se pre-selecciona según la sección donde hizo clic
-  And hay una fila vacía de composición por asset class
+  And asset_class se pre-selecciona según la sección donde hizo clic
+  And hay una fila vacía de underlying
 When el inversionista llena los campos y hace clic en "Guardar producto"
-Then se crea una nueva card en la sección de la categoría seleccionada
+Then se crea una nueva card en la sección de la clase de activo primaria
   And las métricas se actualizan
   And el modal se cierra
 ```
 
 ---
 
-#### Scenario: Cada categoría tiene botón de agregar producto
+#### Scenario: Cada clase de activo tiene botón de agregar producto
 
 ```gherkin
-Given el portafolio tiene productos en las 6 categorías
+Given el portafolio tiene productos en las 6 clases de activo
 When el inversionista ve el panel de portafolio con filtro "Todos"
-Then cada sección de categoría muestra al final de su grid un botón "Agregar producto"
+Then cada sección de clase de activo muestra al final de su grid un botón "Agregar producto"
   And el botón tiene borde dashed, ícono + y texto "Agregar producto"
   And al hacer hover el botón cambia a fondo accent con texto accent
 ```

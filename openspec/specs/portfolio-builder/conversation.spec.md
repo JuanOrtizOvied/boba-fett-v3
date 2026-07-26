@@ -40,7 +40,7 @@ When el agente procesa el documento
 Then el agente responde con la lista de productos encontrados
   And cada producto muestra:
     | atributo     | ejemplo                       |
-    | badge        | categoría con color           |
+    | badge        | clase de activo con color     |
     | nombre       | BlackRock Private Credit Fund |
     | monto        | $150,000                      |
   And los productos se agregan automáticamente como cards en el panel derecho
@@ -71,7 +71,7 @@ Then el agente identifica:
   | atributo   | valor                 |
   | nombre     | Depto. Miraflores     |
   | monto      | 220000                |
-  | categoría  | Inversiones directas  |
+  | asset_class | [{"name": "inversiones_directas", "percentage": 100}] |
   | sub        | RE Perú, Residencial  |
   And el agente confirma la clasificación al usuario
   And crea la card en el panel de portafolio bajo "Inversiones directas"
@@ -124,7 +124,7 @@ Then el agente realiza web scraping del contenido de la página
 Given el inversionista sube un estado de cuenta con 4 productos
 When el agente procesa el documento
 Then el agente presenta los 4 productos encontrados en una lista
-  And cada producto tiene badge de categoría, nombre y monto
+  And cada producto tiene badge de clase de activo, nombre y monto
   And los 4 productos se agregan como cards al panel de portafolio
   And las métricas del portafolio se actualizan (total, conteo)
 ```
@@ -140,7 +140,7 @@ Then el agente indica qué pudo y qué no pudo identificar
   And hace preguntas específicas al usuario:
     | pregunta                                               |
     | "¿Cuál es el nombre exacto del producto?"              |
-    | "¿En qué categoría clasificarías esta inversión?"      |
+    | "¿En qué clase de activo clasificarías esta inversión?" |
     | "¿Cuál es el monto invertido?"                         |
   And no crea cards hasta tener información suficiente
 ```

@@ -13,9 +13,10 @@ existing catalog entries (list, delete).
 
 The system MUST let an admin approve a portfolio product into
 `product_catalog` by submitting the source product's overlapping fields
-(`name`, `category`, `subcategory`) plus admin-supplied enrichment fields
-(`asset_class`, `geographic_focus`, `underlying`, `commission`, `currency`,
-`administrator`, `manager`, `liquidity`, `return_rate`). The system SHOULD
+(`name`, `asset_class`, `subcategory`) plus admin-supplied enrichment fields
+(`geographic_focus`, `underlying`, `commission`, `currency`,
+`administrator`, `manager`, `liquidity`, `return_rate`). `asset_class` is a
+JSONB array of `[{name, percentage}]` summing to 100%. The system SHOULD
 record which source product an approved entry came from, to support
 traceability and rollback.
 
@@ -29,7 +30,7 @@ traceability and rollback.
 #### Scenario: Approval missing required fields is rejected
 
 - GIVEN an authenticated admin
-- WHEN they submit an approval request without `name` or `category`
+- WHEN they submit an approval request without `name` or `asset_class`
 - THEN the system MUST respond 422 and MUST NOT insert a catalog row
 
 #### Scenario: Non-admin cannot approve
@@ -44,7 +45,7 @@ The system MUST reject catalog insertion when a candidate entry's
 normalized field values (trimmed, case-insensitive) match an existing
 `product_catalog` row across every catalog field (`name`, `asset_class`,
 `geographic_focus`, `underlying`, `commission`, `currency`,
-`administrator`, `manager`, `liquidity`, `return_rate`, `category`,
+`administrator`, `manager`, `liquidity`, `return_rate`,
 `subcategory`).
 
 #### Scenario: Exact duplicate rejected regardless of case or spacing

@@ -67,12 +67,12 @@ And tiene las siguientes edges:
 Given el agente tiene la tool "add_product" registrada
 When Claude decide agregar un producto identificado
 Then invoca add_product con los parámetros:
-  | parámetro   | tipo                | requerido | ejemplo                    |
-  | name        | str                 | sí        | "BlackRock Private Credit" |
-  | provider    | str                 | no        | "BlackRock"                |
-  | amount      | float               | sí        | 150000                     |
-  | category    | CategoryEnum        | sí        | "privados"                 |
-  | composition | list[AssetAlloc]    | sí        | [{name, percentage}]       |
+  | parámetro   | tipo                | requerido | ejemplo                                              |
+  | name        | str                 | sí        | "BlackRock Private Credit"                           |
+  | provider    | str                 | no        | "BlackRock"                                          |
+  | amount      | float               | sí        | 150000                                               |
+  | asset_class | list[AssetAllocation] | sí      | [{"name": "mercados_privados", "percentage": 100}]   |
+  | underlying  | list[AssetAllocation] | sí      | [{"name": "Private Credit", "percentage": 100}]      |
   And la tool escribe el producto directamente a PostgreSQL
   And retorna confirmación con el ID asignado
   And el frontend refetch el portfolio desde la REST API
@@ -117,10 +117,9 @@ Then retorna:
   | campo                | valor                                        |
   | total_amount         | suma de todos los montos                     |
   | product_count        | 10                                           |
-  | categories_used      | lista de categorías con al menos 1 producto  |
-  | distribution         | porcentaje por categoría                     |
-  | largest_position     | {name, percentage}                           |
-  | composition_breakdown| distribución por asset class                 |
+  | asset_classes_used   | lista de clases de activo con al menos 1 producto         |
+  | distribution         | porcentaje por clase de activo (splitting proporcional)    |
+  | largest_position     | {name, percentage}                                        |
 ```
 
 ---
@@ -139,8 +138,8 @@ Then convierte el PDF a imágenes (una por página) si es necesario
     | ticker        | ticker o código si existe                           |
     | proveedor     | institución administradora                          |
     | monto         | monto invertido en USD                              |
-    | categoría     | una de las 6 categorías SABBI                       |
-    | composición   | desglose por asset class si está disponible          |
+    | asset_class   | distribución [{name, percentage}] sumando 100%      |
+    | underlying    | desglose por subyacente si está disponible           |
 ```
 
 ---
@@ -165,10 +164,10 @@ Given el agente se inicializa
 Then el system prompt incluye:
   | sección                          | contenido                                           |
   | rol                              | Asistente SABBI para construir portafolios           |
-  | categorías válidas               | las 6 categorías con subcategorías                  |
+  | clases de activo válidas          | las 6 clases con subcategorías                       |
   | formato de respuesta             | listar productos encontrados con badge y monto       |
-  | instrucción de clasificación     | reglas para asignar categoría y subcategoría         |
-  | instrucción de composición       | cómo manejar productos multi-asset class             |
+  | instrucción de clasificación     | reglas para asignar asset_class [{name, percentage}] |
+  | instrucción de underlying        | cómo manejar productos multi-underlying              |
   | instrucción de confirmación      | siempre confirmar con el usuario antes de continuar  |
   | idioma                           | español                                              |
   | tono                             | profesional, amigable, conciso                       |

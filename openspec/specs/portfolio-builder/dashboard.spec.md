@@ -4,9 +4,12 @@
 
 ### Feature: Panel de portafolio con métricas, filtros y resumen final
 
-El panel derecho muestra todos los productos organizados por categoría,
-con métricas en tiempo real, filtros por categoría, y una vista de resumen
-final equivalente a la hoja "Portafolio Final" del Excel.
+El panel derecho muestra todos los productos organizados por clase de activo,
+con métricas en tiempo real, filtros por clase de activo, y una vista de resumen
+final equivalente a la hoja "Portafolio Final" del Excel. Cada producto tiene
+un array `asset_class: [{name, percentage}]` que suma 100%. Cuando un producto
+tiene múltiples clases de activo, su monto se divide proporcionalmente entre
+los grupos correspondientes.
 
 ---
 
@@ -19,7 +22,7 @@ Then se muestran 4 tarjetas de métricas:
   | métrica         | valor        | subtexto           |
   | Total           | $1.16M       | 10 productos       |
   | Mayor posición  | 19.0%        | Depto. Miraflores  |
-  | Categorías      | 6 de 6       | Completo           |
+  | Clases activo   | 6 de 6       | Completo           |
   | Estado          | Listo (verde)| Puedes enviarlo    |
 When se elimina un producto de $220,000
 Then las métricas se recalculan:
@@ -30,13 +33,13 @@ Then las métricas se recalculan:
 
 ---
 
-#### Scenario: Filtrado por categoría con tabs
+#### Scenario: Filtrado por clase de activo con tabs
 
 ```gherkin
-Given el portafolio tiene productos en 6 categorías
+Given el portafolio tiene productos en 6 clases de activo
 When el inversionista ve los tabs de filtro
 Then se muestra el tab "Todos" activo con conteo total
-  And se muestran tabs para cada categoría con su conteo:
+  And se muestran tabs para cada clase de activo con su conteo:
     | tab              | conteo |
     | Todos            | 10     |
     | Inv. directas    | 2      |
@@ -48,23 +51,23 @@ Then se muestra el tab "Todos" activo con conteo total
 When el inversionista hace clic en "Merc. privados"
 Then solo se muestran las secciones de "Mercados privados"
   And las demás secciones se ocultan
-  And el tab "Merc. privados" se marca como activo con color de la categoría
+  And el tab "Merc. privados" se marca como activo con color de la clase
 When el inversionista hace clic en "Todos"
 Then todas las secciones se muestran nuevamente
 ```
 
 ---
 
-#### Scenario: Secciones por categoría con header y total
+#### Scenario: Secciones por clase de activo con header y total
 
 ```gherkin
-Given el portafolio tiene productos en la categoría "Mercados privados"
+Given el portafolio tiene productos en la clase "Mercados privados"
 When se renderiza la sección
 Then el header de la sección muestra:
-  | elemento       | valor                    |
-  | badge          | "2" con color de cat.    |
-  | título         | Mercados privados        |
-  | total derecho  | $385,000                 |
+  | elemento       | valor                       |
+  | badge          | "2" con color de clase      |
+  | título         | Mercados privados           |
+  | total derecho  | $385,000 (suma proporcional)|
   And debajo del header se muestra el grid de cards
   And al final del grid hay un botón "Agregar producto"
 ```
@@ -92,31 +95,34 @@ Given el inversionista ha completado su portafolio con todos los productos
 When hace clic en "Resumen final" en el topbar
 Then se muestra la vista de resumen final a pantalla completa (sin chat)
   And la vista incluye:
-    | componente                                 |
-    | Donut chart con distribución por categoría |
-    | Leyenda del donut con colores y porcentajes|
-    | Tabla consolidada con todas las categorías |
+    | componente                                          |
+    | Donut chart con distribución por clase de activo   |
+    | Leyenda del donut con colores y porcentajes        |
+    | Tabla consolidada con todas las clases de activo   |
     | Botón "Exportar Excel"                     |
     | Botón "Enviar a SABBI"                     |
 ```
 
 ---
 
-#### Scenario: Donut chart de distribución
+#### Scenario: Donut chart de distribución (splitting proporcional)
 
 ```gherkin
-Given el portafolio tiene distribución:
-  | categoría            | porcentaje |
-  | Inversiones directas | 31.9%      |
-  | Mercados privados    | 33.2%      |
-  | Club deals           | 10.8%      |
-  | Mercados públicos    | 10.3%      |
-  | Otros                | 8.6%       |
-  | Cash y equivalentes  | 5.2%       |
+Given el portafolio tiene distribución por clase de activo:
+  | clase de activo       | porcentaje |
+  | Inversiones directas  | 31.9%      |
+  | Mercados privados     | 33.2%      |
+  | Club deals            | 10.8%      |
+  | Mercados públicos     | 10.3%      |
+  | Otros                 | 8.6%       |
+  | Cash y equivalentes   | 5.2%       |
+  And los porcentajes se calculan con splitting proporcional:
+    un producto con asset_class [{inversiones_directas: 60%}, {mercados_privados: 40%}]
+    y monto $100,000 contribuye $60,000 a inversiones_directas y $40,000 a mercados_privados
 When se renderiza el donut chart
-Then cada segmento tiene el color asignado a su categoría
+Then cada segmento tiene el color asignado a su clase de activo
   And el centro del donut muestra el monto total y conteo de productos
-  And la leyenda muestra 6 items con dot de color, nombre y porcentaje
+  And la leyenda muestra items con dot de color, nombre y porcentaje
 ```
 
 ---
@@ -128,11 +134,11 @@ Given el portafolio está completo
 When se renderiza la tabla del resumen final
 Then la tabla tiene las columnas:
   | columna      | alineación |
-  | Categoría    | izquierda  |
+  | Clase de activo | izquierda |
   | Actual       | derecha    |
   | Retorno      | derecha    |
   | Deseado      | derecha    |
-  And las filas de categoría tienen fondo highlight y badge con número
+  And las filas de clase de activo tienen fondo highlight y badge con número
   And las filas de subcategoría están indentadas con color secundario
   And cada subcategoría muestra una barra de progreso proporcional
   And los retornos positivos se muestran en color verde
@@ -149,8 +155,8 @@ Given el portafolio está completo con todos los productos clasificados
 When el inversionista hace clic en "Exportar Excel"
 Then el frontend solicita GET /api/portfolio/:id/export al backend
   And el backend genera el .xlsx server-side con openpyxl (datos directos de Postgres)
-  And el archivo contiene las hojas por categoría con los montos correctos
-  And la hoja "Portafolio Final" consolida todas las categorías
+  And el archivo contiene las hojas por clase de activo con los montos proporcionales
+  And la hoja "Portafolio Final" consolida todas las clases de activo
   And los porcentajes suman 100%
   And el archivo se descarga automáticamente (sin SheetJS ni dependencias JS)
 ```

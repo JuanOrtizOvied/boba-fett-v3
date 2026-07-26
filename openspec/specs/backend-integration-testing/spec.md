@@ -69,7 +69,7 @@ MUST read/write through the real `ProductRepository`.
 #### Scenario: add_product persists a valid product
 
 - GIVEN a `RunnableConfig` with `user_id` set to a seeded test user
-- WHEN `add_product` is invoked with name, amount > 0, and category
+- WHEN `add_product` is invoked with name, amount > 0, and asset_class
 - THEN the tool returns `status: "added"` and the product is retrievable from Postgres
 
 #### Scenario: add_product rejects non-positive amount
@@ -110,9 +110,9 @@ MUST read/write through the real `ProductRepository`.
 
 #### Scenario: get_portfolio_summary on populated portfolio
 
-- GIVEN a test user with 3 products across 2 categories
+- GIVEN a test user with 3 products across 2 asset classes
 - WHEN `get_portfolio_summary` is invoked
-- THEN totals, per-category distribution percentages, and the largest position by amount are computed from live Postgres data
+- THEN totals, per-asset-class distribution percentages (proportional splitting), and the largest position by amount are computed from live Postgres data
 
 ### Requirement: REST API CRUD With Ownership and Auth Enforcement
 
