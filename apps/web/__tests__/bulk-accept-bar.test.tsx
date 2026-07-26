@@ -42,21 +42,21 @@ function cardProps(product: ProductInput) {
 const FUND_A: ProductInput = {
   name: "Fund A",
   amount: 500,
-  asset_class: "cash_y_equivalentes",
+  asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
   underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
 };
 
 const FUND_B_VALID: ProductInput = {
   name: "Fund B",
   amount: 800,
-  asset_class: "cash_y_equivalentes",
+  asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
   underlying: [{ name: "Fondos de Money Market", percentage: 100 }],
 };
 
 const FUND_B_INCOMPLETE: ProductInput = {
   name: "Fund B",
   amount: 800,
-  asset_class: "cash_y_equivalentes",
+  asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
   underlying: undefined,
 };
 

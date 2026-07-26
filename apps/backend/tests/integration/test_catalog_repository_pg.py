@@ -17,7 +17,7 @@ from db.models import CatalogProductCreate
 def _entry(**overrides) -> CatalogProductCreate:
     data = {
         "name": "Bono Soberano",
-        "asset_class": "mercados_publicos",
+        "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
         "geographic_focus": [{"name": "LatAm", "percentage": 100}],
         "commission": "1.5%",
         "currency": "USD",
@@ -57,11 +57,11 @@ async def test_insert_if_not_duplicate_allows_entry_differing_in_asset_class(tes
     first = await repo.insert_if_not_duplicate(_entry())
     assert first is not None
 
-    second = await repo.insert_if_not_duplicate(_entry(asset_class="acciones"))
+    second = await repo.insert_if_not_duplicate(_entry(asset_class=[{"name": "acciones", "percentage": 100}]))
 
     assert second is not None
     assert second.id != first.id
-    assert second.asset_class == "acciones"
+    assert second.asset_class[0].name == "acciones"
 
 
 async def test_insert_if_not_duplicate_persists_provenance_fields(test_pool):

@@ -18,9 +18,11 @@ class Product(BaseModel):
     provider: str = ""
     amount: float = Field(gt=0)
     underlying: list[AssetAllocation] = Field(default_factory=list)
-    asset_class: str = Field(
-        description="One of: inversiones_directas, mercados_privados,"
-        " club_deals, mercados_publicos, otros, cash_y_equivalentes"
+    asset_class: list[AssetAllocation] = Field(
+        default_factory=list,
+        description="List of {name, percentage} allocations summing to 100%."
+        " name is one of: inversiones_directas, mercados_privados,"
+        " club_deals, mercados_publicos, otros, cash_y_equivalentes",
     )
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
@@ -44,7 +46,7 @@ class ProductCreate(BaseModel):
     provider: str = ""
     amount: float = Field(gt=0)
     underlying: list[AssetAllocation] = Field(default_factory=list)
-    asset_class: str
+    asset_class: list[AssetAllocation]
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
@@ -58,6 +60,7 @@ class ProductCreate(BaseModel):
     def _allocations_sum_to_100(self) -> ProductCreate:
         _check_allocation_sum(self.underlying, "Underlying")
         _check_allocation_sum(self.geographic_focus, "Geographic focus")
+        _check_allocation_sum(self.asset_class, "Asset class")
         return self
 
 
@@ -66,7 +69,7 @@ class ProductUpdate(BaseModel):
     provider: str | None = None
     amount: float | None = None
     underlying: list[AssetAllocation] | None = None
-    asset_class: str | None = None
+    asset_class: list[AssetAllocation] | None = None
     geographic_focus: list[AssetAllocation] | None = None
     commission: str | None = None
     currency: str | None = None
@@ -82,6 +85,8 @@ class ProductUpdate(BaseModel):
             _check_allocation_sum(self.underlying, "Underlying")
         if self.geographic_focus is not None:
             _check_allocation_sum(self.geographic_focus, "Geographic focus")
+        if self.asset_class is not None:
+            _check_allocation_sum(self.asset_class, "Asset class")
         return self
 
 
@@ -101,7 +106,7 @@ class CatalogProduct(BaseModel):
     id: int
     name: str
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
-    asset_class: str = ""
+    asset_class: list[AssetAllocation] = Field(default_factory=list)
     underlying: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
@@ -121,7 +126,7 @@ class CatalogProductCreate(BaseModel):
     every other field is optional enrichment."""
 
     name: str
-    asset_class: str
+    asset_class: list[AssetAllocation]
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     underlying: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
@@ -137,7 +142,7 @@ class CatalogProductCreate(BaseModel):
 
 class CatalogProductUpdate(BaseModel):
     name: str | None = None
-    asset_class: str | None = None
+    asset_class: list[AssetAllocation] | None = None
     geographic_focus: list[AssetAllocation] | None = None
     underlying: list[AssetAllocation] | None = None
     commission: str | None = None
@@ -157,7 +162,7 @@ class SearchResult(BaseModel):
     L3 (Tavily web search) product search, with per-field provenance."""
 
     name: str = ""
-    asset_class: str = ""
+    asset_class: list[AssetAllocation] = Field(default_factory=list)
     geographic_focus: list[AssetAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""

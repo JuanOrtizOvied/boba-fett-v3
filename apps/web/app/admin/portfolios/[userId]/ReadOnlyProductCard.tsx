@@ -2,7 +2,12 @@
 
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { CheckIcon, XIcon } from "@/components/icons/Icons";
-import { ASSET_CLASS_META, ASSET_CLASS_ORDER } from "@/lib/categories";
+import {
+  ASSET_CLASS_META,
+  ASSET_CLASS_ORDER,
+  formatAssetClassAllocations,
+  primaryAssetClass,
+} from "@/lib/categories";
 import { compositionColor } from "@/lib/compositionPalette";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { formatUsd } from "@/lib/format";
@@ -32,7 +37,7 @@ export function ReadOnlyProductCard({
   onApprove: (product: Product) => void;
   isApproved?: boolean;
 }) {
-  const meta = ASSET_CLASS_META[product.asset_class];
+  const meta = ASSET_CLASS_META[primaryAssetClass(product.asset_class)];
 
   return (
     <div
@@ -170,7 +175,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
   useEffect(() => {
     if (!product) return;
     setName(product.name);
-    setAssetClass(product.asset_class);
+    setAssetClass(primaryAssetClass(product.asset_class));
     setEnrichment({
       commission: product.commission || "",
       currency: product.currency || "",
@@ -220,7 +225,7 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          asset_class: assetClass,
+          asset_class: [{ name: assetClass, percentage: 100 }],
           geographic_focus: toAllocations(geoFocus),
           underlying: toAllocations(underlying),
           commission: enrichment.commission.trim(),
@@ -285,7 +290,11 @@ export const ApproveProductModal: FC<ApproveProductModalProps> = ({
                 <ComparisonRow label="Nombre" currentValue={catalogEntry.name} newValue={name}>
                   <input value={name} onChange={(e) => setName(e.target.value)} className={modalInputClass} />
                 </ComparisonRow>
-                <ComparisonRow label="Clase de activo" currentValue={catalogEntry.asset_class} newValue={assetClass}>
+                <ComparisonRow
+                  label="Clase de activo"
+                  currentValue={formatAssetClassAllocations(catalogEntry.asset_class)}
+                  newValue={formatAssetClassAllocations([{ name: assetClass, percentage: 100 }])}
+                >
                   <select value={assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)} className={modalInputClass}>
                     {ASSET_CLASS_ORDER.map((ac) => (
                       <option key={ac} value={ac}>{ASSET_CLASS_META[ac].label}</option>

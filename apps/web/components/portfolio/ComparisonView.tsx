@@ -49,8 +49,15 @@ const FIELD_LABELS: Record<string, string> = {
 function formatFieldValue(field: string, value: unknown): string {
   if (value == null || value === "") return "—";
   if (field === "amount") return formatUsd(Number(value));
-  if (field === "asset_class" && typeof value === "string") {
-    return ASSET_CLASS_META[value as AssetClass]?.label ?? value;
+  if (field === "asset_class") {
+    const allocations = value as AssetAllocation[];
+    if (!Array.isArray(allocations) || allocations.length === 0) return "—";
+    return allocations
+      .map((a) => {
+        const meta = ASSET_CLASS_META[a.name as AssetClass];
+        return `${meta?.label ?? a.name} ${a.percentage}%`;
+      })
+      .join(", ");
   }
   if (field === "underlying" || field === "geographic_focus") {
     const allocations = value as AssetAllocation[];

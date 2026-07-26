@@ -147,8 +147,16 @@ class VersioningRepository:
 
                 asset_class_totals: dict[str, float] = {}
                 for r in rows:
-                    ac = r["asset_class"] or "otros"
-                    asset_class_totals[ac] = asset_class_totals.get(ac, 0) + decrypt_amount(r["amount"])
+                    amount = decrypt_amount(r["amount"])
+                    raw_ac = r["asset_class"]
+                    if isinstance(raw_ac, str):
+                        raw_ac = json.loads(raw_ac) if raw_ac else []
+                    if not raw_ac:
+                        raw_ac = [{"name": "otros", "percentage": 100}]
+                    for alloc in (raw_ac if isinstance(raw_ac, list) else []):
+                        ac_name = (alloc.get("name") or "otros") if isinstance(alloc, dict) else "otros"
+                        pct = alloc.get("percentage", 100) if isinstance(alloc, dict) else 100
+                        asset_class_totals[ac_name] = asset_class_totals.get(ac_name, 0) + amount * pct / 100
                 asset_class_summary = sorted(
                     [
                         {"asset_class": ac, "percentage": round(a / total_amount * 100, 1) if total_amount else 0}
@@ -482,7 +490,7 @@ class VersioningRepository:
             provider=row["provider"],
             amount=decrypt_amount(row["amount"]),
             underlying=[AssetAllocation(**a) for a in (raw or [])],
-            asset_class=row["asset_class"],
+            asset_class=self._parse_json_allocations(row.get("asset_class")),
             geographic_focus=self._parse_json_allocations(row.get("geographic_focus")),
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",

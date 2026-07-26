@@ -8,7 +8,7 @@ import { SnapshotButton } from "@/components/portfolio/SnapshotButton";
 import { VersioningDrawer } from "@/components/portfolio/VersioningDrawer";
 import { PieIcon } from "@/components/icons/Icons";
 import { useToast } from "@/components/ui/Toast";
-import { ASSET_CLASS_ORDER } from "@/lib/categories";
+import { ASSET_CLASS_ORDER, primaryAssetClass } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { formatAbbreviatedUsd } from "@/lib/format";
 import type { AssetClass, Product } from "@/lib/portfolio-types";
@@ -64,7 +64,7 @@ export const PortfolioPanel: FC = () => {
 
   const productsByAssetClass = ASSET_CLASS_ORDER.reduce(
     (acc, assetClass) => {
-      acc[assetClass] = products.filter((p) => p.asset_class === assetClass);
+      acc[assetClass] = products.filter((p) => primaryAssetClass(p.asset_class) === assetClass);
       return acc;
     },
     {} as Record<AssetClass, Product[]>,

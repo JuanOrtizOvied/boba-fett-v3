@@ -3,7 +3,12 @@
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { XIcon } from "@/components/icons/Icons";
 import { useToast } from "@/components/ui/Toast";
-import { ASSET_CLASS_META, ASSET_CLASS_ORDER, ASSET_CLASS_SUBCATEGORIES } from "@/lib/categories";
+import {
+  ASSET_CLASS_META,
+  ASSET_CLASS_ORDER,
+  ASSET_CLASS_SUBCATEGORIES,
+  primaryAssetClass,
+} from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { AssetAllocation, AssetClass, Product } from "@/lib/portfolio-types";
 
@@ -17,6 +22,9 @@ export interface EditProductModalProps {
   /** Called after a successful save, before the modal closes. Should refetch. */
   onSaved: () => void | Promise<void>;
 }
+
+/** One asset-class allocation row — same shape as `CompositionRow`, reused for the allocation editor. */
+type AssetClassRow = CompositionRow;
 
 interface CompositionRow {
   key: string;
@@ -57,9 +65,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("");
   const [amount, setAmount] = useState("");
-  const [assetClass, setAssetClass] = useState<AssetClass>(
-    defaultAssetClass ?? "inversiones_directas",
-  );
+  const [assetClassRows, setAssetClassRows] = useState<AssetClassRow[]>([]);
   const [rows, setRows] = useState<CompositionRow[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -71,7 +77,15 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setName(product.name);
       setProvider(product.provider);
       setAmount(String(product.amount));
-      setAssetClass(product.asset_class);
+      setAssetClassRows(
+        product.asset_class.length
+          ? product.asset_class.map((a) => ({
+              key: nextRowKey(),
+              name: a.name,
+              percentage: String(a.percentage),
+            }))
+          : [{ key: nextRowKey(), name: defaultAssetClass ?? "inversiones_directas", percentage: "100" }],
+      );
       setRows(
         product.underlying.length
           ? product.underlying.map((a) => ({
@@ -85,7 +99,9 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setName("");
       setProvider("");
       setAmount("");
-      setAssetClass(defaultAssetClass ?? "inversiones_directas");
+      setAssetClassRows([
+        { key: nextRowKey(), name: defaultAssetClass ?? "inversiones_directas", percentage: "100" },
+      ]);
       setRows([]);
     }
   }, [isOpen, product, defaultAssetClass]);
@@ -110,7 +126,13 @@ export const EditProductModal: FC<EditProductModalProps> = ({
 
   const removeRow = (key: string) => setRows((prev) => prev.filter((row) => row.key !== key));
 
-  const allLeaves = getSubcategoryLeaves(assetClass);
+  // Subcategory taxonomy is keyed by the product's PRIMARY asset class
+  // (highest allocated percentage) — composition itself is independent of
+  // how many asset classes the product spans.
+  const primaryAC = primaryAssetClass(
+    assetClassRows.map((row) => ({ name: row.name, percentage: parseFloat(row.percentage) || 0 })),
+  );
+  const allLeaves = getSubcategoryLeaves(primaryAC);
   const usedNames = new Set(rows.map((r) => r.name));
   const selectableLeaves = allLeaves.filter((l) => !usedNames.has(l.value));
 
@@ -126,9 +148,28 @@ export const EditProductModal: FC<EditProductModalProps> = ({
     setRows((prev) => [...prev, { key: nextRowKey(), name: value, percentage: "" }]);
   };
 
-  const handleAssetClassChange = (next: AssetClass) => {
-    setAssetClass(next);
-    setRows([]);
+  // Asset class allocation editor helpers — mirrors the composition editor
+  // above but operates over the 6 asset class taxonomy keys instead of
+  // subcategory leaves.
+  const assetClassTotal = assetClassRows.reduce(
+    (sum, row) => sum + (parseFloat(row.percentage) || 0),
+    0,
+  );
+  const isAssetClassTotalValid =
+    assetClassRows.length > 0 && Math.abs(assetClassTotal - 100) < 0.5;
+
+  const updateAssetClassRow = (key: string, patch: Partial<AssetClassRow>) => {
+    setAssetClassRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  };
+
+  const removeAssetClassRow = (key: string) =>
+    setAssetClassRows((prev) => prev.filter((row) => row.key !== key));
+
+  const usedAssetClasses = new Set(assetClassRows.map((r) => r.name));
+  const selectableAssetClasses = ASSET_CLASS_ORDER.filter((ac) => !usedAssetClasses.has(ac));
+
+  const addAssetClass = (value: AssetClass) => {
+    setAssetClassRows((prev) => [...prev, { key: nextRowKey(), name: value, percentage: "" }]);
   };
 
   const handleSave = async () => {
@@ -138,6 +179,9 @@ export const EditProductModal: FC<EditProductModalProps> = ({
     const composition: AssetAllocation[] = rows
       .filter((row) => parseFloat(row.percentage) > 0)
       .map((row) => ({ name: row.name, percentage: parseFloat(row.percentage) }));
+    const assetClassAlloc: AssetAllocation[] = assetClassRows
+      .filter((row) => parseFloat(row.percentage) > 0)
+      .map((row) => ({ name: row.name, percentage: parseFloat(row.percentage) }));
 
     if (!trimmedName) {
       setFormError("Ingresa un nombre");
@@ -145,6 +189,17 @@ export const EditProductModal: FC<EditProductModalProps> = ({
     }
     if (!parsedAmount || parsedAmount <= 0) {
       setFormError("Ingresa un monto");
+      return;
+    }
+    if (assetClassAlloc.length === 0) {
+      setFormError("Agrega al menos una clase de activo");
+      return;
+    }
+    const assetClassAllocTotal = assetClassAlloc.reduce((s, c) => s + c.percentage, 0);
+    if (Math.abs(assetClassAllocTotal - 100) >= 0.5) {
+      setFormError(
+        `La clase de activo debe sumar 100% (actual: ${assetClassAllocTotal.toFixed(1)}%)`,
+      );
       return;
     }
     if (composition.length === 0) {
@@ -163,7 +218,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
         name: trimmedName,
         provider: provider.trim(),
         amount: parsedAmount,
-        asset_class: assetClass,
+        asset_class: assetClassAlloc,
         underlying: composition,
       };
       const res = isEditing
@@ -240,19 +295,71 @@ export const EditProductModal: FC<EditProductModalProps> = ({
                 className={inputClass}
               />
             </Field>
-            <Field label="Clase de activo">
-              <select
-                value={assetClass}
-                onChange={(event) => handleAssetClassChange(event.target.value as AssetClass)}
-                className={inputClass}
-              >
-                {ASSET_CLASS_ORDER.map((ac) => (
-                  <option key={ac} value={ac}>
-                    {ASSET_CLASS_META[ac].label}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-sabbi-neutral-700">Clase de activo</p>
+
+              {selectableAssetClasses.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) addAssetClass(e.target.value as AssetClass);
+                  }}
+                  className={inputClass}
+                >
+                  <option value="" disabled>
+                    Agregar clase de activo...
                   </option>
-                ))}
-              </select>
-            </Field>
+                  {selectableAssetClasses.map((ac) => (
+                    <option key={ac} value={ac}>
+                      {ASSET_CLASS_META[ac].label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {assetClassRows.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {assetClassRows.map((row) => (
+                    <div key={row.key} className="flex items-center gap-2">
+                      <span className="flex-1 truncate text-sm font-medium text-sabbi-neutral-900">
+                        {ASSET_CLASS_META[row.name as AssetClass]?.label ?? row.name}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="any"
+                          placeholder="%"
+                          value={row.percentage}
+                          onChange={(event) =>
+                            updateAssetClassRow(row.key, { percentage: event.target.value })
+                          }
+                          className={`${inputClass} w-20 text-right`}
+                        />
+                        <span className="text-xs text-sabbi-neutral-500">%</span>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Eliminar ${ASSET_CLASS_META[row.name as AssetClass]?.label ?? row.name}`}
+                        onClick={() => removeAssetClassRow(row.key)}
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100"
+                      >
+                        <XIcon size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {assetClassRows.length > 0 && (
+                <p
+                  className={`text-sm font-medium ${isAssetClassTotalValid ? "text-emerald-600" : "text-red-600"}`}
+                >
+                  Total: {assetClassTotal.toFixed(1)}%
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-col gap-3">

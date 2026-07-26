@@ -52,10 +52,10 @@ import {
   ASSET_CLASS_SUBCATEGORIES,
   assetClassBgVar,
   assetClassTextVar,
-  resolveAssetClassKey,
+  primaryAssetClass,
 } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
-import type { AssetClass, EnrichedProposedProduct, FieldSource } from "@/lib/portfolio-types";
+import type { AssetAllocation, AssetClass, EnrichedProposedProduct, FieldSource } from "@/lib/portfolio-types";
 
 /**
  * Converts a `File` to a base64 data URL, matching the pattern used by
@@ -546,7 +546,7 @@ const UserReloadButton: FC = () => {
 interface ToolResultProduct {
   name: string;
   amount: number;
-  asset_class: AssetClass;
+  asset_class: AssetAllocation[];
 }
 
 type PortfolioToolResult =
@@ -596,7 +596,7 @@ function ToolResultItem({
   }
 
   const { product } = result;
-  const catKey = resolveAssetClassKey(product.asset_class);
+  const catKey = primaryAssetClass(product.asset_class);
   const meta = ASSET_CLASS_META[catKey];
   if (!meta) return null;
 
@@ -635,7 +635,7 @@ type ProposalResponse = "yes" | "no";
 export interface ProposalEntry {
   name: string;
   amount: number;
-  asset_class: string;
+  asset_class: AssetAllocation[];
   provider: string;
   isValid: boolean;
   missingFields: string[];
@@ -708,7 +708,11 @@ function productsMatch(a: ProposedProduct, b: ToolResultProduct): boolean {
   const aName = normalizeMatchText(a.name);
   const bName = normalizeMatchText(b.name);
   const sameName = aName === bName || aName.includes(bName) || bName.includes(aName);
-  return sameName && (a.asset_class === b.asset_class || amountsMatch(a.amount, b.amount));
+  return (
+    sameName &&
+    (JSON.stringify(a.asset_class) === JSON.stringify(b.asset_class) ||
+      amountsMatch(a.amount, b.amount))
+  );
 }
 
 function responseForProduct(text: string, product: ProposedProduct): ProposalResponse | null {
@@ -768,7 +772,7 @@ export function ProposalBatchProvider({ children }: { children: React.ReactNode 
       prev.responded === entry.responded &&
       prev.name === entry.name &&
       prev.amount === entry.amount &&
-      prev.asset_class === entry.asset_class
+      JSON.stringify(prev.asset_class) === JSON.stringify(entry.asset_class)
     ) {
       return;
     }
@@ -936,7 +940,7 @@ export function ProposeProductCard({
   const [provider, setProvider] = useState(product?.provider ?? "");
   const [amount, setAmount] = useState(product ? String(product.amount) : "0");
   const [assetClass, setAssetClass] = useState<AssetClass>(
-    resolveAssetClassKey(product?.asset_class ?? "cash_y_equivalentes"),
+    primaryAssetClass(product?.asset_class ?? [{ name: "cash_y_equivalentes", percentage: 100 }]),
   );
   const [compRows, setCompRows] = useState<{ key: string; name: string; percentage: string }[]>(() => {
     if (product?.underlying && Array.isArray(product.underlying) && product.underlying.length > 0) {
@@ -1025,7 +1029,7 @@ export function ProposeProductCard({
     batchRef.current.register(cardId, {
       name,
       amount: parsedAmount,
-      asset_class: assetClass,
+      asset_class: [{ name: assetClass, percentage: 100 }],
       provider,
       isValid,
       missingFields,

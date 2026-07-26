@@ -86,7 +86,7 @@ describe("ProposeProductCard rendering", () => {
         {...cardProps({
           name: "BlackRock Fund",
           amount: 1000,
-          asset_class: "mercados_publicos",
+          asset_class: [{ name: "mercados_publicos", percentage: 100 }],
           underlying: [{ name: "Renta Fija US Treasuries", percentage: 100 }],
         })}
       />,
@@ -106,7 +106,7 @@ describe("ProposeProductCard rendering", () => {
         {...cardProps({
           name: "Fondo X",
           amount: 500,
-          asset_class: "cash_y_equivalentes",
+          asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
           underlying: undefined,
         })}
       />,
@@ -130,7 +130,7 @@ describe("ProposeProductCard field editing", () => {
         {...cardProps({
           name: "Fondo X",
           amount: 0,
-          asset_class: "cash_y_equivalentes",
+          asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
           underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
         })}
       />,
@@ -156,7 +156,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
         {...cardProps({
           name: "BlackRock Fund",
           amount: 1000,
-          asset_class: "mercados_publicos",
+          asset_class: [{ name: "mercados_publicos", percentage: 100 }],
           underlying: [{ name: "Renta Fija", percentage: 100 }],
         })}
       />,
@@ -184,7 +184,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
         {...cardProps({
           name: "",
           amount: 1000,
-          asset_class: "cash_y_equivalentes",
+          asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
           underlying: [{ name: "Depósitos a plazo", percentage: 100 }],
         })}
       />,
@@ -206,7 +206,7 @@ describe("ProposeProductCard confirm and reject actions", () => {
         {...cardProps({
           name: "Fondo Y",
           amount: 500,
-          asset_class: "cash_y_equivalentes",
+          asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
           underlying: undefined,
         })}
       />,
@@ -233,7 +233,7 @@ describe("ProposeProductCard registration in ProposalBatchProvider", () => {
           {...cardProps({
             name: "BlackRock Fund",
             amount: 1000,
-            asset_class: "mercados_publicos",
+            asset_class: [{ name: "mercados_publicos", percentage: 100 }],
             underlying: [{ name: "Renta Fija", percentage: 100 }],
           })}
         />
@@ -254,7 +254,7 @@ describe("ProposeProductCard registration in ProposalBatchProvider", () => {
     const product: ProductInput = {
       name: "BlackRock Fund",
       amount: 1000,
-      asset_class: "mercados_publicos",
+      asset_class: [{ name: "mercados_publicos", percentage: 100 }],
       underlying: [{ name: "Renta Fija", percentage: 100 }],
     };
 
@@ -284,7 +284,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fund B",
         amount: 800,
-        asset_class: "cash_y_equivalentes",
+        asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
       },
       [
         {
@@ -308,7 +308,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fondo Visión Largo Plazo Global B",
         amount: 125000.4,
-        asset_class: "mercados_privados",
+        asset_class: [{ name: "mercados_privados", percentage: 100 }],
       },
       [
         {
@@ -329,7 +329,7 @@ describe("ProposeProductCard persisted response state", () => {
                 product: {
                   name: "Fondo Vision Largo Plazo Global B",
                   amount: 125000,
-                  asset_class: "mercados_privados",
+                  asset_class: [{ name: "mercados_privados", percentage: 100 }],
                 },
               },
             },
@@ -346,7 +346,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fund C",
         amount: 900,
-        asset_class: "cash_y_equivalentes",
+        asset_class: [{ name: "cash_y_equivalentes", percentage: 100 }],
       },
       [
         {
@@ -384,7 +384,7 @@ describe("ProposeProductCard persisted response state", () => {
                     product: {
                       name: "Fondo Edifica Core VI B",
                       amount: 55001.56,
-                      asset_class: "club_deals",
+                      asset_class: [{ name: "club_deals", percentage: 100 }],
                     },
                   },
                 },
@@ -401,7 +401,7 @@ describe("ProposeProductCard persisted response state", () => {
           {
             name: "Fondo Edífica Core VI B",
             amount: 55001.56,
-            asset_class: "club_deals",
+            asset_class: [{ name: "club_deals", percentage: 100 }],
           },
           "tc_existing",
         )}
@@ -417,7 +417,7 @@ describe("ProposeProductCard persisted response state", () => {
       {
         name: "Fondo Edífica Core VI B",
         amount: 55001.56,
-        asset_class: "club_deals",
+        asset_class: [{ name: "club_deals", percentage: 100 }],
       },
       [
         {
@@ -433,7 +433,7 @@ describe("ProposeProductCard persisted response state", () => {
                 product: {
                   name: "Fondo Edifica Core VI B",
                   amount: 55002,
-                  asset_class: "club_deals",
+                  asset_class: [{ name: "club_deals", percentage: 100 }],
                 },
               },
             },

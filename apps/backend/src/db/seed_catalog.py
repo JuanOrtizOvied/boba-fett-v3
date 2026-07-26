@@ -43,6 +43,15 @@ def _parse_underlying(text: str) -> str:
     return json.dumps(result)
 
 
+def _parse_asset_class(text: str) -> str:
+    """Convert a single free-text asset_class value into a JSON array of one
+    {name, percentage: 100} allocation. Returns '[]' when empty."""
+    cleaned = _clean(text)
+    if not cleaned:
+        return "[]"
+    return json.dumps([{"name": cleaned, "percentage": 100}])
+
+
 async def seed(path: str) -> int:
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
@@ -67,10 +76,10 @@ async def seed(path: str) -> int:
                    (name, geographic_focus, asset_class, underlying,
                     commission, currency, administrator, manager,
                     liquidity, return_rate)
-                   VALUES ($1, $2::jsonb, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)""",
+                   VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10)""",
                 name,
                 _parse_underlying(row[2]),
-                _clean(row[3]),
+                _parse_asset_class(row[3]),
                 _parse_underlying(row[4]),
                 _clean(row[5]),
                 _clean(row[6]),

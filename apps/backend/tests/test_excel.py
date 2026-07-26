@@ -8,13 +8,17 @@ from openpyxl import load_workbook
 from db.models import AssetAllocation, Product
 
 
+def _ac(name: str) -> list[AssetAllocation]:
+    return [AssetAllocation(name=name, percentage=100)]
+
+
 def _product(**overrides) -> Product:
     defaults = dict(
         user_id="usr_test",
         name="Fund A",
         provider="Provider A",
         amount=10_000,
-        asset_class="inversiones_directas",
+        asset_class=_ac("inversiones_directas"),
         underlying=[AssetAllocation(name="Fund A", percentage=100)],
     )
     defaults.update(overrides)
@@ -24,12 +28,12 @@ def _product(**overrides) -> Product:
 @pytest.fixture
 def sample_products() -> list[Product]:
     return [
-        _product(name="Accionariado XYZ", amount=20_000, asset_class="inversiones_directas"),
-        _product(name="Deuda Privada Fund", amount=15_000, asset_class="mercados_privados"),
+        _product(name="Accionariado XYZ", amount=20_000, asset_class=_ac("inversiones_directas")),
+        _product(name="Deuda Privada Fund", amount=15_000, asset_class=_ac("mercados_privados")),
         _product(
             name="Multi-asset Fund",
             amount=5_000,
-            asset_class="mercados_publicos",
+            asset_class=_ac("mercados_publicos"),
             underlying=[
                 AssetAllocation(name="RV US Large Cap", percentage=60),
                 AssetAllocation(name="RF Corporate", percentage=40),

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ASSET_CLASS_META, ASSET_CLASS_ORDER, resolveAssetClassKey } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, primaryAssetClass, resolveAssetClassKey } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { CatalogProduct, Product } from "@/lib/portfolio-types";
@@ -39,12 +39,7 @@ export default function AdminPortfolioViewPage() {
           );
         }
         const data: { products: Product[] } = await portfolioRes.json();
-        setProducts(
-          data.products.map((p) => ({
-            ...p,
-            asset_class: resolveAssetClassKey(p.asset_class),
-          })),
-        );
+        setProducts(data.products);
 
         if (usersRes.ok) {
           const users: UserInfo[] = await usersRes.json();
@@ -73,7 +68,9 @@ export default function AdminPortfolioViewPage() {
     approvingProduct?.catalog_product_id == null
       ? null
       : catalogEntries.find((entry) => entry.id === approvingProduct.catalog_product_id) ?? null;
-  const assetClassesUsed = new Set((products ?? []).map((p) => p.asset_class));
+  const assetClassesUsed = new Set(
+    (products ?? []).flatMap((p) => (p.asset_class ?? []).map((a) => resolveAssetClassKey(a.name))),
+  );
   const isComplete = ASSET_CLASS_ORDER.every((ac) => assetClassesUsed.has(ac));
   const lastUpdated = userInfo?.updated_at
     ? new Date(userInfo.updated_at).toLocaleDateString("es-PE", {
@@ -127,7 +124,7 @@ export default function AdminPortfolioViewPage() {
         </p>
       ) : (
         ASSET_CLASS_ORDER.map((cat) => {
-          const catProducts = (products ?? []).filter((p) => p.asset_class === cat);
+          const catProducts = (products ?? []).filter((p) => primaryAssetClass(p.asset_class) === cat);
           if (catProducts.length === 0) return null;
           const meta = ASSET_CLASS_META[cat];
           return (

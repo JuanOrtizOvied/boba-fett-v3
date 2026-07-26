@@ -97,12 +97,7 @@ export function usePortfolio(): UsePortfolioResult {
       }
       if (!res.ok) throw new Error(`Failed to load portfolio (${res.status})`);
       const data: { products: Product[] } = await res.json();
-      setProducts(
-        (data.products ?? []).map((p) => ({
-          ...p,
-          asset_class: resolveAssetClassKey(p.asset_class),
-        })),
-      );
+      setProducts(data.products ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -151,7 +146,10 @@ export function usePortfolio(): UsePortfolioResult {
   const assetClassDistribution = useMemo(() => {
     const dist = {} as Record<AssetClass, number>;
     for (const p of products) {
-      dist[p.asset_class] = (dist[p.asset_class] ?? 0) + p.amount;
+      for (const alloc of p.asset_class ?? []) {
+        const key = resolveAssetClassKey(alloc.name) as AssetClass;
+        dist[key] = (dist[key] ?? 0) + (p.amount * alloc.percentage) / 100;
+      }
     }
     return dist;
   }, [products]);

@@ -24,7 +24,7 @@ export interface Product {
   provider: string;
   amount: number;
   underlying: AssetAllocation[];
-  asset_class: AssetClass;
+  asset_class: AssetAllocation[];
   geographic_focus: AssetAllocation[];
   commission: string;
   currency: string;
@@ -39,7 +39,7 @@ export interface ProductCreateInput {
   name: string;
   provider?: string;
   amount: number;
-  asset_class: AssetClass;
+  asset_class: AssetAllocation[];
   underlying: AssetAllocation[];
 }
 
@@ -47,7 +47,7 @@ export interface ProductUpdateInput {
   name?: string;
   provider?: string;
   amount?: number;
-  asset_class?: AssetClass;
+  asset_class?: AssetAllocation[];
   underlying?: AssetAllocation[];
 }
 
@@ -65,7 +65,7 @@ export type ProvenanceMap = Record<string, FieldSource>;
 export interface ProposedProduct {
   name: string;
   amount: number;
-  asset_class: AssetClass;
+  asset_class: AssetAllocation[];
   provider?: string;
 }
 
@@ -101,7 +101,7 @@ export interface CatalogProduct {
   id: number;
   name: string;
   geographic_focus: AssetAllocation[];
-  asset_class: AssetClass;
+  asset_class: AssetAllocation[];
   underlying: AssetAllocation[];
   commission: string;
   currency: string;
@@ -121,7 +121,7 @@ export interface CatalogProduct {
  */
 export interface CatalogProductCreate {
   name: string;
-  asset_class: AssetClass;
+  asset_class: AssetAllocation[];
   geographic_focus?: AssetAllocation[];
   underlying?: AssetAllocation[];
   commission?: string;

@@ -73,7 +73,7 @@ class ProductRepository:
             data.provider,
             encrypt_amount(data.amount),
             json.dumps([a.model_dump() for a in data.underlying]),
-            data.asset_class,
+            json.dumps([a.model_dump() for a in data.asset_class]),
             json.dumps([a.model_dump() for a in data.geographic_focus]),
             data.commission,
             data.currency,
@@ -142,6 +142,10 @@ class ProductRepository:
         if "geographic_focus" in updates:
             updates["geographic_focus"] = json.dumps(
                 [a.model_dump() for a in data.geographic_focus]
+            )
+        if "asset_class" in updates:
+            updates["asset_class"] = json.dumps(
+                [a.model_dump() for a in data.asset_class]
             )
         if "amount" in updates:
             updates["amount"] = encrypt_amount(updates["amount"])
@@ -259,12 +263,14 @@ class ProductRepository:
     async def get_summary(self, user_id: str) -> dict:
         products = await self.list_by_user(user_id)
         total = sum(p.amount for p in products)
-        by_asset_class: dict[str, list[Product]] = {}
+        by_asset_class: dict[str, float] = {}
         for p in products:
-            by_asset_class.setdefault(p.asset_class, []).append(p)
+            for alloc in p.asset_class:
+                ac = alloc.name or "otros"
+                by_asset_class[ac] = by_asset_class.get(ac, 0) + p.amount * alloc.percentage / 100
         distribution = {
-            ac: sum(p.amount for p in prods) / total * 100 if total else 0
-            for ac, prods in by_asset_class.items()
+            ac: amount / total * 100 if total else 0
+            for ac, amount in by_asset_class.items()
         }
         largest = max(products, key=lambda p: p.amount) if products else None
         return {
@@ -296,7 +302,7 @@ class ProductRepository:
             provider=row["provider"],
             amount=decrypt_amount(row["amount"]),
             underlying=[AssetAllocation(**a) for a in (raw or [])],
-            asset_class=row["asset_class"],
+            asset_class=self._parse_json_allocations(row.get("asset_class")),
             geographic_focus=self._parse_json_allocations(row.get("geographic_focus")),
             commission=row.get("commission", "") or "",
             currency=row.get("currency", "") or "",

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
-import { ASSET_CLASS_META, ASSET_CLASS_ORDER } from "@/lib/categories";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { CatalogProduct } from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
@@ -264,7 +263,10 @@ function EditCatalogModal({
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
       const val = entry[field.key as keyof CatalogProduct];
-      if ((field.key === "underlying" || field.key === "geographic_focus") && Array.isArray(val)) {
+      if (
+        (field.key === "underlying" || field.key === "geographic_focus" || field.key === "asset_class") &&
+        Array.isArray(val)
+      ) {
         initial[field.key] = val.map((v) => (typeof v === "object" && v && "name" in v ? `${(v as { name: string; percentage: number }).name}: ${(v as { name: string; percentage: number }).percentage}%` : String(v))).join("\n");
       } else {
         initial[field.key] = Array.isArray(val) ? val.join("\n") : String(val ?? "");
@@ -300,13 +302,17 @@ function EditCatalogModal({
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
-        } else if (field.key === "underlying" || field.key === "geographic_focus") {
+        } else if (
+          field.key === "underlying" ||
+          field.key === "geographic_focus" ||
+          field.key === "asset_class"
+        ) {
           const lines = (form[field.key] ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
           const current = lines.map((line) => {
             const match = line.match(/^(.+?):\s*(\d+(?:\.\d+)?)%?$/);
             return match ? { name: match[1].trim(), percentage: parseFloat(match[2]) } : { name: line, percentage: 0 };
           });
-          const original = entry[field.key as "underlying" | "geographic_focus"] ?? [];
+          const original = entry[field.key as "underlying" | "geographic_focus" | "asset_class"] ?? [];
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
@@ -370,21 +376,7 @@ function EditCatalogModal({
 
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
           {EDITABLE_FIELDS.map((field) =>
-            field.key === "asset_class" ? (
-              <ModalField key={field.key} label={field.label}>
-                <select
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass}
-                >
-                  {ASSET_CLASS_ORDER.map((ac) => (
-                    <option key={ac} value={ac}>
-                      {ASSET_CLASS_META[ac].label}
-                    </option>
-                  ))}
-                </select>
-              </ModalField>
-            ) : field.key === "alternative_names" ? (
+            field.key === "alternative_names" ? (
               <ModalField key={field.key} label={field.label}>
                 <textarea
                   rows={3}
@@ -394,7 +386,9 @@ function EditCatalogModal({
                   className={modalInputClass + " resize-y"}
                 />
               </ModalField>
-            ) : field.key === "underlying" || field.key === "geographic_focus" ? (
+            ) : field.key === "underlying" ||
+              field.key === "geographic_focus" ||
+              field.key === "asset_class" ? (
               <ModalField key={field.key} label={field.label}>
                 <textarea
                   rows={3}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FC } from "react";
 import { EditIcon, TrashIcon, WarningIcon } from "@/components/icons/Icons";
-import { ASSET_CLASS_META, assetClassColorVar } from "@/lib/categories";
+import { ASSET_CLASS_META, assetClassColorVar, primaryAssetClass } from "@/lib/categories";
 import { compositionColor } from "@/lib/compositionPalette";
 import { formatUsd } from "@/lib/format";
 import type { Product } from "@/lib/portfolio-types";
@@ -41,8 +41,9 @@ export const ProductCard: FC<ProductCardProps> = ({ product, isNew, onEdit, onDe
       return () => clearTimeout(timer);
     }
   }, [isNew]);
-  const meta = ASSET_CLASS_META[product.asset_class];
-  const color = assetClassColorVar(product.asset_class);
+  const primaryAC = primaryAssetClass(product.asset_class);
+  const meta = ASSET_CLASS_META[primaryAC];
+  const color = assetClassColorVar(primaryAC);
   const isConfirming = mode === "confirm-delete";
 
   const handleConfirmDelete = async () => {

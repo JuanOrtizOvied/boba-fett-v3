@@ -28,7 +28,7 @@ def _create_data(**overrides: Any) -> ProductCreate:
         "name": "BlackRock Private Credit Fund",
         "provider": "SABBI",
         "amount": 150000,
-        "asset_class": "mercados_privados",
+        "asset_class": [{"name": "mercados_privados", "percentage": 100}],
     }
     data.update(overrides)
     return ProductCreate(**data)
@@ -155,14 +155,14 @@ async def test_update_partial_field_only_changes_touched_field_in_after_state(
 ):
     repo = ProductRepository(test_pool)
     product = await repo.create(
-        test_user_id, _create_data(asset_class="mercados_privados", provider="SABBI")
+        test_user_id, _create_data(asset_class=[{"name": "mercados_privados", "percentage": 100}], provider="SABBI")
     )
 
-    await repo.update(product.id, ProductUpdate(asset_class="club_deals"))
+    await repo.update(product.id, ProductUpdate(asset_class=[{"name": "club_deals", "percentage": 100}]))
 
     update_change = await _fetch_change(test_pool, product.id, "update")
     after = _jsonb(update_change["after_state"])
-    assert after["asset_class"] == "club_deals"
+    assert after["asset_class"] == [{"name": "club_deals", "percentage": 100}]
     assert after["provider"] == "SABBI"
 
 

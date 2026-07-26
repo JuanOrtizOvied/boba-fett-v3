@@ -24,7 +24,7 @@ from tavily import TavilyClient
 
 from agent.state import ASSET_CLASSES
 from db.catalog_repository import CatalogRepository
-from db.models import FieldSource, SearchResult
+from db.models import AssetAllocation, FieldSource, SearchResult
 
 # String fields the cascade searches/returns at every level (field parity
 # — `cascading-search.spec.md`, "Search Field Parity").
@@ -32,7 +32,6 @@ from db.models import FieldSource, SearchResult
 # _merge_fields.
 FIELD_NAMES = (
     "name",
-    "asset_class",
     "commission",
     "currency",
     "administrator",
@@ -62,6 +61,13 @@ Extract these fields for the requested product: name, asset_class,
 geographic_focus, commission, currency, administrator, manager,
 liquidity, return_rate, underlying.
 
+`asset_class` is a list of {name, percentage} objects summing to 100%,
+where each name is one of: inversiones_directas, mercados_privados,
+club_deals, mercados_publicos, otros, cash_y_equivalentes. Most products
+belong to a single asset class (one entry at 100%); only use multiple
+entries when the product is genuinely blended across asset classes. Return
+an empty list if unknown.
+
 `underlying` is the product's underlying asset composition — a list of
 {name, percentage} objects summing to 100%. Each entry names an asset class
 or sub-asset (e.g. "Private Debt", "Real Estate", "US Treasuries") and its
@@ -74,8 +80,8 @@ list if unknown.
 
 CRITICAL RULE: if you are not confident about a field, or the information was
 not given to you, leave that field as an empty string (or empty list for
-underlying and geographic_focus). NEVER invent, guess, or fabricate a value
-you cannot verify."""
+underlying, geographic_focus, and asset_class). NEVER invent, guess, or
+fabricate a value you cannot verify."""
 
 
 class _ExtractedAllocation(BaseModel):
@@ -88,7 +94,7 @@ class ExtractedProduct(BaseModel):
     Mirrors `SearchResult`'s field set minus provenance/primary_source."""
 
     name: str = ""
-    asset_class: str = ""
+    asset_class: list[_ExtractedAllocation] = Field(default_factory=list)
     geographic_focus: list[_ExtractedAllocation] = Field(default_factory=list)
     commission: str = ""
     currency: str = ""
@@ -114,7 +120,6 @@ def _merge_fields(
             setattr(result, field, new_value)
             result.provenance[field] = source
             filled_any = True
-    from db.models import AssetAllocation
     raw_underlying = new_data.get("underlying") or []
     if not result.underlying and raw_underlying:
         result.underlying = [
@@ -131,6 +136,14 @@ def _merge_fields(
         ]
         result.provenance["geographic_focus"] = source
         filled_any = True
+    raw_ac = new_data.get("asset_class") or []
+    if not result.asset_class and raw_ac:
+        result.asset_class = [
+            AssetAllocation(**a) if isinstance(a, dict) else a
+            for a in raw_ac
+        ]
+        result.provenance["asset_class"] = source
+        filled_any = True
     if filled_any and _SOURCE_RANK[source] > _SOURCE_RANK[result.primary_source]:
         result.primary_source = source
     return result
@@ -141,6 +154,7 @@ def _is_complete(result: SearchResult) -> bool:
         all(getattr(result, field) for field in FIELD_NAMES)
         and bool(result.underlying)
         and bool(result.geographic_focus)
+        and bool(result.asset_class)
     )
 
 
@@ -149,6 +163,7 @@ def _has_any_data(result: SearchResult) -> bool:
         any(getattr(result, field) for field in FIELD_NAMES)
         or bool(result.underlying)
         or bool(result.geographic_focus)
+        or bool(result.asset_class)
     )
 
 
@@ -168,6 +183,9 @@ async def _search_catalog(query: str, pool: asyncpg.Pool) -> SearchResult:
     if match.geographic_focus:
         result.geographic_focus = match.geographic_focus
         result.provenance["geographic_focus"] = "catalog"
+    if match.asset_class:
+        result.asset_class = match.asset_class
+        result.provenance["asset_class"] = "catalog"
     catalog_data = {field: getattr(match, field) for field in FIELD_NAMES}
     return _merge_fields(result, catalog_data, "catalog")
 
@@ -259,12 +277,16 @@ def _is_valid_asset_class(value: str) -> bool:
 
 
 def _sanitize_taxonomy(result: SearchResult) -> None:
-    """Clear asset_class values that don't match the SABBI taxonomy.
-    Invalid values (e.g. "Diversificado" from a catalog entry) are wiped so
-    _classify can re-attempt auto-classification or the agent asks the user."""
-    if result.asset_class and not _is_valid_asset_class(result.asset_class):
-        result.asset_class = ""
-        result.provenance.pop("asset_class", None)
+    """Drop asset_class allocations whose name doesn't match the SABBI
+    taxonomy. Invalid entries (e.g. "Diversificado" from a catalog entry)
+    are wiped so _classify can re-attempt auto-classification or the agent
+    asks the user."""
+    if result.asset_class:
+        valid = [a for a in result.asset_class if _is_valid_asset_class(a.name)]
+        if len(valid) != len(result.asset_class):
+            result.asset_class = valid
+            if not valid:
+                result.provenance.pop("asset_class", None)
 
 
 def _classify(result: SearchResult) -> None:
@@ -298,7 +320,8 @@ def _classify(result: SearchResult) -> None:
         return
 
     asset_class_key, group_name, leaf = next(iter(matches))
-    result.asset_class = asset_class_key
+    del group_name, leaf
+    result.asset_class = [AssetAllocation(name=asset_class_key, percentage=100)]
     result.provenance["asset_class"] = result.primary_source
 
 

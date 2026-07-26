@@ -60,31 +60,42 @@ def _underlying_summary(product: Product) -> str:
     return ", ".join(f"{a.name} {a.percentage:.0f}%" for a in product.underlying)
 
 
-def _group_by_asset_class(products: list[Product]) -> dict[str, list[Product]]:
-    by_asset_class: dict[str, list[Product]] = {}
+def _group_by_asset_class(products: list[Product]) -> dict[str, list[tuple[Product, float]]]:
+    """Group products by asset class, splitting each product's amount
+    proportionally across its `asset_class` allocations (`[{name,
+    percentage}]`). A product with a 60/40 split across two asset classes
+    contributes its proportional share to each group's entries."""
+    by_asset_class: dict[str, list[tuple[Product, float]]] = {}
     for product in products:
-        by_asset_class.setdefault(product.asset_class, []).append(product)
+        for alloc in product.asset_class:
+            ac = alloc.name or "otros"
+            proportional_amount = product.amount * alloc.percentage / 100
+            by_asset_class.setdefault(ac, []).append((product, proportional_amount))
     return by_asset_class
 
 
-def _write_asset_class_sheet(wb: Workbook, asset_class: str, products: list[Product]) -> None:
+def _write_asset_class_sheet(
+    wb: Workbook, asset_class: str, entries: list[tuple[Product, float]]
+) -> None:
     label = ASSET_CLASS_LABELS.get(asset_class, asset_class)
     ws = wb.create_sheet(title=label[:31])
     headers = ["Nombre", "Proveedor", "Monto (USD)", "Underlying"]
     _style_header_row(ws, headers)
 
     row = 2
-    for product in products:
+    for product, proportional_amount in entries:
         ws.cell(row=row, column=1, value=product.name)
         ws.cell(row=row, column=2, value=product.provider)
-        amount_cell = ws.cell(row=row, column=3, value=product.amount)
+        amount_cell = ws.cell(row=row, column=3, value=proportional_amount)
         amount_cell.number_format = CURRENCY_FORMAT
         ws.cell(row=row, column=4, value=_underlying_summary(product))
         row += 1
 
     total_label_cell = ws.cell(row=row, column=1, value="Total")
     total_label_cell.font = Font(bold=True)
-    total_amount_cell = ws.cell(row=row, column=3, value=sum(p.amount for p in products))
+    total_amount_cell = ws.cell(
+        row=row, column=3, value=sum(proportional_amount for _, proportional_amount in entries)
+    )
     total_amount_cell.number_format = CURRENCY_FORMAT
     total_amount_cell.font = Font(bold=True)
 
@@ -101,10 +112,10 @@ def _write_summary_sheet(wb: Workbook, products: list[Product]) -> None:
 
     row = 2
     for asset_class in ASSET_CLASS_ORDER:
-        asset_class_products = by_asset_class.get(asset_class, [])
-        if not asset_class_products:
+        entries = by_asset_class.get(asset_class, [])
+        if not entries:
             continue
-        asset_class_total = sum(p.amount for p in asset_class_products)
+        asset_class_total = sum(proportional_amount for _, proportional_amount in entries)
         ws.cell(row=row, column=1, value=ASSET_CLASS_LABELS.get(asset_class, asset_class))
         amount_cell = ws.cell(row=row, column=2, value=asset_class_total)
         amount_cell.number_format = CURRENCY_FORMAT
@@ -112,7 +123,7 @@ def _write_summary_sheet(wb: Workbook, products: list[Product]) -> None:
             row=row, column=3, value=(asset_class_total / total if total else 0)
         )
         percent_cell.number_format = PERCENT_FORMAT
-        ws.cell(row=row, column=4, value=len(asset_class_products))
+        ws.cell(row=row, column=4, value=len(entries))
         row += 1
 
     total_label_cell = ws.cell(row=row, column=1, value="Total")
@@ -141,9 +152,9 @@ def build_portfolio_workbook(products: list[Product]) -> io.BytesIO:
 
     by_asset_class = _group_by_asset_class(products)
     for asset_class in ASSET_CLASS_ORDER:
-        asset_class_products = by_asset_class.get(asset_class)
-        if asset_class_products:
-            _write_asset_class_sheet(wb, asset_class, asset_class_products)
+        entries = by_asset_class.get(asset_class)
+        if entries:
+            _write_asset_class_sheet(wb, asset_class, entries)
 
     buffer = io.BytesIO()
     wb.save(buffer)

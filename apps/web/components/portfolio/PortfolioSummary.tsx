@@ -2,7 +2,7 @@
 
 import { useMemo, type FC } from "react";
 import { SummaryTable } from "@/components/portfolio/SummaryTable";
-import { ASSET_CLASS_META, ASSET_CLASS_ORDER, assetClassColorVar } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, assetClassColorVar, resolveAssetClassKey } from "@/lib/categories";
 import { formatAbbreviatedUsd } from "@/lib/format";
 import type { AssetClass } from "@/lib/portfolio-types";
 import { usePortfolio } from "@/lib/usePortfolio";
@@ -31,16 +31,18 @@ export const PortfolioSummary: FC = () => {
   const { products, isLoading, error, totalAmount, productCount } = usePortfolio();
 
   const slices = useMemo<AssetClassSlice[]>(() => {
-    return ASSET_CLASS_ORDER.map((assetClass) => {
-      const amount = products
-        .filter((p) => p.asset_class === assetClass)
-        .reduce((sum, p) => sum + p.amount, 0);
-      return {
-        assetClass,
-        amount,
-        percentage: totalAmount > 0 ? (amount / totalAmount) * 100 : 0,
-      };
-    }).filter((slice) => slice.amount > 0);
+    const amounts: Record<AssetClass, number> = {} as Record<AssetClass, number>;
+    for (const p of products) {
+      for (const alloc of p.asset_class ?? []) {
+        const key = resolveAssetClassKey(alloc.name) as AssetClass;
+        amounts[key] = (amounts[key] ?? 0) + (p.amount * alloc.percentage) / 100;
+      }
+    }
+    return ASSET_CLASS_ORDER.map((assetClass) => ({
+      assetClass,
+      amount: amounts[assetClass] ?? 0,
+      percentage: totalAmount > 0 ? ((amounts[assetClass] ?? 0) / totalAmount) * 100 : 0,
+    })).filter((slice) => slice.amount > 0);
   }, [products, totalAmount]);
 
   const isEmpty = !isLoading && products.length === 0;

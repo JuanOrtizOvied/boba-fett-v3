@@ -8,6 +8,7 @@ Listing", "Catalog Entry Deletion".
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from auth.dependencies import get_current_user
@@ -17,7 +18,7 @@ from tests.integration.conftest import fake_user
 def _approve_payload(**overrides) -> dict:
     payload = {
         "name": "Bono Soberano",
-        "asset_class": "mercados_publicos",
+        "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
         "commission": "1.5%",
     }
     payload.update(overrides)
@@ -41,7 +42,9 @@ async def test_approve_creates_catalog_entry(admin_api_client, test_pool):
         "SELECT * FROM product_catalog WHERE id = $1", body["id"]
     )
     assert row is not None
-    assert row["asset_class"] == "mercados_publicos"
+    raw_ac = row["asset_class"]
+    ac = json.loads(raw_ac) if isinstance(raw_ac, str) else raw_ac
+    assert ac == [{"name": "mercados_publicos", "percentage": 100}]
 
 
 async def test_approve_missing_required_field_returns_422_and_no_insert(
@@ -50,12 +53,13 @@ async def test_approve_missing_required_field_returns_422_and_no_insert(
     _app, client = admin_api_client
 
     response = await client.post(
-        "/admin/catalog/approve", json={"asset_class": "mercados_publicos"}  # missing "name"
+        "/admin/catalog/approve", json={"asset_class": [{"name": "mercados_publicos", "percentage": 100}]}  # missing "name"
     )
 
     assert response.status_code == 422
     count = await test_pool.fetchval(
-        "SELECT count(*) FROM product_catalog WHERE asset_class = $1", "mercados_publicos"
+        "SELECT count(*) FROM product_catalog WHERE asset_class = $1::jsonb",
+        json.dumps([{"name": "mercados_publicos", "percentage": 100}]),
     )
     assert count == 0
 
@@ -87,12 +91,12 @@ async def test_approve_full_flow_create_then_repeat_rejected(admin_api_client, t
     product_id = "prod_test0001"
     await test_pool.execute(
         """INSERT INTO products (id, user_id, name, amount, asset_class)
-           VALUES ($1, $2, $3, $4, $5)""",
+           VALUES ($1, $2, $3, $4, $5::jsonb)""",
         product_id,
         user_id,
         "Fondo Renta",
-        1000,
-        "mercados_publicos",
+        "1000",
+        json.dumps([{"name": "mercados_publicos", "percentage": 100}]),
     )
 
     first = await client.post(
@@ -212,12 +216,12 @@ async def test_admin_lists_all_products_across_users_with_email(admin_api_client
     )
     await test_pool.execute(
         """INSERT INTO products (id, user_id, name, amount, asset_class)
-           VALUES ($1, $2, $3, $4, $5)""",
+           VALUES ($1, $2, $3, $4, $5::jsonb)""",
         "prod_cross0001",
         user_id,
         "Cross Fund",
-        500,
-        "cash_y_equivalentes",
+        "500",
+        json.dumps([{"name": "cash_y_equivalentes", "percentage": 100}]),
     )
 
     response = await client.get("/admin/products")

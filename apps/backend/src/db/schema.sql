@@ -77,6 +77,21 @@ DO $$ BEGIN
 END $$;
 ALTER TABLE products ALTER COLUMN asset_class SET NOT NULL;
 
+-- Migration: asset_class TEXT -> JSONB array
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='products' AND column_name='asset_class' AND data_type='text'
+  ) THEN
+    UPDATE products SET asset_class = CASE
+      WHEN asset_class IS NOT NULL AND asset_class != ''
+      THEN jsonb_build_array(jsonb_build_object('name', asset_class, 'percentage', 100))::text
+      ELSE '[]' END;
+    ALTER TABLE products ALTER COLUMN asset_class TYPE JSONB USING asset_class::jsonb;
+    ALTER TABLE products ALTER COLUMN asset_class SET DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
+
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -130,7 +145,7 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     geographic_focus JSONB DEFAULT '[]',
-    asset_class TEXT DEFAULT '',
+    asset_class JSONB DEFAULT '[]',
     underlying JSONB DEFAULT '[]',
     commission TEXT DEFAULT '',
     currency TEXT DEFAULT '',
@@ -139,6 +154,21 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     liquidity TEXT DEFAULT '',
     return_rate TEXT DEFAULT ''
 );
+
+-- Migration: product_catalog asset_class TEXT -> JSONB array
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='product_catalog' AND column_name='asset_class' AND data_type='text'
+  ) THEN
+    UPDATE product_catalog SET asset_class = CASE
+      WHEN asset_class IS NOT NULL AND asset_class != ''
+      THEN jsonb_build_array(jsonb_build_object('name', asset_class, 'percentage', 100))::text
+      ELSE '[]' END;
+    ALTER TABLE product_catalog ALTER COLUMN asset_class TYPE JSONB USING asset_class::jsonb;
+    ALTER TABLE product_catalog ALTER COLUMN asset_class SET DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
 
 -- Migration: product_catalog geographic_focus TEXT -> JSONB
 DO $$ BEGIN
@@ -195,27 +225,36 @@ END $$;
 
 ALTER TABLE portfolio_snapshots ADD COLUMN IF NOT EXISTS asset_class_summary JSONB DEFAULT '[]';
 
-UPDATE portfolio_snapshots ps
-SET asset_class_summary = COALESCE(agg.summary, '[]'::jsonb)
-FROM (
-    SELECT
-        sp.snapshot_id,
-        jsonb_agg(
-            jsonb_build_object('asset_class', ac, 'percentage', round(ac_total / NULLIF(ps2.total_amount, 0) * 100, 1))
-            ORDER BY ac_total DESC
-        ) AS summary
-    FROM (
-        SELECT snapshot_id,
-               COALESCE(product_data->>'asset_class', 'otros') AS ac,
-               SUM((product_data->>'amount')::numeric) AS ac_total
-        FROM snapshot_products
-        GROUP BY snapshot_id, ac
-    ) sp
-    JOIN portfolio_snapshots ps2 ON ps2.id = sp.snapshot_id
-    GROUP BY sp.snapshot_id, ps2.total_amount
-) agg
-WHERE agg.snapshot_id = ps.id
-  AND (ps.asset_class_summary IS NULL OR ps.asset_class_summary = '[]'::jsonb);
+DO $backfill$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='snapshot_products' AND column_name='product_data' AND data_type='jsonb'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE portfolio_snapshots ps
+      SET asset_class_summary = COALESCE(agg.summary, '[]'::jsonb)
+      FROM (
+          SELECT
+              sp.snapshot_id,
+              jsonb_agg(
+                  jsonb_build_object('asset_class', ac, 'percentage', round(ac_total / NULLIF(ps2.total_amount, 0) * 100, 1))
+                  ORDER BY ac_total DESC
+              ) AS summary
+          FROM (
+              SELECT snapshot_id,
+                     COALESCE(product_data->>'asset_class', 'otros') AS ac,
+                     SUM((product_data->>'amount')::numeric) AS ac_total
+              FROM snapshot_products
+              GROUP BY snapshot_id, ac
+          ) sp
+          JOIN portfolio_snapshots ps2 ON ps2.id = sp.snapshot_id
+          GROUP BY sp.snapshot_id, ps2.total_amount
+      ) agg
+      WHERE agg.snapshot_id = ps.id
+        AND (ps.asset_class_summary IS NULL OR ps.asset_class_summary = '[]'::jsonb)
+    $sql$;
+  END IF;
+END $backfill$;
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_user_created
     ON portfolio_snapshots (user_id, created_at DESC);

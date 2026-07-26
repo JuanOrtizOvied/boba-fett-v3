@@ -18,7 +18,7 @@ const PRODUCT: Product = {
   name: "Bono Soberano",
   provider: "BCP",
   amount: 10000,
-  asset_class: "mercados_publicos",
+  asset_class: [{ name: "mercados_publicos", percentage: 100 }],
   underlying: [{ name: "US Treasuries", percentage: 100 }],
   geographic_focus: [],
   commission: "",
@@ -34,7 +34,7 @@ const CATALOG_ENTRY: CatalogProduct = {
   id: 77,
   name: "Bono Soberano Catálogo",
   geographic_focus: [{ name: "LatAm", percentage: 100 }],
-  asset_class: "mercados_publicos",
+  asset_class: [{ name: "mercados_publicos", percentage: 100 }],
   underlying: [{ name: "Bonos", percentage: 100 }],
   commission: "1.5%",
   currency: "USD",
@@ -151,7 +151,7 @@ describe("ApproveProductModal confirm", () => {
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body).toMatchObject({
       name: "Bono Soberano",
-      asset_class: "otros",
+      asset_class: [{ name: "otros", percentage: 100 }],
       approved_from_product_id: "prod-1",
       catalog_product_id: null,
     });

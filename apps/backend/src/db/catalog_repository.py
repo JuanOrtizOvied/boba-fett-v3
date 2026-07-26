@@ -23,15 +23,16 @@ class CatalogRepository:
         SQL"). Matching is on name + asset_class, trimmed and
         case-insensitive. Returns `None` when a duplicate is found instead
         of inserting."""
+        asset_class_json = json.dumps([a.model_dump() for a in data.asset_class])
         existing = await self.pool.fetchrow(
             """
             SELECT id FROM product_catalog
             WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
-              AND LOWER(TRIM(COALESCE(asset_class, ''))) = LOWER(TRIM($2))
+              AND asset_class = $2::jsonb
             LIMIT 1
             """,
             data.name,
-            data.asset_class,
+            asset_class_json,
         )
         if existing is not None:
             return None
@@ -47,7 +48,7 @@ class CatalogRepository:
             RETURNING *
             """,
             data.name,
-            data.asset_class,
+            asset_class_json,
             json.dumps([a.model_dump() for a in data.geographic_focus]),
             json.dumps([a.model_dump() for a in data.underlying]),
             data.commission,
@@ -88,7 +89,7 @@ class CatalogRepository:
             """,
             catalog_id,
             data.name,
-            data.asset_class,
+            json.dumps([a.model_dump() for a in data.asset_class]),
             json.dumps([a.model_dump() for a in data.geographic_focus]),
             json.dumps([a.model_dump() for a in data.underlying]),
             data.commission,
@@ -113,6 +114,10 @@ class CatalogRepository:
         if "geographic_focus" in fields:
             fields["geographic_focus"] = json.dumps(
                 [a.model_dump() for a in data.geographic_focus]
+            )
+        if "asset_class" in fields:
+            fields["asset_class"] = json.dumps(
+                [a.model_dump() for a in data.asset_class]
             )
         if not fields:
             row = await self.pool.fetchrow(
@@ -149,7 +154,7 @@ class CatalogRepository:
             WHERE
                 similarity(name, $1) > 0.1
                 OR name ILIKE '%' || $1 || '%'
-                OR COALESCE(asset_class, '') ILIKE '%' || $1 || '%'
+                OR asset_class::text ILIKE '%' || $1 || '%'
                 OR EXISTS (
                     SELECT 1 FROM unnest(alternative_names) AS alt
                     WHERE similarity(alt, $1) > 0.1
@@ -177,7 +182,7 @@ class CatalogRepository:
             id=row["id"],
             name=row["name"],
             geographic_focus=self._parse_json_allocations(row["geographic_focus"]),
-            asset_class=row["asset_class"] or "",
+            asset_class=self._parse_json_allocations(row["asset_class"]),
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             commission=row["commission"] or "",
             currency=row["currency"] or "",

@@ -61,6 +61,18 @@ def _normalize_asset_class_key(key_or_label: str) -> str:
     return resolved if resolved else "otros"
 
 
+def _normalize_asset_class_allocations(items: list[dict[str, Any]]) -> list[AssetAllocation]:
+    """Normalize a list of `{name, percentage}` asset_class allocations,
+    resolving each `name` to its canonical taxonomy key."""
+    return [
+        AssetAllocation(
+            name=_normalize_asset_class_key(item["name"]),
+            percentage=item["percentage"],
+        )
+        for item in items
+    ]
+
+
 async def _repository() -> ProductRepository:
     """Resolve the `ProductRepository` bound to the process-wide connection pool."""
     pool = await get_pool()
@@ -108,7 +120,7 @@ def _to_allocations(items: list[dict[str, Any]]) -> list[AssetAllocation]:
 async def propose_product(
     name: str,
     amount: float,
-    asset_class: str,
+    asset_class: list[dict[str, Any]],
     provider: str = "",
     underlying: list[dict[str, Any]] | None = None,
     currency: str = "",
@@ -138,9 +150,13 @@ async def propose_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        asset_class: Asset class key, one of: inversiones_directas,
+        asset_class: List of {name, percentage} asset class allocations
+            summing to 100%. Each name is one of: inversiones_directas,
             mercados_privados, club_deals, mercados_publicos, otros,
-            cash_y_equivalentes.
+            cash_y_equivalentes. A single-asset-class product is a list with
+            one entry at 100%; a blended product lists each asset class with
+            its weight (e.g. [{"name": "inversiones_directas", "percentage":
+            60}, {"name": "mercados_privados", "percentage": 40}]).
         provider: Provider or fund manager name.
         underlying: List of {name, percentage} subcategory allocations.
             Names MUST be canonical subcategory leaves from the ASSET_CLASSES
@@ -170,12 +186,16 @@ async def propose_product(
     """
     del config
     resolved_provenance = provenance or {}
+    resolved_asset_class = asset_class or [{"name": "otros", "percentage": 100}]
     return {
         "status": "proposed",
         "product": {
             "name": name,
             "amount": amount,
-            "asset_class": _normalize_asset_class_key(asset_class),
+            "asset_class": [
+                {"name": _normalize_asset_class_key(a["name"]), "percentage": a["percentage"]}
+                for a in resolved_asset_class
+            ],
             "provider": provider,
             "underlying": underlying or [{"name": name, "percentage": 100}],
             "currency": currency,
@@ -197,7 +217,7 @@ async def propose_product(
 async def add_product(
     name: str,
     amount: float,
-    asset_class: str,
+    asset_class: list[dict[str, Any]],
     provider: str = "",
     underlying: list[dict[str, Any]] | None = None,
     currency: str = "",
@@ -216,9 +236,12 @@ async def add_product(
     Args:
         name: Product name (e.g. 'BlackRock Private Credit Fund').
         amount: Investment amount in USD.
-        asset_class: Asset class key, one of: inversiones_directas,
+        asset_class: List of {name, percentage} asset class allocations
+            summing to 100%. Each name is one of: inversiones_directas,
             mercados_privados, club_deals, mercados_publicos, otros,
-            cash_y_equivalentes.
+            cash_y_equivalentes. A single-asset-class product is a list with
+            one entry at 100%; a blended product lists each asset class with
+            its weight.
         provider: Provider or fund manager name.
         underlying: List of {name, percentage} subcategory allocations.
             Names MUST be canonical subcategory leaves from the ASSET_CLASSES
@@ -251,7 +274,9 @@ async def add_product(
             provider=provider,
             amount=amount,
             underlying=allocs,
-            asset_class=_normalize_asset_class_key(asset_class),
+            asset_class=_normalize_asset_class_allocations(
+                asset_class or [{"name": "otros", "percentage": 100}]
+            ),
             geographic_focus=geo_allocs,
             commission=commission,
             currency=currency,
@@ -273,7 +298,7 @@ async def update_product(
     name: str | None = None,
     provider: str | None = None,
     amount: float | None = None,
-    asset_class: str | None = None,
+    asset_class: list[dict[str, Any]] | None = None,
     underlying: list[dict[str, Any]] | None = None,
     *,
     config: RunnableConfig,
@@ -285,7 +310,8 @@ async def update_product(
         name: New product name, if changed.
         provider: New provider name, if changed.
         amount: New amount in USD, if changed.
-        asset_class: New asset class, if changed.
+        asset_class: New list of {name, percentage} asset class allocations
+            summing to 100%, if changed.
         underlying: New underlying allocation list, if changed.
     """
     del config  # unused — product_id already scopes the update, no portfolio lookup needed
@@ -297,7 +323,11 @@ async def update_product(
             name=name,
             provider=provider,
             amount=amount,
-            asset_class=_normalize_asset_class_key(asset_class) if asset_class else None,
+            asset_class=(
+                _normalize_asset_class_allocations(asset_class)
+                if asset_class is not None
+                else None
+            ),
             underlying=allocs,
         ),
         source="agent",

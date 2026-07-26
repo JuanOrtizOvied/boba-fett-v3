@@ -2,7 +2,12 @@
 
 import type { FC } from "react";
 import { EditIcon, RobotIcon, WarningIcon } from "@/components/icons/Icons";
-import { ASSET_CLASS_META, assetClassColorVar, resolveAssetClassKey } from "@/lib/categories";
+import {
+  ASSET_CLASS_META,
+  assetClassColorVar,
+  formatAssetClassAllocations,
+  primaryAssetClass,
+} from "@/lib/categories";
 import { formatAbbreviatedUsd, formatRelativeTime } from "@/lib/format";
 import type { ChangeLogEntry, ChangeOperation, ChangeSource } from "@/lib/usePortfolioVersioning";
 
@@ -81,10 +86,8 @@ function describeChanges(entry: ChangeLogEntry): string | null {
   const a = entry.after_state;
   if (b.amount !== a.amount)
     diffs.push(`${formatAbbreviatedUsd(b.amount)} → ${formatAbbreviatedUsd(a.amount)}`);
-  if (b.asset_class !== a.asset_class) {
-    const from = ASSET_CLASS_META[resolveAssetClassKey(b.asset_class)].shortLabel;
-    const to = ASSET_CLASS_META[resolveAssetClassKey(a.asset_class)].shortLabel;
-    diffs.push(`${from} → ${to}`);
+  if (JSON.stringify(b.asset_class) !== JSON.stringify(a.asset_class)) {
+    diffs.push(`${formatAssetClassAllocations(b.asset_class)} → ${formatAssetClassAllocations(a.asset_class)}`);
   }
   if (b.name !== a.name) diffs.push(`"${b.name}" → "${a.name}"`);
   return diffs.length > 0 ? diffs.join(" · ") : null;
@@ -96,7 +99,7 @@ const ChangeLogItem: FC<{ entry: ChangeLogEntry }> = ({ entry }) => {
   const product = entry.after_state ?? entry.before_state;
   const productName = product?.name ?? "Producto";
   const amount = product?.amount;
-  const assetClassKey = product?.asset_class ? resolveAssetClassKey(product.asset_class) : null;
+  const assetClassKey = product?.asset_class ? primaryAssetClass(product.asset_class) : null;
   const assetClassMeta = assetClassKey ? ASSET_CLASS_META[assetClassKey] : null;
   const changes = describeChanges(entry);
 

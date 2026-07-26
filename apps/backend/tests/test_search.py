@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from db.models import SearchResult
+from db.models import AssetAllocation, SearchResult
 
 # --- _merge_fields (pure function) -----------------------------------------
 
@@ -68,7 +68,7 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
     product = CatalogProduct(
         id=1,
         name="Vanguard Total World Stock ETF",
-        asset_class="Renta Variable",
+        asset_class=[AssetAllocation(name="Renta Variable", percentage=100)],
         commission="0.07%",
     )
 
@@ -85,7 +85,7 @@ def test_search_catalog_maps_repository_match_into_search_result(monkeypatch):
 
     assert result.name == "Vanguard Total World Stock ETF"
     assert result.commission == "0.07%"
-    assert result.asset_class == "Renta Variable"
+    assert result.asset_class == [AssetAllocation(name="Renta Variable", percentage=100)]
     assert result.catalog_product_id == 1
     assert result.provenance["name"] == "catalog"
     assert result.provenance["commission"] == "catalog"
@@ -121,7 +121,7 @@ def test_extract_from_claude_returns_structured_dict_with_empty_unknowns(monkeyp
 
     expected = search_module.ExtractedProduct(
         name="Vanguard Total World Stock ETF",
-        asset_class="Renta Variable",
+        asset_class=[{"name": "Renta Variable", "percentage": 100}],
         currency="USD",
         # every field Claude is unsure about is left "" by the model itself
     )
@@ -145,7 +145,7 @@ def test_extract_from_claude_returns_structured_dict_with_empty_unknowns(monkeyp
     result = asyncio.run(search_module._extract_from_claude("Vanguard Total World Stock ETF"))
 
     assert result["name"] == "Vanguard Total World Stock ETF"
-    assert result["asset_class"] == "Renta Variable"
+    assert result["asset_class"] == [{"name": "Renta Variable", "percentage": 100}]
     assert result["currency"] == "USD"
     assert result["commission"] == ""
     assert result["manager"] == ""
@@ -219,7 +219,7 @@ def test_classify_sets_confident_taxonomy_match():
     result = SearchResult(geographic_focus=[{"name": "US Treasuries", "percentage": 100}])
     _classify(result)
 
-    assert result.asset_class == "mercados_publicos"
+    assert result.asset_class == [AssetAllocation(name="mercados_publicos", percentage=100)]
     assert result.provenance["asset_class"] == result.primary_source
 
 
@@ -231,7 +231,7 @@ def test_classify_leaves_empty_on_ambiguous_match():
     result = SearchResult(geographic_focus=[{"name": "Perú Bonds", "percentage": 100}])
     _classify(result)
 
-    assert result.asset_class == ""
+    assert result.asset_class == []
     assert "asset_class" not in result.provenance
 
 
@@ -241,16 +241,16 @@ def test_classify_leaves_empty_when_no_taxonomy_leaf_matches():
     result = SearchResult(name="Unknown Widget Corp")
     _classify(result)
 
-    assert result.asset_class == ""
+    assert result.asset_class == []
 
 
 def test_classify_skips_when_asset_class_already_set():
     from agent.search import _classify
 
-    result = SearchResult(asset_class="cash_y_equivalentes")
+    result = SearchResult(asset_class=[AssetAllocation(name="cash_y_equivalentes", percentage=100)])
     _classify(result)
 
-    assert result.asset_class == "cash_y_equivalentes"
+    assert result.asset_class == [AssetAllocation(name="cash_y_equivalentes", percentage=100)]
 
 
 # --- cascade_search --------------------------------------------------------------
@@ -261,8 +261,9 @@ def test_cascade_search_stops_after_l1_when_catalog_result_is_complete(monkeypat
 
     complete = SearchResult(
         name="Vanguard Total World Stock ETF",
-        asset_class="Renta Variable",
+        asset_class=[AssetAllocation(name="Renta Variable", percentage=100)],
         geographic_focus=[{"name": "Global", "percentage": 100}],
+        underlying=[AssetAllocation(name="Global Equities", percentage=100)],
         commission="0.07%",
         currency="USD",
         administrator="Vanguard",
@@ -340,7 +341,7 @@ def test_cascade_search_falls_through_levels_and_keeps_catalog_authoritative(mon
     assert "currency" not in result.provenance
 
     # never-invent: no taxonomy leaf matched, classification leaves asset_class empty
-    assert result.asset_class == ""
+    assert result.asset_class == []
 
     # field parity — the full field shape is always present
     for field in search_module.FIELD_NAMES:

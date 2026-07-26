@@ -203,7 +203,7 @@ def test_propose_product_forwards_enrichment_and_provenance():
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 5000,
-                "asset_class": "mercados_publicos",
+                "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
                 "commission": "0.45%",
                 "administrator": "BlackRock",
                 "catalog_product_id": 42,
@@ -233,7 +233,7 @@ def test_propose_product_tag_verified_when_all_fields_are_catalog():
             {
                 "name": "Vanguard Total World Stock ETF",
                 "amount": 1000,
-                "asset_class": "mercados_publicos",
+                "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
                 "provenance": {"name": "catalog", "commission": "catalog"},
             }
         )
@@ -250,7 +250,7 @@ def test_propose_product_tag_verified_when_identity_is_catalog_even_with_enrichm
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 1000,
-                "asset_class": "mercados_publicos",
+                "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
                 "provenance": {"name": "catalog", "liquidity": "web_search"},
             }
         )
@@ -267,7 +267,7 @@ def test_propose_product_tag_web_when_identity_is_not_catalog_and_web_contribute
             {
                 "name": "BlackRock Global Bond Fund",
                 "amount": 1000,
-                "asset_class": "mercados_publicos",
+                "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
                 "provenance": {"name": "claude_knowledge", "liquidity": "web_search"},
             }
         )
@@ -284,7 +284,7 @@ def test_propose_product_tag_unverified_when_no_catalog_or_web_source():
             {
                 "name": "Unknown Widget Corp",
                 "amount": 1000,
-                "asset_class": "otros",
+                "asset_class": [{"name": "otros", "percentage": 100}],
                 "provenance": {"name": "claude_knowledge"},
             }
         )
@@ -298,7 +298,11 @@ def test_propose_product_tag_unverified_when_provenance_empty():
 
     result = asyncio.run(
         propose_product.ainvoke(
-            {"name": "Unknown Widget Corp", "amount": 1000, "asset_class": "otros"}
+            {
+                "name": "Unknown Widget Corp",
+                "amount": 1000,
+                "asset_class": [{"name": "otros", "percentage": 100}],
+            }
         )
     )
 
@@ -311,11 +315,15 @@ def test_propose_product_normalizes_legacy_key_to_new_key():
 
     result = asyncio.run(
         propose_product.ainvoke(
-            {"name": "Fondo XYZ", "amount": 1000, "asset_class": "mercados_privados"}
+            {
+                "name": "Fondo XYZ",
+                "amount": 1000,
+                "asset_class": [{"name": "mercados_privados", "percentage": 100}],
+            }
         )
     )
 
-    assert result["product"]["asset_class"] == "mercados_privados"
+    assert result["product"]["asset_class"] == [{"name": "mercados_privados", "percentage": 100}]
 
 
 def test_propose_product_normalizes_label_to_new_key():
@@ -323,11 +331,15 @@ def test_propose_product_normalizes_label_to_new_key():
 
     result = asyncio.run(
         propose_product.ainvoke(
-            {"name": "Fondo XYZ", "amount": 1000, "asset_class": "Mercados Privados"}
+            {
+                "name": "Fondo XYZ",
+                "amount": 1000,
+                "asset_class": [{"name": "Mercados Privados", "percentage": 100}],
+            }
         )
     )
 
-    assert result["product"]["asset_class"] == "mercados_privados"
+    assert result["product"]["asset_class"] == [{"name": "mercados_privados", "percentage": 100}]
 
 
 def test_key_to_label_all_keys():

@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { ASSET_CLASS_META, ASSET_CLASS_ORDER, assetClassColorVar } from "@/lib/categories";
+import { ASSET_CLASS_META, ASSET_CLASS_ORDER, assetClassColorVar, resolveAssetClassKey } from "@/lib/categories";
 import type { Product } from "@/lib/portfolio-types";
 
 export interface SummaryTableProps {
@@ -7,9 +7,15 @@ export interface SummaryTableProps {
   totalAmount: number;
 }
 
+/** A product's proportional contribution (by amount) to one asset class. */
+interface AssetClassContribution {
+  product: Product;
+  amount: number;
+}
+
 interface AssetClassGroupData {
   assetClassKey: (typeof ASSET_CLASS_ORDER)[number];
-  products: Product[];
+  contributions: AssetClassContribution[];
   assetClassTotal: number;
 }
 
@@ -25,10 +31,17 @@ interface AssetClassGroupData {
  */
 export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) => {
   const groups: AssetClassGroupData[] = ASSET_CLASS_ORDER.map((assetClassKey) => {
-    const assetClassProducts = products.filter((p) => p.asset_class === assetClassKey);
-    const assetClassTotal = assetClassProducts.reduce((sum, p) => sum + p.amount, 0);
-    return { assetClassKey, products: assetClassProducts, assetClassTotal };
-  }).filter((group) => group.products.length > 0);
+    const contributions: AssetClassContribution[] = [];
+    for (const p of products) {
+      for (const alloc of p.asset_class ?? []) {
+        if (resolveAssetClassKey(alloc.name) === assetClassKey) {
+          contributions.push({ product: p, amount: (p.amount * alloc.percentage) / 100 });
+        }
+      }
+    }
+    const assetClassTotal = contributions.reduce((sum, c) => sum + c.amount, 0);
+    return { assetClassKey, contributions, assetClassTotal };
+  }).filter((group) => group.contributions.length > 0);
 
   const totalActualPercent =
     totalAmount > 0
@@ -59,7 +72,7 @@ export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) =
                 color={assetClassColorVar(group.assetClassKey)}
                 assetClassPercent={assetClassPercent}
                 assetClassTotal={group.assetClassTotal}
-                products={group.products}
+                contributions={group.contributions}
               />
             );
           })}
@@ -77,11 +90,11 @@ export const SummaryTable: FC<SummaryTableProps> = ({ products, totalAmount }) =
   );
 };
 
-function aggregateUnderlying(products: Product[], assetClassTotal: number) {
+function aggregateUnderlying(contributions: AssetClassContribution[], assetClassTotal: number) {
   const map = new Map<string, number>();
-  for (const p of products) {
-    const weight = assetClassTotal > 0 ? p.amount / assetClassTotal : 0;
-    for (const a of p.underlying) {
+  for (const c of contributions) {
+    const weight = assetClassTotal > 0 ? c.amount / assetClassTotal : 0;
+    for (const a of c.product.underlying) {
       map.set(a.name, (map.get(a.name) ?? 0) + weight * a.percentage);
     }
   }
@@ -96,9 +109,9 @@ const AssetClassRows: FC<{
   color: string;
   assetClassPercent: number;
   assetClassTotal: number;
-  products: Product[];
-}> = ({ index, label, color, assetClassPercent, assetClassTotal, products }) => {
-  const compositionRows = aggregateUnderlying(products, assetClassTotal);
+  contributions: AssetClassContribution[];
+}> = ({ index, label, color, assetClassPercent, assetClassTotal, contributions }) => {
+  const compositionRows = aggregateUnderlying(contributions, assetClassTotal);
   return (
     <>
       <tr className="bg-sabbi-neutral-100/70">

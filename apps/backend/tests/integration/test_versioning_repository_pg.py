@@ -31,7 +31,7 @@ def _create_data(**overrides: Any) -> ProductCreate:
         "name": "BlackRock Private Credit Fund",
         "provider": "SABBI",
         "amount": 150000,
-        "asset_class": "mercados_privados",
+        "asset_class": [{"name": "mercados_privados", "percentage": 100}],
     }
     data.update(overrides)
     return ProductCreate(**data)
@@ -48,7 +48,7 @@ def _enriched_data(**overrides: Any) -> ProductCreate:
             {"name": "Deuda privada", "percentage": 60},
             {"name": "Deuda soberana", "percentage": 40},
         ],
-        "asset_class": "mercados_publicos",
+        "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
         "geographic_focus": [{"name": "Global", "percentage": 100}],
         "commission": "0.10%",
         "currency": "USD",
@@ -130,7 +130,7 @@ async def test_create_snapshot_materializes_full_product_fields(test_pool, test_
     materialized = detail["products"][0]
     assert materialized["id"] == product.id
     assert materialized["name"] == "iShares Global Bond ETF"
-    assert materialized["asset_class"] == "Renta Fija"
+    assert materialized["asset_class"] == [{"name": "mercados_publicos", "percentage": 100}]
     assert materialized["commission"] == "0.10%"
     assert materialized["geographic_focus"] == [{"name": "Global", "percentage": 100}]
     assert materialized["underlying"] == [
@@ -457,16 +457,16 @@ async def test_compare_snapshots_per_field_delta_asset_class(test_pool, test_use
     repo = ProductRepository(test_pool)
     versioning = VersioningRepository(test_pool)
 
-    product = await repo.create(test_user_id, _create_data(asset_class="mercados_privados"))
+    product = await repo.create(test_user_id, _create_data(asset_class=[{"name": "mercados_privados", "percentage": 100}]))
     snapshot_a = await versioning.create_snapshot(test_user_id, "a")
-    await repo.update(product.id, ProductUpdate(asset_class="club_deals"))
+    await repo.update(product.id, ProductUpdate(asset_class=[{"name": "club_deals", "percentage": 100}]))
     snapshot_b = await versioning.create_snapshot(test_user_id, "b")
 
     diff = await versioning.compare_snapshots(snapshot_a["id"], snapshot_b["id"], test_user_id)
 
     assert diff["modified"][0]["changes"]["asset_class"] == {
-        "before": "mercados_privados",
-        "after": "club_deals",
+        "before": [{"name": "mercados_privados", "percentage": 100}],
+        "after": [{"name": "club_deals", "percentage": 100}],
     }
 
 

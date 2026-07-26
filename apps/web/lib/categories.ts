@@ -1,4 +1,4 @@
-import type { AssetClass } from "@/lib/portfolio-types";
+import type { AssetAllocation, AssetClass } from "@/lib/portfolio-types";
 
 export interface AssetClassMeta {
   key: AssetClass;
@@ -160,4 +160,22 @@ export function assetClassBgVar(assetClass: AssetClass): string {
 
 export function assetClassTextVar(assetClass: AssetClass): string {
   return `var(${ASSET_CLASS_META[assetClass].textCssVar})`;
+}
+
+/** Get the primary (highest percentage) asset class from an allocation array. */
+export function primaryAssetClass(allocations: AssetAllocation[]): AssetClass {
+  if (!allocations || allocations.length === 0) return "otros";
+  const primary = allocations.reduce((max, a) => (a.percentage > max.percentage ? a : max), allocations[0]);
+  return resolveAssetClassKey(primary.name);
+}
+
+/** Format asset class allocations as a readable string. */
+export function formatAssetClassAllocations(allocations: AssetAllocation[]): string {
+  if (!allocations || allocations.length === 0) return "—";
+  return allocations
+    .map((a) => {
+      const meta = ASSET_CLASS_META[resolveAssetClassKey(a.name)];
+      return `${meta?.label ?? a.name} ${a.percentage}%`;
+    })
+    .join(", ");
 }

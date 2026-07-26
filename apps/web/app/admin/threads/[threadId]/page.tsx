@@ -7,12 +7,12 @@ import remarkGfm from "remark-gfm";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import {
   ASSET_CLASS_META,
-  resolveAssetClassKey,
+  primaryAssetClass,
   assetClassBgVar,
   assetClassTextVar,
 } from "@/lib/categories";
 import { formatUsd } from "@/lib/format";
-import type { AssetClass, FieldSource } from "@/lib/portfolio-types";
+import type { AssetAllocation, FieldSource } from "@/lib/portfolio-types";
 
 // -- Types ----------------------------------------------------------------
 
@@ -317,7 +317,7 @@ const ENRICHED_FIELDS: { key: EnrichedFieldKey; label: string }[] = [
 interface ToolResultProduct {
   name: string;
   amount: number;
-  asset_class: AssetClass;
+  asset_class: AssetAllocation[];
 }
 
 type PortfolioToolResult =
@@ -328,7 +328,7 @@ type PortfolioToolResult =
 interface ProposedProduct {
   name: string;
   amount: number;
-  asset_class: string;
+  asset_class: AssetAllocation[];
   provider?: string;
   commission?: string;
   currency?: string;
@@ -437,7 +437,7 @@ const ReadOnlyProposalCard: FC<{
   product: ProposedProduct;
   confirmed: boolean;
 }> = ({ product, confirmed }) => {
-  const catKey = resolveAssetClassKey(product.asset_class);
+  const catKey = primaryAssetClass(product.asset_class);
   const meta = ASSET_CLASS_META[catKey];
   if (!meta) return null;
 
@@ -554,7 +554,7 @@ const ToolResultRow: FC<{ result: PortfolioToolResult; args?: Record<string, unk
   }
 
   const { product } = result;
-  const catKey = resolveAssetClassKey(product.asset_class);
+  const catKey = primaryAssetClass(product.asset_class);
   const meta = ASSET_CLASS_META[catKey];
   if (!meta) return null;
 

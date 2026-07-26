@@ -168,7 +168,7 @@ def _fake_row(**overrides) -> dict:
         "name": "Fund A",
         "provider": "Provider A",
         "amount": 10000.0,
-        "asset_class": "inversiones_directas",
+        "asset_class": [{"name": "inversiones_directas", "percentage": 100}],
         "underlying": json.dumps([{"name": "Fund A", "percentage": 100}]),
     }
     row.update(overrides)
@@ -200,7 +200,7 @@ def test_repository_create_inserts_and_returns_product():
     pool = _pool_with_conn(conn)
 
     repo = ProductRepository(pool)
-    data = ProductCreate(name="New Fund", amount=5000, asset_class="cash_y_equivalentes")
+    data = ProductCreate(name="New Fund", amount=5000, asset_class=[{"name": "cash_y_equivalentes", "percentage": 100}])
     product = asyncio.run(repo.create("usr_test", data))
 
     assert product.name == "New Fund"
@@ -312,8 +312,8 @@ def test_repository_get_summary_computes_totals_and_largest_position():
 
     pool = AsyncMock()
     pool.fetch.return_value = [
-        _fake_row(id="p1", amount=7000.0, asset_class="inversiones_directas"),
-        _fake_row(id="p2", amount=3000.0, asset_class="cash_y_equivalentes"),
+        _fake_row(id="p1", amount=7000.0, asset_class=[{"name": "inversiones_directas", "percentage": 100}]),
+        _fake_row(id="p2", amount=3000.0, asset_class=[{"name": "cash_y_equivalentes", "percentage": 100}]),
     ]
 
     repo = ProductRepository(pool)
