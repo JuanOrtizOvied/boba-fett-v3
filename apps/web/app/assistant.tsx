@@ -125,7 +125,16 @@ function convertMessages(api: ApiMessage[], threadCreatedAt?: string | null): Th
         }
       }
 
-      if (parts.length) result.push({ role: "assistant", id: msg.id, content: parts, createdAt: threadCreatedAt ? new Date(threadCreatedAt) : undefined });
+      if (parts.length && parts.some((p) => p.type === "text")) {
+        result.push({
+          role: "assistant",
+          id: msg.id,
+          content: parts,
+          createdAt: threadCreatedAt
+            ? new Date(threadCreatedAt)
+            : undefined,
+        });
+      }
     }
   }
 

@@ -44,12 +44,26 @@ def _parse_underlying(text: str) -> str:
 
 
 def _parse_asset_class(text: str) -> str:
-    """Convert a single free-text asset_class value into a JSON array of one
-    {name, percentage: 100} allocation. Returns '[]' when empty."""
+    """Parse 'Class1 X%, Class2 Y%' into JSON array of {name, percentage}.
+    Handles newlines and large whitespace runs as separators.
+    Falls back to a single 100% allocation when no percentages are found."""
     cleaned = _clean(text)
     if not cleaned:
         return "[]"
-    return json.dumps([{"name": cleaned, "percentage": 100}])
+    normalized = cleaned.replace("\n", ",").replace("\r", ",")
+    normalized = re.sub(r"%\s{2,}", "%, ", normalized)
+    parts = [p.strip() for p in re.split(r",(?![^(]*\))", normalized) if p.strip()]
+    result = []
+    for part in parts:
+        part = part.strip().rstrip(",")
+        m = _PCT_RE.match(part)
+        if m:
+            name = m.group(1).strip().rstrip(",")
+            pct = float(m.group(2))
+            result.append({"name": name, "percentage": pct})
+    if not result and cleaned:
+        result = [{"name": cleaned, "percentage": 100}]
+    return json.dumps(result)
 
 
 async def seed(path: str) -> int:

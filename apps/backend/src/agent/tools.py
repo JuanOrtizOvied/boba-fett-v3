@@ -265,31 +265,34 @@ async def add_product(
     """
     repo = await _repository()
     user_id = _user_id(config)
-    allocs = _to_allocations(underlying or [{"name": name, "percentage": 100}])
-    geo_allocs = _to_allocations(geographic_focus) if geographic_focus else []
-    product = await repo.create(
-        user_id,
-        ProductCreate(
-            name=name,
-            provider=provider,
-            amount=amount,
-            underlying=allocs,
-            asset_class=_normalize_asset_class_allocations(
-                asset_class or [{"name": "otros", "percentage": 100}]
+    try:
+        allocs = _to_allocations(underlying or [{"name": name, "percentage": 100}])
+        geo_allocs = _to_allocations(geographic_focus) if geographic_focus else []
+        product = await repo.create(
+            user_id,
+            ProductCreate(
+                name=name,
+                provider=provider,
+                amount=amount,
+                underlying=allocs,
+                asset_class=_normalize_asset_class_allocations(
+                    asset_class or [{"name": "otros", "percentage": 100}]
+                ),
+                geographic_focus=geo_allocs,
+                commission=commission,
+                currency=currency,
+                administrator=administrator,
+                manager=manager,
+                liquidity=liquidity,
+                return_rate=return_rate,
+                catalog_product_id=catalog_product_id,
             ),
-            geographic_focus=geo_allocs,
-            commission=commission,
-            currency=currency,
-            administrator=administrator,
-            manager=manager,
-            liquidity=liquidity,
-            return_rate=return_rate,
-            catalog_product_id=catalog_product_id,
-        ),
-        source="agent",
-        metadata={"tool": "add_product"},
-    )
-    return {"status": "added", "product": product.model_dump()}
+            source="agent",
+            metadata={"tool": "add_product"},
+        )
+        return {"status": "added", "product": product.model_dump()}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @tool
