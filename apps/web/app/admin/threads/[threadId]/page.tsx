@@ -56,6 +56,7 @@ type AdminThreadMessage = {
 
 const MODEL_PRICING: Record<string, { input: number; output: number; label: string }> = {
   "claude-sonnet-4-20250514": { input: 3, output: 15, label: "Sonnet 4" },
+  "claude-sonnet-5": { input: 3, output: 15, label: "Sonnet 5" },
   "claude-haiku-4-5-20251001": { input: 1, output: 5, label: "Haiku 4.5" },
   "claude-opus-4-20250514": { input: 15, output: 75, label: "Opus 4" },
 };
