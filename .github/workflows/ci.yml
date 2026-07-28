@@ -35,6 +35,8 @@ jobs:
 
   backend:
     name: Backend — Lint & Test
+    needs:
+      - frontend
     runs-on: ubuntu-latest
     defaults:
       run:
