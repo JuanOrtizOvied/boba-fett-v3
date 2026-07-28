@@ -1,0 +1,57 @@
+name: Deploy Production
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  migrate:
+    name: Database migrations
+    uses: ./.github/workflows/migrate.yml
+    secrets:
+      aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      aws_region: ${{ secrets.AWS_REGION }}
+      aws_secret_name: ${{ secrets.AWS_SECRET_NAME_PRODUCTION }}
+
+  deploy:
+    name: Deploy to production
+    needs: [migrate]
+    runs-on: production-server
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+            | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Copy compose file
+        run: |
+          cp deploy/docker-compose.yml /home/ubuntu/apps/boba-fett/docker-compose.yml
+
+      - name: Write .env from Secrets Manager
+        run: |
+          aws secretsmanager get-secret-value \
+            --secret-id ${{ secrets.AWS_SECRET_NAME_PRODUCTION }} \
+            --query 'SecretString' --output text \
+            | jq -r 'to_entries | map("\(.key)=\(.value)") | .[]' \
+            > /home/ubuntu/apps/boba-fett/.env
+
+      - name: Pull tagged image
+        run: |
+          cd /home/ubuntu/apps/boba-fett
+          TAG=${{ github.event.release.tag_name }}
+          sed -i "s/:latest/:$TAG/g" docker-compose.yml
+          docker compose pull
+
+      - name: Start services
+        run: cd /home/ubuntu/apps/boba-fett && docker compose up -d --remove-orphans && docker image prune -f
