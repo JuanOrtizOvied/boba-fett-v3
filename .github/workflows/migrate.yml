@@ -2,6 +2,10 @@ name: Migrate
 
 on:
   workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
     secrets:
       aws_access_key_id:
         required: true
@@ -9,13 +13,12 @@ on:
         required: true
       aws_region:
         required: true
-      aws_secret_name:
-        required: true
 
 jobs:
   migrate:
     name: Run database migrations
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +42,7 @@ jobs:
       - name: Get DATABASE_URL from Secrets Manager
         run: |
           DATABASE_URL=$(aws secretsmanager get-secret-value \
-            --secret-id ${{ secrets.aws_secret_name }} \
+            --secret-id ${{ secrets.AWS_SECRET_NAME }} \
             --query 'SecretString' --output text | jq -r '.DATABASE_URL')
           echo "DATABASE_URL=$DATABASE_URL" >> "$GITHUB_ENV"
 

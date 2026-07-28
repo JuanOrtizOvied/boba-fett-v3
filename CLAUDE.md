@@ -65,11 +65,13 @@ Read these before touching agent, portfolio, or dashboard code — they are the 
 boilerplate-template/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml              # Lint + test on every PR
-│       └── deploy.yml          # Docker Compose + Traefik → ECR → EC2
+│       ├── ci.yml              # Lint + test on apps/** changes
+│       ├── deploy.yml          # Staging: CI success → build → migrate → deploy
+│       ├── deploy-production.yml # Production: published release → migrate → deploy
+│       └── migrate.yml         # Reusable: Alembic migrations via Secrets Manager
 ├── deploy/
-│   ├── docker-compose.yml      # Traefik + web + backend stack
-│   └── env.example             # Required env vars for EC2 host
+│   ├── docker-compose.yml      # Web + backend stack (Traefik labels)
+│   └── env.example             # Required env vars reference
 ├── apps/
 │   ├── web/                    # Next.js frontend (assistant-ui)
 │   │   ├── app/
@@ -608,42 +610,41 @@ Before the workflows can run, set up these AWS resources:
 
 1. Create two ECR private repositories: one for frontend (e.g. `sabbi-web`), one for backend (e.g. `sabbi-backend`)
 
-**EC2 (single instance — both services):**
+**Self-hosted runners (one per environment):**
 
-1. Launch one EC2 instance (Amazon Linux 2023 or Ubuntu 22.04+ recommended)
-2. Install Docker and Docker Compose plugin
-3. Open security group ports: `80` (HTTP), `443` (HTTPS), `22` (SSH for deploys)
-4. Point DNS: `boba-fett.sabbi.com` and `boba-fett-api.sabbi.com` → EC2 public IP
-5. Generate an SSH key pair — store the private key as a GitHub secret
+1. Launch two EC2 instances (Amazon Linux 2023 or Ubuntu 22.04+ recommended) — one for staging, one for production
+2. Install Docker, Docker Compose plugin, and the GitHub Actions self-hosted runner on each
+3. Register runners with labels `staging-server` and `production-server`
+4. Install `jq` and AWS CLI on each instance
+5. Open security group ports: `80` (HTTP), `443` (HTTPS)
+6. Point DNS per environment (e.g. `boba-fett.sabbi.com` / `boba-fett-api.sabbi.com`)
+
+**AWS Secrets Manager (one secret per environment):**
+
+Create two secrets in AWS Secrets Manager containing ALL app and infra env vars (ECR registry, API keys, database URLs, auth secrets, etc.) as JSON key-value pairs. The deploy workflows write these to `.env` at deploy time — no individual GitHub secrets needed for app config.
 
 **IAM:**
 
-Create an IAM user (or OIDC role) with permissions for ECR push/pull. The EC2 instance profile also needs `ecr:GetAuthorizationToken` and `ecr:BatchGetImage` to pull images. Store deploy credentials as GitHub repository secrets.
+Create an IAM user (or OIDC role) with permissions for ECR push/pull and Secrets Manager read. The EC2 instance profiles also need `ecr:GetAuthorizationToken` and `ecr:BatchGetImage` to pull images.
+
+**GitHub Environments:**
+
+Create two environments in GitHub Settings → Environments: `staging` and `production`. Optionally add required reviewers to `production` for manual approval before deploy.
 
 ### Required GitHub Secrets
 
 | Secret | Description |
 |--------|-------------|
-| `AWS_ACCESS_KEY_ID` | IAM access key (ECR push) |
+| `AWS_ACCESS_KEY_ID` | IAM access key (ECR push + Secrets Manager read) |
 | `AWS_SECRET_ACCESS_KEY` | IAM secret key |
 | `AWS_REGION` | e.g. `us-east-1` |
 | `ECR_REGISTRY` | ECR registry URL (e.g. `123456789.dkr.ecr.us-east-1.amazonaws.com`) |
 | `ECR_REPO_FRONTEND` | ECR repository name for the frontend |
 | `ECR_REPO_BACKEND` | ECR repository name for the backend |
-| `EC2_HOST` | Public IP or hostname of the EC2 instance |
-| `EC2_SSH_USER` | SSH user on EC2 (e.g. `ec2-user` or `ubuntu`) |
-| `EC2_SSH_KEY` | Private SSH key (PEM format) for EC2 access |
-| `ACME_EMAIL` | Email for Let's Encrypt certificate registration |
-| `LANGCHAIN_API_KEY` | LangSmith API key injected at runtime |
-| `ANTHROPIC_API_KEY` | Claude API key (agent is Anthropic-only) |
-| `LANGSMITH_API_KEY` | LangSmith key for tracing |
-| `TAVILY_API_KEY` | Tavily web search key |
-| `DATABASE_URL` | Postgres connection string for the portfolio database |
-| `POSTGRES_URI` | Postgres URI for LangGraph checkpointer |
-| `JWT_SECRET` | JWT signing secret for auth |
-| `JWT_REFRESH_SECRET` | JWT refresh token secret |
-| `ADMIN_EMAIL` | Admin user email |
-| `ADMIN_PASSWORD` | Admin user password |
+| `AWS_SECRET_NAME_STAGING` | Secrets Manager secret ID for staging env vars |
+| `AWS_SECRET_NAME_PRODUCTION` | Secrets Manager secret ID for production env vars |
+
+All app configuration (API keys, database URLs, auth secrets, etc.) lives in AWS Secrets Manager, not GitHub Secrets. The Secrets Manager JSON is converted to `.env` at deploy time.
 
 ### Frontend Dockerfile (`apps/web/Dockerfile`)
 
@@ -770,100 +771,55 @@ CMD ["gunicorn", \
 
 ### Workflow 1 — CI (`.github/workflows/ci.yml`)
 
-Runs on every pull request and push to `main`. Lints and tests both frontend and backend.
+Runs on push to `main` and pull requests, only when `apps/**` files change. Lints and tests both frontend and backend. Deploy workflows depend on CI success.
 
-```yaml
-name: CI
+See `.github/workflows/ci.yml` for the full workflow source.
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+### Workflow 2 — Deploy Staging (`.github/workflows/deploy.yml`)
 
-jobs:
-  frontend:
-    name: Frontend — Lint & Build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: |
-          cd ../..
-          yarn install --frozen-lockfile
-
-      - name: Lint
-        run: yarn lint
-
-      - name: Build
-        run: yarn build
-
-  backend:
-    name: Backend — Lint & Test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/backend
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-
-      - name: Lint
-        run: ruff check src/
-
-      - name: Test
-        run: pytest -q || echo "No tests found — skipping"
-```
-
-### Workflow 2 — Deploy (`.github/workflows/deploy.yml`)
-
-A single unified workflow that deploys both services to one EC2 instance via Docker Compose + Traefik. It detects which services changed and only rebuilds affected images.
+Auto-deploys to staging when CI passes on `main`. Runs on a self-hosted `staging-server` runner.
 
 **Jobs:**
 
-1. **`changes`** — uses `dorny/paths-filter` to detect `frontend`, `backend`, or `infra` changes
-2. **`build-frontend`** — builds and pushes the frontend Docker image to ECR (skipped if no frontend/infra changes)
-3. **`build-backend`** — builds and pushes the backend Docker image to ECR (skipped if no backend/infra changes)
-4. **`deploy`** — connects to EC2 via SSH (native, no third-party actions) and runs:
-   1. Copies `deploy/docker-compose.yml` to `/opt/sabbi/` on EC2
-   2. Writes `.env` from GitHub secrets
-   3. Pulls updated images
-   4. Runs `alembic upgrade head` in a throwaway container (migration failure blocks deploy)
-   5. Starts the stack with `docker compose up -d`
+1. **`changes`** — detects `frontend`, `backend`, or `infra` changes (only runs if CI succeeded)
+2. **`tag`** — bumps semver tag via `anothrNick/github-tag-action` (default: minor, `v`-prefixed)
+3. **`build-frontend`** / **`build-backend`** — build and push Docker images to ECR tagged with semver + `latest` (skipped if no relevant changes)
+4. **`migrate`** — calls `migrate.yml` reusable workflow (Alembic via Secrets Manager)
+5. **`deploy`** — on the staging server: writes `.env` from Secrets Manager, pulls images, starts the stack
 
-**Traefik handles:**
-- HTTPS termination via Let's Encrypt (auto-provisioned certificates)
+### Workflow 3 — Deploy Production (`.github/workflows/deploy-production.yml`)
+
+Deploys to production when a GitHub release is published. Runs on a self-hosted `production-server` runner.
+
+**Jobs:**
+
+1. **`migrate`** — calls `migrate.yml` with the production Secrets Manager secret
+2. **`deploy`** — on the production server: writes `.env` from Secrets Manager, replaces `:latest` with the release tag in `docker-compose.yml`, pulls the exact tagged image, starts the stack
+
+No rebuild — production uses the same image that staging already built and tested.
+
+### Workflow 4 — Migrate (`.github/workflows/migrate.yml`)
+
+Reusable workflow called by both deploy workflows. Installs Python 3.11 + uv, gets `DATABASE_URL` from AWS Secrets Manager, and runs `alembic upgrade head`. A failed migration blocks the deploy.
+
+### Traefik Routing
+
+Both environments use Docker Compose with Traefik labels for HTTPS termination and domain routing:
+- HTTPS via Let's Encrypt (auto-provisioned certificates)
 - HTTP → HTTPS redirect
-- Domain routing: `boba-fett.sabbi.com` → web (:3000), `boba-fett-api.sabbi.com` → backend (:8000)
-- Only ports 80/443 are exposed (no raw 3000/8000)
+- `boba-fett.sabbi.com` → web (:3000), `boba-fett-api.sabbi.com` → backend (:8000)
 
-**Internal networking:** The frontend's `PORTFOLIO_API_URL` and `LANGGRAPH_API_URL` point to `http://backend:8000` — internal Docker network, no public hop.
+Internal networking: `PORTFOLIO_API_URL` and `LANGGRAPH_API_URL` point to `http://backend:8000` — Docker network, no public hop.
 
-See `deploy/docker-compose.yml` for the full stack definition and `.github/workflows/deploy.yml` for the workflow source.
+### Server Setup (one-time, per environment)
 
-### EC2 Instance Setup (one-time)
-
-Run these commands on the EC2 instance before the first deploy:
+Run these commands on each self-hosted runner instance:
 
 ```bash
 # Amazon Linux 2023
-sudo yum install -y docker
+sudo yum install -y docker jq
 sudo systemctl enable docker && sudo systemctl start docker
-sudo usermod -aG docker ec2-user
+sudo usermod -aG docker ubuntu
 
 # Install Docker Compose plugin
 sudo mkdir -p /usr/local/lib/docker/cli-plugins
@@ -876,38 +832,48 @@ curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip
 unzip awscliv2.zip && sudo ./aws/install
 
 # Create app directory
-sudo mkdir -p /opt/sabbi && sudo chown ec2-user:ec2-user /opt/sabbi
+mkdir -p /home/ubuntu/apps/boba-fett
+
+# Install and configure GitHub Actions self-hosted runner
+# Follow: https://docs.github.com/en/actions/hosting-your-own-runners
 ```
 
 ### How It Fits Together
 
 ```
-  PR opened / push to main
+  push to main (apps/**)
         │
         ▼
   ┌─────────────┐
   │   ci.yml     │  ← Lint + build frontend, lint + test backend
   └─────────────┘
-        │ (main only, path-filtered)
+        │ (success)
         ▼
-  ┌──────────────────────────────────────┐
-  │            deploy.yml                │
-  │                                      │
-  │  1. Detect changed services          │
-  │  2. Build only changed images → ECR  │
-  │  3. SCP docker-compose.yml → EC2     │
-  │  4. Write .env from secrets          │
-  │  5. docker compose pull              │
-  │  6. alembic upgrade head (migration) │
-  │  7. docker compose up -d             │
-  │                                      │
-  │  Traefik routes:                     │
-  │  boba-fett.sabbi.com     → web:3000  │
-  │  boba-fett-api.sabbi.com → api:8000  │
-  └──────────────────────────────────────┘
+  ┌──────────────────────────────────────────┐
+  │         deploy.yml (staging)             │
+  │                                          │
+  │  1. Detect changed services              │
+  │  2. Bump semver tag (v1.2.0)             │
+  │  3. Build only changed images → ECR      │
+  │  4. migrate.yml (Secrets Manager → DB)   │
+  │  5. .env from Secrets Manager            │
+  │  6. docker compose up (staging-server)   │
+  └──────────────────────────────────────────┘
+
+  publish release v1.2.0
+        │
+        ▼
+  ┌──────────────────────────────────────────┐
+  │    deploy-production.yml (production)    │
+  │                                          │
+  │  1. migrate.yml (Secrets Manager → DB)   │
+  │  2. .env from Secrets Manager            │
+  │  3. Pull exact tagged image (v1.2.0)     │
+  │  4. docker compose up (production-server)│
+  └──────────────────────────────────────────┘
 ```
 
-The deploy workflow is **path-filtered** — changes in `apps/web/` rebuild only the frontend image, changes in `apps/backend/` rebuild only the backend image. Changes to `deploy/` or the workflow itself rebuild both. Database migrations run as a separate step before starting services — a failed migration blocks the deploy.
+Images are built ONCE during staging and reused in production by tag — no rebuild.
 
 ---
 
@@ -923,8 +889,8 @@ The deploy workflow is **path-filtered** — changes in `apps/web/` rebuild only
 | Python import errors | Make sure you ran `pip install -e .` from `apps/backend/` |
 | OpenSpec commands not recognized | Run `openspec update` to refresh agent instruction files |
 | ECR login fails in GitHub Actions | Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` secrets are set and the IAM user has `ecr:GetAuthorizationToken` permission |
-| SSH deploy step fails | Ensure `EC2_SSH_KEY` secret contains the full PEM key, `EC2_HOST` is reachable, and port 22 is open in the security group |
-| Container starts but app is unreachable | Run `docker compose logs` in `/opt/sabbi`; verify ports 80/443 are open in the security group and DNS points to the EC2 IP |
+| Deploy step fails | Ensure the self-hosted runner is online (`staging-server` / `production-server`), AWS credentials are valid, and the Secrets Manager secret ID is correct |
+| Container starts but app is unreachable | Run `docker compose logs` in `/home/ubuntu/apps/boba-fett`; verify ports 80/443 are open in the security group and DNS points to the instance IP |
 | PM2 shows 0 instances online | Ensure `output: "standalone"` is set in `next.config.ts` so `server.js` is generated in `.next/standalone` |
 | Gunicorn workers keep dying | Increase `--timeout` if LLM responses are slow; check EC2 instance memory (each Uvicorn worker uses ~200-400 MB) |
 | Docker pull fails on EC2 | The instance profile needs `ecr:BatchGetImage` and `ecr:GetDownloadUrlForLayer`; re-run `aws ecr get-login-password` |
@@ -949,7 +915,7 @@ The deploy workflow is **path-filtered** — changes in `apps/web/` rebuild only
 | Dev Server     | `langgraph dev` (in-memory, hot-reload) + `uvicorn --reload` (FastAPI) |
 | Monorepo       | Yarn workspaces + Turborepo                      |
 | Orchestration  | concurrently / Makefile                          |
-| CI/CD          | GitHub Actions (ci, deploy) + Docker Compose + Traefik |
+| CI/CD          | GitHub Actions (ci, deploy-staging, deploy-production, migrate) + Docker Compose + Traefik |
 | Frontend Prod  | Docker + PM2 (cluster mode) on EC2                     |
 | Backend Prod   | Docker + Gunicorn + Uvicorn workers on EC2             |
 | Reverse Proxy  | Traefik v3 (HTTPS via Let's Encrypt, domain routing)   |

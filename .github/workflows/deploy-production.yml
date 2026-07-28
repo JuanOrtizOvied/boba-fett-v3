@@ -8,11 +8,12 @@ jobs:
   migrate:
     name: Database migrations
     uses: ./.github/workflows/migrate.yml
+    with:
+      environment: production
     secrets:
       aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
       aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       aws_region: ${{ secrets.AWS_REGION }}
-      aws_secret_name: ${{ secrets.AWS_SECRET_NAME_PRODUCTION }}
 
   deploy:
     name: Deploy to production
@@ -41,7 +42,7 @@ jobs:
       - name: Write .env from Secrets Manager
         run: |
           aws secretsmanager get-secret-value \
-            --secret-id ${{ secrets.AWS_SECRET_NAME_PRODUCTION }} \
+            --secret-id ${{ secrets.AWS_SECRET_NAME }} \
             --query 'SecretString' --output text \
             | jq -r 'to_entries | map("\(.key)=\(.value)") | .[]' \
             > /home/ubuntu/apps/boba-fett/.env
