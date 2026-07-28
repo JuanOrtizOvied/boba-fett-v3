@@ -121,61 +121,39 @@ jobs:
       aws_secret_name: ${{ secrets.AWS_SECRET_NAME }}
 
   deploy:
-    name: Deploy to EC2
+    name: Deploy to server
     needs: [changes, migrate]
     if: always() && !failure() && !cancelled()
-    runs-on: ubuntu-latest
+    runs-on: private-server
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup SSH
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-        env:
-          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+            | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
-      - name: Copy compose file to EC2
+      - name: Copy compose file
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_HOST }} \
-            "mkdir -p /opt/sabbi"
-          scp -i ~/.ssh/deploy_key \
-            deploy/docker-compose.yml \
-            ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_HOST }}:/opt/sabbi/docker-compose.yml
+          cp deploy/docker-compose.yml /home/ubuntu/apps/boba-fett/docker-compose.yml
 
-      - name: Write .env and pull images
+      - name: Write .env from Secrets Manager
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_HOST }} bash -s <<'REMOTE'
-            set -euo pipefail
+          aws secretsmanager get-secret-value \
+            --secret-id ${{ secrets.AWS_SECRET_NAME }} \
+            --query 'SecretString' --output text \
+            | jq -r 'to_entries | map("\(.key)=\(.value)") | .[]' \
+            > /home/ubuntu/apps/boba-fett/.env
 
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-
-            cd /opt/sabbi
-
-            cat > .env <<'ENVEOF'
-          ECR_REGISTRY=${{ secrets.ECR_REGISTRY }}
-          ECR_REPO_FRONTEND=${{ secrets.ECR_REPO_FRONTEND }}
-          ECR_REPO_BACKEND=${{ secrets.ECR_REPO_BACKEND }}
-          ACME_EMAIL=${{ secrets.ACME_EMAIL }}
-          LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}
-          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-          LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
-          TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-          POSTGRES_URI=${{ secrets.POSTGRES_URI }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
-          ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-          ENVEOF
-
-            docker compose pull
-          REMOTE
+      - name: Pull images
+        run: cd /home/ubuntu/apps/boba-fett && docker compose pull
 
       - name: Start services
-        run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_HOST }} \
-            "cd /opt/sabbi && docker compose up -d --remove-orphans && docker image prune -f"
+        run: cd /home/ubuntu/apps/boba-fett && docker compose up -d --remove-orphans && docker image prune -f
