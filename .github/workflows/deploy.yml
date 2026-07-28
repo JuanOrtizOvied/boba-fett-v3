@@ -51,7 +51,7 @@ jobs:
 
   build-frontend:
     name: Build frontend image
-    needs: [tag, changes]
+    needs: [tag, changes, build-frontend]
     if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
