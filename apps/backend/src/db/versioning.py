@@ -130,7 +130,8 @@ class VersioningRepository:
                 )
                 if latest is not None:
                     prev_rows = await conn.fetch(
-                        "SELECT product_id, product_data FROM snapshot_products WHERE snapshot_id = $1",
+                        "SELECT product_id, product_data "
+                        "FROM snapshot_products WHERE snapshot_id = $1",
                         latest["id"],
                     )
                     prev_products = {
@@ -154,12 +155,21 @@ class VersioningRepository:
                     if not raw_ac:
                         raw_ac = [{"name": "otros", "percentage": 100}]
                     for alloc in (raw_ac if isinstance(raw_ac, list) else []):
-                        ac_name = (alloc.get("name") or "otros") if isinstance(alloc, dict) else "otros"
-                        pct = alloc.get("percentage", 100) if isinstance(alloc, dict) else 100
-                        asset_class_totals[ac_name] = asset_class_totals.get(ac_name, 0) + amount * pct / 100
+                        if isinstance(alloc, dict):
+                            ac_name = alloc.get("name") or "otros"
+                            pct = alloc.get("percentage", 100)
+                        else:
+                            ac_name = "otros"
+                            pct = 100
+                        asset_class_totals[ac_name] = (
+                            asset_class_totals.get(ac_name, 0) + amount * pct / 100
+                        )
                 asset_class_summary = sorted(
                     [
-                        {"asset_class": ac, "percentage": round(a / total_amount * 100, 1) if total_amount else 0}
+                        {
+                            "asset_class": ac,
+                            "percentage": round(a / total_amount * 100, 1) if total_amount else 0,
+                        }
                         for ac, a in asset_class_totals.items()
                     ],
                     key=lambda x: x["percentage"],
@@ -168,7 +178,8 @@ class VersioningRepository:
 
                 snapshot_row = await conn.fetchrow(
                     """INSERT INTO portfolio_snapshots
-                       (user_id, name, description, product_count, total_amount, asset_class_summary)
+                       (user_id, name, description,
+                        product_count, total_amount, asset_class_summary)
                        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
                        RETURNING id, created_at""",
                     user_id,
@@ -466,7 +477,10 @@ class VersioningRepository:
             "description": row["description"],
             "product_count": row["product_count"],
             "total_amount": decrypt_amount(row["total_amount"]),
-            "asset_class_summary": self._jsonb(row["asset_class_summary"]) if row.get("asset_class_summary") else [],
+            "asset_class_summary": (
+                self._jsonb(row["asset_class_summary"])
+                if row.get("asset_class_summary") else []
+            ),
             "created_at": row["created_at"].isoformat(),
         }
 

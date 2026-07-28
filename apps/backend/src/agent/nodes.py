@@ -11,7 +11,7 @@ from __future__ import annotations
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 
-from agent.file_utils import PARSEABLE_MIMES, file_to_text
+from agent.file_utils import file_to_text
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import AgentState
 from agent.tools import portfolio_tools

@@ -7,7 +7,12 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class AssetAllocation(BaseModel):
-    name: str = Field(description="Canonical subcategory leaf, e.g. 'Deuda Privada', 'Renta Variable US Large Cap'")
+    name: str = Field(
+        description=(
+            "Canonical subcategory leaf, e.g. 'Deuda Privada', "
+            "'Renta Variable US Large Cap'"
+        ),
+    )
     percentage: float = Field(ge=0, le=100)
 
 

@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from agent.file_utils import file_to_text
 from auth.dependencies import get_current_user
@@ -171,7 +171,7 @@ def _stream_event_progress(event: Any) -> dict[str, str] | None:
     if ev_type == "on_chain_start" and name in _NODE_LABELS:
         return {"step": name, "label": _NODE_LABELS[name]}
     if ev_type == "on_tool_start" and name:
-        label = _TOOL_LABELS.get(name, f"Ejecutando herramienta")
+        label = _TOOL_LABELS.get(name, "Ejecutando herramienta")
         return {"step": f"tool_{name}", "label": label}
     return None
 
@@ -290,7 +290,8 @@ async def stream_message(
         input_data = {"messages": [input_message]}
 
     async def events() -> AsyncIterator[str]:
-        yield _sse_event("progress", {"step": "loading_context", "label": "Reintentando" if body.retry else "Cargando contexto"})
+        label = "Reintentando" if body.retry else "Cargando contexto"
+        yield _sse_event("progress", {"step": "loading_context", "label": label})
         has_emitted_text = False
         try:
             if hasattr(graph, "astream_events"):
