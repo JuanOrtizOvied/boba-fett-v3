@@ -66,8 +66,10 @@ boilerplate-template/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml              # Lint + test on every PR
-│       ├── deploy-frontend.yml # Docker → ECR → EC2 (PM2)
-│       └── deploy-backend.yml  # Docker → ECR → EC2 (Gunicorn+Uvicorn)
+│       └── deploy.yml          # Docker Compose + Traefik → ECR → EC2
+├── deploy/
+│   ├── docker-compose.yml      # Traefik + web + backend stack
+│   └── env.example             # Required env vars for EC2 host
 ├── apps/
 │   ├── web/                    # Next.js frontend (assistant-ui)
 │   │   ├── app/
@@ -604,14 +606,14 @@ Before the workflows can run, set up these AWS resources:
 
 **ECR (both services):**
 
-1. Create two ECR private repositories: one for frontend (e.g. `boilerplate-web`), one for backend (e.g. `boilerplate-backend`)
+1. Create two ECR private repositories: one for frontend (e.g. `sabbi-web`), one for backend (e.g. `sabbi-backend`)
 
-**EC2 (both services):**
+**EC2 (single instance — both services):**
 
-1. Launch EC2 instances (Amazon Linux 2023 or Ubuntu 22.04+ recommended)
-2. Install Docker and configure the instance to pull from ECR (`aws ecr get-login-password`)
-3. Open security group ports: `3000` (frontend), `8000` (backend), `22` (SSH for deploys)
-4. (Recommended) Place an ALB in front of the EC2 instances for HTTPS termination and health checks
+1. Launch one EC2 instance (Amazon Linux 2023 or Ubuntu 22.04+ recommended)
+2. Install Docker and Docker Compose plugin
+3. Open security group ports: `80` (HTTP), `443` (HTTPS), `22` (SSH for deploys)
+4. Point DNS: `boba-fett.sabbi.com` and `boba-fett-api.sabbi.com` → EC2 public IP
 5. Generate an SSH key pair — store the private key as a GitHub secret
 
 **IAM:**
@@ -620,24 +622,28 @@ Create an IAM user (or OIDC role) with permissions for ECR push/pull. The EC2 in
 
 ### Required GitHub Secrets
 
-| Secret | Used by | Description |
-|--------|---------|-------------|
-| `AWS_ACCESS_KEY_ID` | All deploy workflows | IAM access key (ECR push) |
-| `AWS_SECRET_ACCESS_KEY` | All deploy workflows | IAM secret key |
-| `AWS_REGION` | All deploy workflows | e.g. `us-east-1` |
-| `ECR_REGISTRY` | All deploy workflows | ECR registry URL (e.g. `123456789.dkr.ecr.us-east-1.amazonaws.com`) |
-| `ECR_REPO_FRONTEND` | Frontend deploy | ECR repository name for the frontend |
-| `ECR_REPO_BACKEND` | Backend deploy | ECR repository name for the backend |
-| `EC2_HOST_FRONTEND` | Frontend deploy | Public IP or hostname of the frontend EC2 instance |
-| `EC2_HOST_BACKEND` | Backend deploy | Public IP or hostname of the backend EC2 instance |
-| `EC2_SSH_USER` | All deploy workflows | SSH user on EC2 (e.g. `ec2-user` or `ubuntu`) |
-| `EC2_SSH_KEY` | All deploy workflows | Private SSH key (PEM format) for EC2 access |
-| `LANGGRAPH_API_URL` | Frontend deploy | LangGraph backend URL for the proxy route (e.g. `http://<backend-ec2>:8000`) |
-| `LANGCHAIN_API_KEY` | Frontend deploy | LangSmith API key injected at runtime |
-| `PORTFOLIO_API_URL` | Both deploy workflows | FastAPI portfolio API URL used by the Next.js proxy (`/api/portfolio/*`, `/api/products/*`) |
-| `ANTHROPIC_API_KEY` | Backend deploy | Claude API key injected at runtime (agent is Anthropic-only) |
-| `DATABASE_URL` | Backend deploy | Postgres connection string for the portfolio `products` table (`db.connection.get_pool`) |
-| `LANGSMITH_API_KEY` | Backend deploy | LangSmith key injected at runtime |
+| Secret | Description |
+|--------|-------------|
+| `AWS_ACCESS_KEY_ID` | IAM access key (ECR push) |
+| `AWS_SECRET_ACCESS_KEY` | IAM secret key |
+| `AWS_REGION` | e.g. `us-east-1` |
+| `ECR_REGISTRY` | ECR registry URL (e.g. `123456789.dkr.ecr.us-east-1.amazonaws.com`) |
+| `ECR_REPO_FRONTEND` | ECR repository name for the frontend |
+| `ECR_REPO_BACKEND` | ECR repository name for the backend |
+| `EC2_HOST` | Public IP or hostname of the EC2 instance |
+| `EC2_SSH_USER` | SSH user on EC2 (e.g. `ec2-user` or `ubuntu`) |
+| `EC2_SSH_KEY` | Private SSH key (PEM format) for EC2 access |
+| `ACME_EMAIL` | Email for Let's Encrypt certificate registration |
+| `LANGCHAIN_API_KEY` | LangSmith API key injected at runtime |
+| `ANTHROPIC_API_KEY` | Claude API key (agent is Anthropic-only) |
+| `LANGSMITH_API_KEY` | LangSmith key for tracing |
+| `TAVILY_API_KEY` | Tavily web search key |
+| `DATABASE_URL` | Postgres connection string for the portfolio database |
+| `POSTGRES_URI` | Postgres URI for LangGraph checkpointer |
+| `JWT_SECRET` | JWT signing secret for auth |
+| `JWT_REFRESH_SECRET` | JWT refresh token secret |
+| `ADMIN_EMAIL` | Admin user email |
+| `ADMIN_PASSWORD` | Admin user password |
 
 ### Frontend Dockerfile (`apps/web/Dockerfile`)
 
@@ -823,158 +829,35 @@ jobs:
         run: pytest -q || echo "No tests found — skipping"
 ```
 
-### Workflow 2 — Deploy Frontend (`.github/workflows/deploy-frontend.yml`)
+### Workflow 2 — Deploy (`.github/workflows/deploy.yml`)
 
-Builds the Docker image with PM2, pushes to ECR, SSHs into the EC2 instance and pulls the new image.
+A single unified workflow that deploys both services to one EC2 instance via Docker Compose + Traefik. It detects which services changed and only rebuilds affected images.
 
-```yaml
-name: Deploy Frontend
+**Jobs:**
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/web/**"
+1. **`changes`** — uses `dorny/paths-filter` to detect `frontend`, `backend`, or `infra` changes
+2. **`build-frontend`** — builds and pushes the frontend Docker image to ECR (skipped if no frontend/infra changes)
+3. **`build-backend`** — builds and pushes the backend Docker image to ECR (skipped if no backend/infra changes)
+4. **`deploy`** — connects to EC2 via SSH (native, no third-party actions) and runs:
+   1. Copies `deploy/docker-compose.yml` to `/opt/sabbi/` on EC2
+   2. Writes `.env` from GitHub secrets
+   3. Pulls updated images
+   4. Runs `alembic upgrade head` in a throwaway container (migration failure blocks deploy)
+   5. Starts the stack with `docker compose up -d`
 
-jobs:
-  deploy:
-    name: Build & Deploy to EC2
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+**Traefik handles:**
+- HTTPS termination via Let's Encrypt (auto-provisioned certificates)
+- HTTP → HTTPS redirect
+- Domain routing: `boba-fett.sabbi.com` → web (:3000), `boba-fett-api.sabbi.com` → backend (:8000)
+- Only ports 80/443 are exposed (no raw 3000/8000)
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+**Internal networking:** The frontend's `PORTFOLIO_API_URL` and `LANGGRAPH_API_URL` point to `http://backend:8000` — internal Docker network, no public hop.
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push frontend image
-        env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPO_FRONTEND }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            apps/web
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST_FRONTEND }}
-          username: ${{ secrets.EC2_SSH_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-
-            docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_FRONTEND }}:latest
-
-            docker stop boba-fett-web || true
-            docker rm boba-fett-web || true
-
-            docker run -d \
-              --name boba-fett-web \
-              --restart unless-stopped \
-              -p 3000:3000 \
-              -e LANGGRAPH_API_URL=${{ secrets.LANGGRAPH_API_URL }} \
-              -e LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }} \
-              -e PORTFOLIO_API_URL=${{ secrets.PORTFOLIO_API_URL }} \
-              -e NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent \
-              ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_FRONTEND }}:latest
-```
-
-### Workflow 3 — Deploy Backend (`.github/workflows/deploy-backend.yml`)
-
-Builds the Docker image with Gunicorn + Uvicorn, pushes to ECR, SSHs into the EC2 instance and pulls the new image.
-
-```yaml
-name: Deploy Backend
-
-on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/backend/**"
-
-jobs:
-  deploy:
-    name: Build & Deploy to EC2
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push backend image
-        env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPO_BACKEND }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            apps/backend
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST_BACKEND }}
-          username: ${{ secrets.EC2_SSH_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-
-            docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
-
-            docker stop boba-fett-backend || true
-            docker rm boba-fett-backend || true
-
-            docker run -d \
-              --name boba-fett-backend \
-              --restart unless-stopped \
-              -p 8000:8000 \
-              -e ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }} \
-              -e LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }} \
-              -e LANGSMITH_TRACING=true \
-              -e LANGSMITH_PROJECT=boba-fett-v3 \
-              -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-              -e POSTGRES_URI=${{ secrets.POSTGRES_URI }} \
-              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
-              -e JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }} \
-              -e ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }} \
-              -e ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }} \
-              -e TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }} \
-              ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_BACKEND }}:latest
-```
-
-See `.github/workflows/deploy-backend.yml` for the full, up-to-date command.
+See `deploy/docker-compose.yml` for the full stack definition and `.github/workflows/deploy.yml` for the workflow source.
 
 ### EC2 Instance Setup (one-time)
 
-Run these commands on each EC2 instance before the first deploy:
+Run these commands on the EC2 instance before the first deploy:
 
 ```bash
 # Amazon Linux 2023
@@ -982,13 +865,18 @@ sudo yum install -y docker
 sudo systemctl enable docker && sudo systemctl start docker
 sudo usermod -aG docker ec2-user
 
+# Install Docker Compose plugin
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
 # Install AWS CLI (if not pre-installed)
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip && sudo ./aws/install
 
-# Configure ECR login (instance profile handles auth)
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin <your-ecr-registry>
+# Create app directory
+sudo mkdir -p /opt/sabbi && sudo chown ec2-user:ec2-user /opt/sabbi
 ```
 
 ### How It Fits Together
@@ -1002,18 +890,24 @@ aws ecr get-login-password --region us-east-1 \
   └─────────────┘
         │ (main only, path-filtered)
         ▼
-  ┌─────────────────────┐     ┌──────────────────────┐
-  │ deploy-frontend.yml │     │  deploy-backend.yml  │
-  │                     │     │                      │
-  │ docker build (PM2)  │     │ docker build         │
-  │ push to ECR         │     │ (Gunicorn+Uvicorn)   │
-  │ SSH → EC2 pull+run  │     │ push to ECR          │
-  │ :3000               │     │ SSH → EC2 pull+run   │
-  └─────────────────────┘     │ :8000                │
-                              └──────────────────────┘
+  ┌──────────────────────────────────────┐
+  │            deploy.yml                │
+  │                                      │
+  │  1. Detect changed services          │
+  │  2. Build only changed images → ECR  │
+  │  3. SCP docker-compose.yml → EC2     │
+  │  4. Write .env from secrets          │
+  │  5. docker compose pull              │
+  │  6. alembic upgrade head (migration) │
+  │  7. docker compose up -d             │
+  │                                      │
+  │  Traefik routes:                     │
+  │  boba-fett.sabbi.com     → web:3000  │
+  │  boba-fett-api.sabbi.com → api:8000  │
+  └──────────────────────────────────────┘
 ```
 
-Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger only the frontend deploy, and changes in `apps/backend/` trigger only the backend deploy. If a single commit touches both, both workflows run in parallel.
+The deploy workflow is **path-filtered** — changes in `apps/web/` rebuild only the frontend image, changes in `apps/backend/` rebuild only the backend image. Changes to `deploy/` or the workflow itself rebuild both. Database migrations run as a separate step before starting services — a failed migration blocks the deploy.
 
 ---
 
@@ -1029,8 +923,8 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 | Python import errors | Make sure you ran `pip install -e .` from `apps/backend/` |
 | OpenSpec commands not recognized | Run `openspec update` to refresh agent instruction files |
 | ECR login fails in GitHub Actions | Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` secrets are set and the IAM user has `ecr:GetAuthorizationToken` permission |
-| SSH deploy step fails | Ensure `EC2_SSH_KEY` secret contains the full PEM key, `EC2_HOST_*` is reachable, and port 22 is open in the security group |
-| Container starts but app is unreachable | Check `docker logs boba-fett-web` (or `boba-fett-backend`); verify ports 3000/8000 are open in the EC2 security group |
+| SSH deploy step fails | Ensure `EC2_SSH_KEY` secret contains the full PEM key, `EC2_HOST` is reachable, and port 22 is open in the security group |
+| Container starts but app is unreachable | Run `docker compose logs` in `/opt/sabbi`; verify ports 80/443 are open in the security group and DNS points to the EC2 IP |
 | PM2 shows 0 instances online | Ensure `output: "standalone"` is set in `next.config.ts` so `server.js` is generated in `.next/standalone` |
 | Gunicorn workers keep dying | Increase `--timeout` if LLM responses are slow; check EC2 instance memory (each Uvicorn worker uses ~200-400 MB) |
 | Docker pull fails on EC2 | The instance profile needs `ecr:BatchGetImage` and `ecr:GetDownloadUrlForLayer`; re-run `aws ecr get-login-password` |
@@ -1055,8 +949,9 @@ Both deploy workflows are **path-filtered** — changes in `apps/web/` trigger o
 | Dev Server     | `langgraph dev` (in-memory, hot-reload) + `uvicorn --reload` (FastAPI) |
 | Monorepo       | Yarn workspaces + Turborepo                      |
 | Orchestration  | concurrently / Makefile                          |
-| CI/CD          | GitHub Actions (ci, deploy-frontend, deploy-backend) |
-| Frontend Prod  | Docker + PM2 (cluster mode) on EC2               |
-| Backend Prod   | Docker + Gunicorn + Uvicorn workers on EC2       |
+| CI/CD          | GitHub Actions (ci, deploy) + Docker Compose + Traefik |
+| Frontend Prod  | Docker + PM2 (cluster mode) on EC2                     |
+| Backend Prod   | Docker + Gunicorn + Uvicorn workers on EC2             |
+| Reverse Proxy  | Traefik v3 (HTTPS via Let's Encrypt, domain routing)   |
 | Container Reg. | AWS ECR (private repositories)                   |
 | Spec Framework | OpenSpec (SDD) — https://github.com/Fission-AI/OpenSpec |****

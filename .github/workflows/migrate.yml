@@ -1,0 +1,48 @@
+name: Migrate
+
+on:
+  workflow_call:
+    secrets:
+      aws_access_key_id:
+        required: true
+      aws_secret_access_key:
+        required: true
+      aws_region:
+        required: true
+      aws_secret_name:
+        required: true
+
+jobs:
+  migrate:
+    name: Run database migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        working-directory: apps/backend
+        run: uv pip install --system -e .
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-region: ${{ secrets.aws_region }}
+
+      - name: Get DATABASE_URL from Secrets Manager
+        run: |
+          DATABASE_URL=$(aws secretsmanager get-secret-value \
+            --secret-id ${{ secrets.aws_secret_name }} \
+            --query 'SecretString' --output text | jq -r '.DATABASE_URL')
+          echo "DATABASE_URL=$DATABASE_URL" >> "$GITHUB_ENV"
+
+      - name: Run migrations
+        working-directory: apps/backend
+        run: alembic upgrade head

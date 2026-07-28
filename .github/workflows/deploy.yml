@@ -1,16 +1,15 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
     branches: [main]
-    paths:
-      - "apps/**"
-      - "deploy/**"
-      - ".github/workflows/deploy.yml"
+    types: [completed]
 
 jobs:
   changes:
     name: Detect changes
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -30,9 +29,29 @@ jobs:
               - 'deploy/**'
               - '.github/workflows/deploy.yml'
 
+  tag:
+    name: Bump version tag
+    needs: [changes]
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump and tag
+        id: tag
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BUMP: minor
+          WITH_V: true
+          INITIAL_VERSION: 1.0.0
+
   build-frontend:
     name: Build frontend image
-    needs: changes
+    needs: [tag, changes]
     if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -50,19 +69,19 @@ jobs:
         env:
           ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPO_FRONTEND }}
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION: ${{ needs.tag.outputs.new_tag }}
         run: |
           docker build \
             -f apps/web/Dockerfile \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
   build-backend:
     name: Build backend image
-    needs: changes
+    needs: [tag, changes]
     if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -80,19 +99,30 @@ jobs:
         env:
           ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPO_BACKEND }}
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION: ${{ needs.tag.outputs.new_tag }}
         run: |
           docker build \
             -f apps/backend/Dockerfile \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             apps/backend
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  migrate:
+    name: Database migrations
+    needs: [build-frontend, build-backend]
+    if: always() && !failure() && !cancelled()
+    uses: ./.github/workflows/migrate.yml
+    secrets:
+      aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      aws_region: ${{ secrets.AWS_REGION }}
+      aws_secret_name: ${{ secrets.AWS_SECRET_NAME }}
 
   deploy:
     name: Deploy to EC2
-    needs: [changes, build-frontend, build-backend]
+    needs: [changes, migrate]
     if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -144,11 +174,6 @@ jobs:
 
             docker compose pull
           REMOTE
-
-      - name: Run database migrations
-        run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_HOST }} \
-            "cd /opt/sabbi && docker compose run --rm backend alembic upgrade head"
 
       - name: Start services
         run: |
