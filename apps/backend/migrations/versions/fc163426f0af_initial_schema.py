@@ -48,13 +48,12 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("provider", sa.Text(), server_default=""),
-        sa.Column("amount", sa.Numeric(), nullable=False),
-        sa.Column("category", sa.Text(), nullable=False),
+        sa.Column("amount", sa.Text(), nullable=False),
         sa.Column("underlying", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("asset_class", sa.Text(), server_default=""),
-        sa.Column("geographic_focus", sa.Text(), server_default=""),
+        sa.Column("asset_class", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column("geographic_focus", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb")),
         sa.Column("commission", sa.Text(), server_default=""),
         sa.Column("currency", sa.Text(), server_default=""),
         sa.Column("administrator", sa.Text(), server_default=""),
@@ -62,7 +61,6 @@ def upgrade() -> None:
         sa.Column("liquidity", sa.Text(), server_default=""),
         sa.Column("return_rate", sa.Text(), server_default=""),
         sa.Column("catalog_product_id", sa.Integer()),
-        sa.CheckConstraint("amount > 0", name="products_amount_positive"),
     )
     op.create_index("idx_products_user", "products", ["user_id"])
     op.create_index("idx_products_catalog_product_id", "products", ["catalog_product_id"])
@@ -71,8 +69,8 @@ def upgrade() -> None:
         "product_catalog",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("name", sa.Text(), nullable=False),
-        sa.Column("geographic_focus", sa.Text(), server_default=""),
-        sa.Column("asset_class", sa.Text(), server_default=""),
+        sa.Column("geographic_focus", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb")),
+        sa.Column("asset_class", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb")),
         sa.Column("underlying", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb")),
         sa.Column("commission", sa.Text(), server_default=""),
         sa.Column("currency", sa.Text(), server_default=""),
@@ -80,7 +78,6 @@ def upgrade() -> None:
         sa.Column("manager", sa.Text(), server_default=""),
         sa.Column("liquidity", sa.Text(), server_default=""),
         sa.Column("return_rate", sa.Text(), server_default=""),
-        sa.Column("category", sa.Text(), server_default=""),
         sa.Column("approved_from_product_id", sa.Text()),
         sa.Column("approved_at", sa.DateTime(timezone=True)),
         sa.Column("alternative_names", postgresql.ARRAY(sa.Text()), server_default=sa.text("'{}'::text[]")),
@@ -100,9 +97,9 @@ def upgrade() -> None:
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("description", sa.Text(), nullable=False, server_default=""),
         sa.Column("product_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("total_amount", sa.Numeric(), nullable=False, server_default=sa.text("0")),
+        sa.Column("total_amount", sa.Text(), nullable=False, server_default=sa.text("'0'")),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("category_summary", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb")),
+        sa.Column("asset_class_summary", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb")),
     )
     op.create_index(
         "idx_snapshots_user_created",
@@ -115,7 +112,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), primary_key=True),
         sa.Column("snapshot_id", sa.UUID(), sa.ForeignKey("portfolio_snapshots.id", ondelete="CASCADE"), nullable=False),
         sa.Column("product_id", sa.Text(), nullable=False),
-        sa.Column("product_data", postgresql.JSONB(), nullable=False),
+        sa.Column("product_data", sa.Text(), nullable=False),
     )
     op.create_index("idx_snapshot_products_snapshot", "snapshot_products", ["snapshot_id"])
     op.create_index("idx_snapshot_products_product_id", "snapshot_products", ["product_id"])
@@ -126,8 +123,8 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("product_id", sa.Text()),
         sa.Column("operation", sa.Text(), nullable=False),
-        sa.Column("before_state", postgresql.JSONB()),
-        sa.Column("after_state", postgresql.JSONB()),
+        sa.Column("before_state", sa.Text()),
+        sa.Column("after_state", sa.Text()),
         sa.Column("source", sa.Text(), nullable=False, server_default="api"),
         sa.Column("snapshot_id", sa.UUID(), sa.ForeignKey("portfolio_snapshots.id", ondelete="SET NULL")),
         sa.Column("metadata", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
