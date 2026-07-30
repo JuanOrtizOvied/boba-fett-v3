@@ -42,6 +42,6 @@ services:
       - traefik.http.routers.backend.entrypoints=websecured
       - traefik.http.routers.backend.tls.certresolver=le
       - traefik.http.services.backend.loadbalancer.server.port=8000
-
-volumes:
-  letsencrypt:
+networks:
+  traefik-network:
+    external: true
