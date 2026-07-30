@@ -83,7 +83,7 @@ jobs:
 
   build-backend:
     name: Build backend image
-    needs: [tag, changes, build-frontend]
+    needs: [tag, changes]
     if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -115,8 +115,8 @@ jobs:
 
   migrate:
     name: Database migrations
-    needs: [build-frontend, build-backend]
-    if: always() && !failure() && !cancelled()
+    needs: [changes, build-backend]
+    if: always() && !failure() && !cancelled() && needs.changes.outputs.backend == 'true'
     uses: ./.github/workflows/migrate.yml
     with:
       environment: staging
@@ -124,7 +124,7 @@ jobs:
 
   deploy:
     name: Deploy to staging
-    needs: [changes, migrate]
+    needs: [changes, build-frontend, build-backend, migrate]
     if: always() && !failure() && !cancelled()
     runs-on: staging-server
     environment: staging
