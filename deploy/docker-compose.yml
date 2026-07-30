@@ -14,7 +14,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.web.rule=Host(`boba-fett.sabbi.com`)
       - traefik.http.routers.web.entrypoints=websecured
-      - traefik.http.routers.web.tls.certresolver=letsencrypt
+      - traefik.http.routers.web.tls.certresolver=le
       - traefik.http.services.web.loadbalancer.server.port=3000
     depends_on:
       - backend
@@ -35,7 +35,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.backend.rule=Host(`boba-fett-api.sabbi.com`)
       - traefik.http.routers.backend.entrypoints=websecured
-      - traefik.http.routers.backend.tls.certresolver=letsencrypt
+      - traefik.http.routers.backend.tls.certresolver=le
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
 volumes:
