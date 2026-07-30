@@ -9,8 +9,6 @@ services:
     restart: always
     env_file: .env
     environment:
-      - PORTFOLIO_API_URL=http://backend:8000
-      - LANGGRAPH_API_URL=http://backend:8000
       - NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
     labels:
       - traefik.enable=true
