@@ -8,6 +8,8 @@ services:
           memory: ${MEMORY_WEB}
     restart: always
     env_file: .env
+    networks:
+      - traefik-network
     environment:
       - HOSTNAME=0.0.0.0
       - NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
@@ -29,6 +31,8 @@ services:
           memory: ${MEMORY_BACKEND}
     restart: always
     env_file: .env
+    networks:
+      - traefik-network
     environment:
       - LANGSMITH_TRACING=true
       - LANGSMITH_PROJECT=boba-fett-v3
