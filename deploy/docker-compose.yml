@@ -9,6 +9,7 @@ services:
     restart: always
     env_file: .env
     environment:
+      - HOSTNAME=0.0.0.0
       - NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
     labels:
       - traefik.enable=true
