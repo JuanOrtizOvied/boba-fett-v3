@@ -40,7 +40,8 @@ def test_graph_edges_include_expected_transitions():
     graph_repr = graph.get_graph()
     edges = {(edge.source, edge.target) for edge in graph_repr.edges}
 
-    assert ("__start__", "router") in edges
+    assert ("__start__", "guardrail") in edges
+    assert ("guardrail", "router") in edges
     assert ("process_document", "agent") in edges
     assert ("tools", "agent") in edges
 
