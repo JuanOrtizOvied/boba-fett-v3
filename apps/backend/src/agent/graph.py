@@ -2,10 +2,10 @@
 
 Exposed as graph id `agent` via `langgraph.json` at `./src/agent/graph.py:graph`.
 
-Nodes: `router` -> (`process_document` | `agent`) -> `agent` -> (`tools` | END),
-`tools` -> `agent` (loop). Portfolio mutations happen inside `tools` (a
-standard `ToolNode`) which write directly to PostgreSQL — the graph state
-itself only carries `messages`.
+Nodes: `guardrail` -> (`router` | END) -> (`process_document` | `agent`) ->
+`agent` -> (`tools` | END), `tools` -> `agent` (loop). Portfolio mutations
+happen inside `tools` (a standard `ToolNode`) which write directly to
+PostgreSQL — the graph state itself only carries `messages`.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from agent.guardrails import guardrail_node, guardrail_route
 from agent.nodes import agent_node, has_file_attachment, process_document_node, router_node
 from agent.state import AgentState
 from agent.tools import portfolio_tools
@@ -28,13 +29,18 @@ def should_continue(state: AgentState) -> str:
 
 builder = StateGraph(AgentState)
 
+builder.add_node("guardrail", guardrail_node)
 builder.add_node("router", router_node)
 builder.add_node("process_document", process_document_node)
 builder.add_node("agent", agent_node)
-# Standard ToolNode — tools write to Postgres directly, no custom executor.
 builder.add_node("tools", ToolNode(portfolio_tools))
 
-builder.add_edge(START, "router")
+builder.add_edge(START, "guardrail")
+builder.add_conditional_edges(
+    "guardrail",
+    guardrail_route,
+    {"router": "router", END: END},
+)
 builder.add_conditional_edges(
     "router",
     has_file_attachment,
