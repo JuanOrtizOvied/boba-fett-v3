@@ -86,6 +86,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
+    window.location.href = "/login";
   }, []);
 
   return (
