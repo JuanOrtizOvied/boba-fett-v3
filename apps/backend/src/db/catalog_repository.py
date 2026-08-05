@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 
 import asyncpg
-
-from sqlalchemy import Table, Column, Integer, Text, MetaData, select, func, case, or_
+from sqlalchemy import Column, Integer, MetaData, Table, Text, case, func, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
