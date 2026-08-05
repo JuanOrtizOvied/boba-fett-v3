@@ -5,11 +5,118 @@ import json
 import asyncpg
 
 from db.models import AssetAllocation, CatalogProduct, CatalogProductCreate, CatalogProductUpdate
+from sqlalchemy import Table, Column, Integer, Text, MetaData, select, func, case, or_
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.sql import text
 
+# Define the table object for SQLAlchemy Core expressions
+metadata = MetaData()
+product_catalog_table = Table(
+    "product_catalog",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", Text, nullable=False),
+    Column("geographic_focus", postgresql.JSONB, server_default=text("'[]'::jsonb")),
+    Column("asset_class", postgresql.JSONB, server_default=text("'[]'::jsonb")),
+    Column("underlying", postgresql.JSONB, server_default=text("'[]'::jsonb")),
+    Column("commission", Text, server_default=""),
+    Column("currency", Text, server_default=""),
+    Column("administrator", Text, server_default=""),
+    Column("manager", Text, server_default=""),
+    Column("liquidity", Text, server_default=""),
+    Column("return_rate", Text, server_default=""),
+    Column("approved_from_product_id", Text()),
+    Column("approved_at", Text()),
+    Column("alternative_names", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
+)
 
 class CatalogRepository:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
+
+    async def get_catalog(self, search: str | None, limit: int, offset: int) -> list[dict]:
+        """Fetches the product catalog with optional search and pagination.
+
+        Uses SQLAlchemy Core for expression construction.
+        The name column has a trigram index; aliases are searched functionally.
+        """
+        # Base selection
+        query = select(product_catalog_table)
+
+        if search:
+            # Normalize the search input
+            normalized_input = func.normalize_catalog_text(search)
+
+            # The name column can leverage the trigram index.
+            # Alias searching remains functional because alternative_names
+            # cannot be indexed using the previous expression strategy.
+
+            name_match = product_catalog_table.c.name.ilike(
+                func.concat("%", search, "%")
+            )
+
+            alt_names_match = func.normalize_catalog_text(
+                func.array_to_string(
+                    func.coalesce(
+                        product_catalog_table.c.alternative_names,
+                        postgresql.array([], type_=Text)
+                    ),
+                    " "
+                )
+            ).like(func.concat("%", normalized_input, "%"))
+
+            query = query.where(
+                or_(
+                    name_match,
+                    alt_names_match
+                )
+            )
+
+            # Ranking logic
+            # 1. Exact Match
+            # 2. Starts With
+            # 3. Contains (Default)
+            query = query.order_by(
+                case(
+                    (func.normalize_catalog_text(product_catalog_table.c.name) == normalized_input, 1),
+                    (func.normalize_catalog_text(product_catalog_table.c.name).like(func.concat(normalized_input, "%")), 2),
+                    else_=3
+                ),
+                product_catalog_table.c.name.asc()
+            )
+        else:
+            query = query.order_by(product_catalog_table.c.name.asc())
+
+        query = query.limit(limit).offset(offset)
+
+        # Compile to SQL string
+        # Note: Since we use asyncpg directly, we compile the expression to a string.
+        # In a full SQLAlchemy migration, we would use the engine to execute.
+        dialect = postgresql.dialect()
+        statement = query.compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+        sql_string = str(statement)
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(sql_string)
+            return [self._normalize_row(r) for r in rows]
+
+    @staticmethod
+    def _normalize_row(row: asyncpg.Record) -> dict:
+        """asyncpg devuelve JSONB como string; se parsea para que el
+        frontend reciba arrays/objetos según el contrato de CatalogProduct."""
+        d = dict(row)
+        for field in ("geographic_focus", "asset_class", "underlying"):
+            raw = d.get(field)
+            if isinstance(raw, str):
+                d[field] = json.loads(raw)
+            elif raw is None:
+                d[field] = []
+        d["alternative_names"] = list(d.get("alternative_names") or [])
+        approved_at = d.get("approved_at")
+        if approved_at is not None and not isinstance(approved_at, str):
+            d["approved_at"] = approved_at.isoformat()
+        return d
+
 
     async def list_all(self) -> list[CatalogProduct]:
         rows = await self.pool.fetch("SELECT * FROM product_catalog ORDER BY id")
