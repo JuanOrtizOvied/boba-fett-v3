@@ -4,10 +4,11 @@ import json
 
 import asyncpg
 
-from db.models import AssetAllocation, CatalogProduct, CatalogProductCreate, CatalogProductUpdate
 from sqlalchemy import Table, Column, Integer, Text, MetaData, select, func, case, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
+
+from db.models import AssetAllocation, CatalogProduct, CatalogProductCreate, CatalogProductUpdate
 
 # Define the table object for SQLAlchemy Core expressions
 metadata = MetaData()
@@ -76,10 +77,14 @@ class CatalogRepository:
             # 1. Exact Match
             # 2. Starts With
             # 3. Contains (Default)
+            name_norm = func.normalize_catalog_text(product_catalog_table.c.name)
+            exact_match = (name_norm == normalized_input, 1)
+            starts_with = (name_norm.like(func.concat(normalized_input, "%")), 2)
+
             query = query.order_by(
                 case(
-                    (func.normalize_catalog_text(product_catalog_table.c.name) == normalized_input, 1),
-                    (func.normalize_catalog_text(product_catalog_table.c.name).like(func.concat(normalized_input, "%")), 2),
+                    exact_match,
+                    starts_with,
                     else_=3
                 ),
                 product_catalog_table.c.name.asc()
