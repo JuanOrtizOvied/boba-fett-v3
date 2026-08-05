@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState, type FC, type ReactNode } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FC,
+  type ReactNode,
+} from "react";
 import { EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { CatalogProduct } from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useUrlSearch } from "@/hooks/useUrlSearch";
+import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "alternative_names", label: "Nombres alternativos" },
@@ -19,7 +30,23 @@ const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "return_rate", label: "Rendimiento" },
 ];
 
+// Hasta que exista UI de paginación, se pide un límite alto para
+// conservar el comportamiento actual de "tabla entera" (el default
+// del backend es 50).
+const CATALOG_PAGE_SIZE = 1000;
+
 export default function AdminCatalogPage() {
+  // useUrlSearch → useSearchParams requiere un boundary <Suspense> en App Router.
+  return (
+    <Suspense
+      fallback={<p className="text-sm text-sabbi-neutral-600">Cargando…</p>}
+    >
+      <CatalogPageContent />
+    </Suspense>
+  );
+}
+
+function CatalogPageContent() {
   const { toast } = useToast();
   const [entries, setEntries] = useState<CatalogProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,22 +54,64 @@ export default function AdminCatalogPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<CatalogProduct | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetchWithAuth("/api/admin/catalog/entries");
-        if (!res.ok) {
-          throw new Error(
-            `No se pudo cargar el catálogo (status ${res.status})`,
-          );
-        }
-        const data: CatalogProduct[] = await res.json();
-        setEntries(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Error desconocido");
+  // -- Búsqueda: input ↔ URL ↔ debounce --------------------------------
+  const [searchInput, setSearchInput] = useUrlSearch("search");
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
+  const [isFetching, setIsFetching] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const isDebouncing =
+    searchInput.trim() !== debouncedSearch.trim() &&
+    searchInput.trim() !== "";
+
+  const loadCatalog = useCallback(
+    async (term: string, signal: AbortSignal) => {
+      const params = new URLSearchParams();
+      if (term) params.set("search", term);
+      params.set("limit", String(CATALOG_PAGE_SIZE));
+      params.set("offset", "0");
+
+      const res = await fetchWithAuth(
+        `/api/admin/catalog/entries?${params}`,
+        { signal },
+      );
+      if (!res.ok) {
+        throw new Error(
+          `No se pudo cargar el catálogo (status ${res.status})`,
+        );
       }
-    })();
-  }, []);
+      const data: CatalogProduct[] = await res.json();
+      setEntries(data);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const term = debouncedSearch.trim();
+
+    // Cancelar petición anterior si el usuario escribe rápido
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setError(null);
+    setIsFetching(true);
+
+    loadCatalog(term, controller.signal)
+      .catch((err: unknown) => {
+        // Ignorar errores de cancelación (cuando el usuario escribe de nuevo)
+        if (err instanceof Error && err.name === "AbortError") return;
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : "Error desconocido");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsFetching(false);
+      });
+
+    // Limpiar al desmontar
+    return () => controller.abort();
+  }, [debouncedSearch, loadCatalog]);
 
   const handleDelete = async (id: number) => {
     const previous = entries ?? [];
@@ -54,7 +123,9 @@ export default function AdminCatalogPage() {
         method: "DELETE",
       });
       if (!res.ok) {
-        throw new Error(`No se pudo eliminar la entrada (status ${res.status})`);
+        throw new Error(
+          `No se pudo eliminar la entrada (status ${res.status})`,
+        );
       }
       await new Promise((r) => setTimeout(r, 400));
       setEntries(previous.filter((entry) => entry.id !== id));
@@ -71,9 +142,23 @@ export default function AdminCatalogPage() {
     );
   };
 
+  // Determinar si estamos en modo búsqueda para el mensaje de vacío
+  const isSearchMode = debouncedSearch.trim() !== "";
+
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-sabbi-neutral-900">Catálogo</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-lg font-semibold text-sabbi-neutral-900">
+          Catálogo
+        </h1>
+        <div className="w-full sm:w-80">
+          <CatalogSearch
+            value={searchInput}
+            onChange={setSearchInput}
+            isLoading={isFetching || isDebouncing}
+          />
+        </div>
+      </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -81,7 +166,9 @@ export default function AdminCatalogPage() {
         <p className="text-sm text-sabbi-neutral-600">Cargando…</p>
       ) : entries && entries.length === 0 ? (
         <p className="text-sm text-sabbi-neutral-600">
-          No hay entradas en el catálogo.
+          {isSearchMode
+            ? "No se encontraron productos."
+            : "No hay entradas en el catálogo."}
         </p>
       ) : (
         entries && (
@@ -93,7 +180,10 @@ export default function AdminCatalogPage() {
                     Nombre
                   </th>
                   {CATALOG_COLUMNS.map((column) => (
-                    <th key={column.key} className="px-4 py-2 whitespace-nowrap">
+                    <th
+                      key={column.key}
+                      className="px-4 py-2 whitespace-nowrap"
+                    >
                       {column.label}
                     </th>
                   ))}
@@ -121,7 +211,13 @@ export default function AdminCatalogPage() {
                       {CATALOG_COLUMNS.map((column) => {
                         const val = entry[column.key];
                         const display = Array.isArray(val)
-                          ? val.map((v) => (typeof v === "object" && v && "name" in v ? `${(v as { name: string; percentage: number }).name} ${(v as { name: string; percentage: number }).percentage}%` : v)).join(", ")
+                          ? val
+                              .map((v) =>
+                                typeof v === "object" && v && "name" in v
+                                  ? `${(v as { name: string; percentage: number }).name} ${(v as { name: string; percentage: number }).percentage}%`
+                                  : v,
+                              )
+                              .join(", ")
                           : val;
                         return (
                           <td
@@ -264,12 +360,22 @@ function EditCatalogModal({
     for (const field of EDITABLE_FIELDS) {
       const val = entry[field.key as keyof CatalogProduct];
       if (
-        (field.key === "underlying" || field.key === "geographic_focus" || field.key === "asset_class") &&
+        (field.key === "underlying" ||
+          field.key === "geographic_focus" ||
+          field.key === "asset_class") &&
         Array.isArray(val)
       ) {
-        initial[field.key] = val.map((v) => (typeof v === "object" && v && "name" in v ? `${(v as { name: string; percentage: number }).name}: ${(v as { name: string; percentage: number }).percentage}%` : String(v))).join("\n");
+        initial[field.key] = val
+          .map((v) =>
+            typeof v === "object" && v && "name" in v
+              ? `${(v as { name: string; percentage: number }).name}: ${(v as { name: string; percentage: number }).percentage}%`
+              : String(v),
+          )
+          .join("\n");
       } else {
-        initial[field.key] = Array.isArray(val) ? val.join("\n") : String(val ?? "");
+        initial[field.key] = Array.isArray(val)
+          ? val.join("\n")
+          : String(val ?? "");
       }
     }
     setForm(initial);
@@ -307,18 +413,27 @@ function EditCatalogModal({
           field.key === "geographic_focus" ||
           field.key === "asset_class"
         ) {
-          const lines = (form[field.key] ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+          const lines = (form[field.key] ?? "")
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean);
           const current = lines.map((line) => {
             const match = line.match(/^(.+?):\s*(\d+(?:\.\d+)?)%?$/);
-            return match ? { name: match[1].trim(), percentage: parseFloat(match[2]) } : { name: line, percentage: 0 };
+            return match
+              ? { name: match[1].trim(), percentage: parseFloat(match[2]) }
+              : { name: line, percentage: 0 };
           });
-          const original = entry[field.key as "underlying" | "geographic_focus" | "asset_class"] ?? [];
+          const original =
+            entry[field.key as "underlying" | "geographic_focus" | "asset_class"] ??
+            [];
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
         } else {
           const current = form[field.key]?.trim() ?? "";
-          const original = String(entry[field.key as keyof CatalogProduct] ?? "");
+          const original = String(
+            entry[field.key as keyof CatalogProduct] ?? "",
+          );
           if (current !== original) {
             patch[field.key] = current;
           }
@@ -328,11 +443,14 @@ function EditCatalogModal({
         onClose();
         return;
       }
-      const res = await fetchWithAuth(`/api/admin/catalog/entries/${entry.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
+      const res = await fetchWithAuth(
+        `/api/admin/catalog/entries/${entry.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        },
+      );
       if (!res.ok) {
         throw new Error(`No se pudo actualizar (status ${res.status})`);
       }
@@ -438,7 +556,10 @@ function EditCatalogModal({
 const modalInputClass =
   "rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
 
-const ModalField: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+const ModalField: FC<{ label: string; children: ReactNode }> = ({
+  label,
+  children,
+}) => (
   <label className="flex flex-col gap-1 text-sm">
     <span className="text-xs font-medium text-sabbi-neutral-700">{label}</span>
     {children}
