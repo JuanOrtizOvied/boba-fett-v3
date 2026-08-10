@@ -86,6 +86,18 @@ _REJECTION_MESSAGES: dict[str, str] = {
 }
 
 
+_ATTACHMENT_CONTENT_TYPES = ("image_url", "image", "document", "file")
+
+
+def _has_attachment(message: HumanMessage) -> bool:
+    if isinstance(message.content, str):
+        return False
+    return any(
+        isinstance(block, dict) and block.get("type") in _ATTACHMENT_CONTENT_TYPES
+        for block in message.content
+    )
+
+
 def _extract_text(message: HumanMessage) -> str:
     if isinstance(message.content, str):
         return message.content
@@ -118,8 +130,9 @@ async def guardrail_node(state: AgentState) -> dict:
         return {"messages": []}
 
     text = _extract_text(last_human)
+    has_file = _has_attachment(last_human)
 
-    if not text.strip():
+    if not text.strip() and not has_file:
         return {"messages": []}
 
     if len(text) > MAX_INPUT_LENGTH:
@@ -127,6 +140,9 @@ async def guardrail_node(state: AgentState) -> dict:
 
     if _injection_re.search(text):
         return {"messages": [AIMessage(content=_REJECTION_MESSAGES["prompt_injection"])]}
+
+    if has_file:
+        return {"messages": []}
 
     category = await _classify(text)
     if category in _REJECTION_MESSAGES:

@@ -427,6 +427,103 @@ async def create_snapshot(
         return {"status": "error", "message": str(e)}
 
 
+@tool
+async def analyze_portfolio_drift(
+    targets: list[dict[str, Any]],
+    rebalancing_band: float = 5.0,
+    *,
+    config: RunnableConfig,
+) -> dict:
+    """Analyze how far the current portfolio drifts from target allocations.
+
+    Returns a per-asset-class drift table, flags positions outside the
+    rebalancing band, and suggests illustrative trades to close the gap.
+    The investor makes the final decision — this is analysis, not advice.
+
+    Args:
+        targets: Target allocation as a list of
+            {"asset_class": "<canonical_key>", "percentage": <target_%>}.
+            Percentages MUST sum to 100. Use canonical keys from ASSET_CLASSES
+            (inversiones_directas, mercados_privados, club_deals,
+            mercados_publicos, otros, cash_y_equivalentes).
+        rebalancing_band: Maximum acceptable drift in percentage points
+            before flagging an asset class as out of balance. Default 5.0.
+    """
+    repo = await _repository()
+    user_id = _user_id(config)
+    products = await repo.list_by_user(user_id)
+
+    if not products:
+        return {"status": "empty", "message": "Portfolio has no products"}
+
+    total = sum(p.amount for p in products)
+    if total == 0:
+        return {"status": "empty", "message": "Portfolio total is zero"}
+
+    target_map: dict[str, float] = {
+        t["asset_class"]: t["percentage"] for t in targets
+    }
+    target_sum = sum(target_map.values())
+    if abs(target_sum - 100) > 0.5:
+        return {
+            "status": "error",
+            "message": f"Target percentages sum to {target_sum}%, must be 100%",
+        }
+
+    current_amounts: dict[str, float] = {}
+    for product in products:
+        for alloc in product.asset_class:
+            ac = alloc.name or "otros"
+            current_amounts[ac] = current_amounts.get(ac, 0) + (
+                product.amount * alloc.percentage / 100
+            )
+
+    all_classes = set(target_map.keys()) | set(current_amounts.keys())
+
+    drift_table = []
+    out_of_band = []
+    for ac in sorted(all_classes):
+        current_pct = (current_amounts.get(ac, 0) / total) * 100
+        target_pct = target_map.get(ac, 0)
+        drift = current_pct - target_pct
+        current_amt = current_amounts.get(ac, 0)
+        target_amt = total * target_pct / 100
+        entry = {
+            "asset_class": ac,
+            "label": _KEY_TO_LABEL.get(ac, ac),
+            "current_pct": round(current_pct, 1),
+            "target_pct": round(target_pct, 1),
+            "drift_pct": round(drift, 1),
+            "current_amount": round(current_amt, 2),
+            "target_amount": round(target_amt, 2),
+            "delta_amount": round(current_amt - target_amt, 2),
+        }
+        drift_table.append(entry)
+        if abs(drift) > rebalancing_band:
+            out_of_band.append(entry)
+
+    suggestions = []
+    for entry in out_of_band:
+        action = "reduce" if entry["drift_pct"] > 0 else "increase"
+        suggestions.append({
+            "asset_class": entry["asset_class"],
+            "label": entry["label"],
+            "action": action,
+            "amount": abs(entry["delta_amount"]),
+            "from_pct": entry["current_pct"],
+            "to_pct": entry["target_pct"],
+        })
+
+    return {
+        "status": "analyzed",
+        "total_portfolio": round(total, 2),
+        "rebalancing_band": rebalancing_band,
+        "drift_table": drift_table,
+        "out_of_band_count": len(out_of_band),
+        "suggestions": suggestions,
+    }
+
+
 portfolio_tools = [
     search_product,
     propose_product,
@@ -434,5 +531,6 @@ portfolio_tools = [
     update_product,
     delete_product,
     get_portfolio_summary,
+    analyze_portfolio_drift,
     create_snapshot,
 ]

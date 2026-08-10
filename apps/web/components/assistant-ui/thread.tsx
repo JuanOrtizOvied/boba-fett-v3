@@ -33,6 +33,7 @@ import {
   useAuiState,
   useComposer,
   useComposerRuntime,
+  useMessage,
   useThreadRuntime,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
@@ -1403,6 +1404,37 @@ const ReasoningPart: FC<ReasoningMessagePartProps> = ({ text, status }) => {
   );
 };
 
+const AssistantMessageActionBar: FC = () => {
+  const messages = useAuiState((s) => s.thread.messages);
+  const message = useMessage();
+
+  const isLastConsecutiveAssistant = useMemo(() => {
+    const idx = message.index;
+    const next = messages[idx + 1];
+    return !next || next.role !== "assistant";
+  }, [message.index, messages]);
+
+  if (!isLastConsecutiveAssistant) return null;
+
+  return (
+    <div className="flex items-center gap-1">
+      <MessageTimestamp />
+      <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
+        <ActionBarPrimitive.Copy asChild>
+          <button type="button" className={messageActionBtn} title="Copiar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </ActionBarPrimitive.Copy>
+        <ActionBarPrimitive.Reload asChild>
+          <button type="button" className={messageActionBtn} title="Reintentar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </ActionBarPrimitive.Reload>
+      </ActionBarPrimitive.Root>
+    </div>
+  );
+};
+
 const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="group/msg mr-auto flex w-full min-w-0 flex-col items-start gap-1">
@@ -1438,21 +1470,7 @@ const AssistantMessage: FC = () => {
           </ErrorPrimitive.Root>
         </MessagePrimitive.Error>
       </div>
-      <div className="flex items-center gap-1">
-        <MessageTimestamp />
-        <ActionBarPrimitive.Root className="flex gap-0.5 opacity-100">
-          <ActionBarPrimitive.Copy asChild>
-            <button type="button" className={messageActionBtn} title="Copiar">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-          </ActionBarPrimitive.Copy>
-          <ActionBarPrimitive.Reload asChild>
-            <button type="button" className={messageActionBtn} title="Reintentar">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            </button>
-          </ActionBarPrimitive.Reload>
-        </ActionBarPrimitive.Root>
-      </div>
+      <AssistantMessageActionBar />
     </MessagePrimitive.Root>
   );
 };

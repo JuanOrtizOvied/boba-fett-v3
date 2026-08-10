@@ -13,10 +13,10 @@ import asyncio
 from unittest.mock import AsyncMock
 
 
-def test_portfolio_tools_exports_seven_tools():
+def test_portfolio_tools_exports_eight_tools():
     from agent.tools import portfolio_tools
 
-    assert len(portfolio_tools) == 7
+    assert len(portfolio_tools) == 8
     names = {t.name for t in portfolio_tools}
     assert names == {
         "search_product",
@@ -25,6 +25,7 @@ def test_portfolio_tools_exports_seven_tools():
         "update_product",
         "delete_product",
         "get_portfolio_summary",
+        "analyze_portfolio_drift",
         "create_snapshot",
     }
 
@@ -363,3 +364,130 @@ def test_derive_card_tag_directly():
     assert _derive_card_tag({"name": "catalog", "commission": "claude_knowledge"}) == "verified"
     assert _derive_card_tag({"name": "web_search"}) == "web"
     assert _derive_card_tag({"name": "claude_knowledge"}) == "unverified"
+
+
+# --- analyze_portfolio_drift ------------------------------------------------
+
+
+def test_analyze_portfolio_drift_schema():
+    from agent.tools import analyze_portfolio_drift
+
+    assert analyze_portfolio_drift.name == "analyze_portfolio_drift"
+    assert analyze_portfolio_drift.description
+    args = analyze_portfolio_drift.args
+    assert "targets" in args
+    assert "rebalancing_band" in args
+    assert args["rebalancing_band"].get("default") == 5.0
+    assert "config" not in args
+
+
+def test_analyze_portfolio_drift_returns_drift_table(monkeypatch):
+    import agent.tools as tools_module
+    from db.models import AssetAllocation, Product
+
+    products = [
+        Product(
+            id="prod_1",
+            user_id="usr_1",
+            name="Fund A",
+            provider="Provider A",
+            amount=70_000,
+            underlying=[],
+            asset_class=[AssetAllocation(name="mercados_publicos", percentage=100)],
+        ),
+        Product(
+            id="prod_2",
+            user_id="usr_1",
+            name="Fund B",
+            provider="Provider B",
+            amount=30_000,
+            underlying=[],
+            asset_class=[AssetAllocation(name="mercados_privados", percentage=100)],
+        ),
+    ]
+
+    fake_repo = AsyncMock()
+    fake_repo.list_by_user = AsyncMock(return_value=products)
+    monkeypatch.setattr(tools_module, "_repository", AsyncMock(return_value=fake_repo))
+
+    result = asyncio.run(
+        tools_module.analyze_portfolio_drift.ainvoke(
+            {
+                "targets": [
+                    {"asset_class": "mercados_publicos", "percentage": 50},
+                    {"asset_class": "mercados_privados", "percentage": 50},
+                ],
+            },
+            config={"configurable": {"user_id": "usr_1"}},
+        )
+    )
+
+    assert result["status"] == "analyzed"
+    assert result["total_portfolio"] == 100_000
+    assert result["out_of_band_count"] == 2
+
+    drift_by_ac = {d["asset_class"]: d for d in result["drift_table"]}
+    assert drift_by_ac["mercados_publicos"]["drift_pct"] == 20.0
+    assert drift_by_ac["mercados_privados"]["drift_pct"] == -20.0
+
+    assert len(result["suggestions"]) == 2
+    actions = {s["asset_class"]: s["action"] for s in result["suggestions"]}
+    assert actions["mercados_publicos"] == "reduce"
+    assert actions["mercados_privados"] == "increase"
+
+
+def test_analyze_portfolio_drift_empty_portfolio(monkeypatch):
+    import agent.tools as tools_module
+
+    fake_repo = AsyncMock()
+    fake_repo.list_by_user = AsyncMock(return_value=[])
+    monkeypatch.setattr(tools_module, "_repository", AsyncMock(return_value=fake_repo))
+
+    result = asyncio.run(
+        tools_module.analyze_portfolio_drift.ainvoke(
+            {
+                "targets": [
+                    {"asset_class": "mercados_publicos", "percentage": 100},
+                ],
+            },
+            config={"configurable": {"user_id": "usr_1"}},
+        )
+    )
+
+    assert result["status"] == "empty"
+
+
+def test_analyze_portfolio_drift_rejects_bad_targets(monkeypatch):
+    import agent.tools as tools_module
+    from db.models import AssetAllocation, Product
+
+    products = [
+        Product(
+            id="prod_1",
+            user_id="usr_1",
+            name="Fund A",
+            provider="",
+            amount=10_000,
+            underlying=[],
+            asset_class=[AssetAllocation(name="otros", percentage=100)],
+        ),
+    ]
+
+    fake_repo = AsyncMock()
+    fake_repo.list_by_user = AsyncMock(return_value=products)
+    monkeypatch.setattr(tools_module, "_repository", AsyncMock(return_value=fake_repo))
+
+    result = asyncio.run(
+        tools_module.analyze_portfolio_drift.ainvoke(
+            {
+                "targets": [
+                    {"asset_class": "mercados_publicos", "percentage": 60},
+                    {"asset_class": "mercados_privados", "percentage": 60},
+                ],
+            },
+            config={"configurable": {"user_id": "usr_1"}},
+        )
+    )
+
+    assert result["status"] == "error"
+    assert "120" in result["message"]

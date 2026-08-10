@@ -41,8 +41,11 @@ Extrae TODOS los productos de inversión que encuentres. Para cada producto iden
   club_deals, mercados_publicos, otros, cash_y_equivalentes)
 - underlying (distribución por asset class) si está disponible
 
-Presenta los productos encontrados en una lista clara y luego usa la tool
-`add_product` para agregar cada uno al portafolio del usuario."""
+Para CADA producto extraído, llama `search_product` con el nombre del
+producto para enriquecer sus datos, y luego llama `propose_product` con los
+datos del documento combinados con el enriquecimiento de `search_product`.
+NO uses `add_product` directamente — sigue el flujo estándar de las
+instrucciones del sistema."""
 
 
 def _has_attachment(message: object) -> bool:
