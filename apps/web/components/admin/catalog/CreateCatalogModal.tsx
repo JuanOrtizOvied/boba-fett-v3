@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { XIcon } from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { CatalogProduct } from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
 
 // --- Shared UI Constants (Mirrored from EditCatalogModal) ---
@@ -45,7 +44,7 @@ export default function CreateCatalogModal({
   onSaved,
 }: {
   onClose: () => void;
-  onSaved: () => void; 
+  onSaved: () => Promise<void>;
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState<Record<string, string>>(INITIAL_FORM_STATE);
@@ -67,7 +66,7 @@ export default function CreateCatalogModal({
     setIsSubmitting(true);
 
     try {
-      const patch: Record<string, any> = {};
+      const patch: Record<string, unknown> = {};
 
       for (const field of EDITABLE_FIELDS) {
         const value = form[field.key] ?? "";
@@ -92,7 +91,7 @@ export default function CreateCatalogModal({
               throw new Error(`Clase de activo debe contener al menos una asignación.`);
             }
             // For underlying/geographic_focus, we simply skip them if empty
-            continue; 
+            continue;
           } else {
             const parsedLines = lines.map((line) => {
               // Regex now requires the % sign as per blueprint
@@ -101,7 +100,7 @@ export default function CreateCatalogModal({
                 throw new Error(`Error de formato en ${field.label}: "${line}". Use el formato "Nombre: 50%".`);
               }
               const percentage = parseFloat(match[2]);
-              
+
               if (percentage < 0 || percentage > 100) {
                 throw new Error(`${field.label}: el porcentaje debe estar entre 0% y 100%.`);
               }
@@ -142,14 +141,16 @@ export default function CreateCatalogModal({
         }
         throw new Error(`No se pudo crear el producto (status ${res.status})`);
       }
+      await onSaved();
 
-      onSaved(); // Trigger refetch in page.tsx
+      toast("Producto creado con éxito.", "success");
+
       onClose();
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Error desconocido");
-    } finally {
-      setIsSubmitting(false);
-    }
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : "Error desconocido");
+      } finally {
+        setIsSubmitting(false);
+      }
   };
 
   const updateField = (key: string, value: string) =>
