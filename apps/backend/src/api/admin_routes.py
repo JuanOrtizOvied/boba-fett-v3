@@ -175,6 +175,22 @@ async def list_catalog_entries(
     entries = await catalog_repo.get_catalog(search_term, limit, offset)
     return entries#[e.model_dump() for e in entries]
 
+@router.post("/catalog/create", status_code=201)
+async def create_catalog_entry(
+    data: CatalogProductCreate,
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> dict:
+    """Create a new product catalog entry.
+
+    Validates uniqueness of Name + Asset Class.
+    Returns 409 Conflict if a duplicate exists.
+    """
+    entry = await catalog_repo.insert_if_not_duplicate(data)
+    if entry is None:
+        raise HTTPException(status_code=409, detail="A matching catalog entry already exists")
+
+    return entry.model_dump()
+
 
 @router.post("/catalog/approve", status_code=201)
 async def approve_to_catalog(
