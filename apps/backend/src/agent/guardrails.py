@@ -50,6 +50,12 @@ _injection_re = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
 _CLASSIFICATION_PROMPT = """\
 Classify this user message for a Spanish-language investment portfolio assistant.
 
+IMPORTANT: Fund and product names can be creative, unusual, or even humorous \
+(e.g. "Fondo Cobra Achorada", "Flip Capital Agresivo"). A strange-sounding name \
+does NOT make a message off-topic. If the message mentions money amounts, funds, \
+portfolios, or investment products — regardless of how the name sounds — classify \
+as allowed.
+
 Categories (respond with ONLY the category name):
 - allowed: investments, portfolio, financial products, greetings, thanks, \
 help requests, farewells, or any conversational message related to using \
