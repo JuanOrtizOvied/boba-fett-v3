@@ -23,6 +23,7 @@ import {
   ASSET_CLASS_OPTIONS,
   CURRENCY_OPTIONS,
   GEOGRAPHIC_FOCUS_OPTIONS,
+  MANAGER_OPTIONS,
   UNDERLYING_OPTIONS,
 } from "@/lib/catalogOptions";
 
@@ -393,6 +394,60 @@ function isAllocationInvalid(rows: AssetAllocation[]): boolean {
   return rows.length > 0 && Math.abs(allocationSum(rows) - 100) >= 0.5;
 }
 
+/**
+ * Open-vocabulary field: a <select> of reference names (plus the current
+ * value as an extra option when it's a legacy/free-text value not in the
+ * list) with an always-visible "add new" text input below it. Unlike
+ * AllocationListField's fields, nothing here is enforced on the backend —
+ * `options` is UI-only reference data.
+ *
+ * Pass `key={entry.id}` from the caller so the draft input resets when a
+ * different catalog entry is loaded.
+ */
+function OpenVocabularyField({
+  options,
+  value,
+  onChange,
+  addPlaceholder,
+}: {
+  options: readonly string[];
+  value: string;
+  onChange: (next: string) => void;
+  addPlaceholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <select
+        value={value}
+        onChange={(e) => {
+          setDraft("");
+          onChange(e.target.value);
+        }}
+        className={modalInputClass}
+      >
+        <option value="">—</option>
+        {value && !options.includes(value) && <option value={value}>{value}</option>}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      <input
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          onChange(e.target.value);
+        }}
+        placeholder={addPlaceholder}
+        className={modalInputClass}
+      />
+    </div>
+  );
+}
+
 function EditCatalogModal({
   entry,
   onClose,
@@ -406,7 +461,6 @@ function EditCatalogModal({
   const [geographicFocus, setGeographicFocus] = useState<AssetAllocation[]>([]);
   const [assetClass, setAssetClass] = useState<AssetAllocation[]>([]);
   const [underlying, setUnderlying] = useState<AssetAllocation[]>([]);
-  const [administratorDraft, setAdministratorDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -429,7 +483,6 @@ function EditCatalogModal({
     setGeographicFocus(entry.geographic_focus ?? []);
     setAssetClass(entry.asset_class ?? []);
     setUnderlying(entry.underlying ?? []);
-    setAdministratorDraft("");
     setErrorMessage(null);
   }, [entry]);
 
@@ -641,36 +694,23 @@ function EditCatalogModal({
               </ModalField>
             ) : field.key === "administrator" ? (
               <ModalField key={field.key} label={field.label}>
-                <div className="flex flex-col gap-1.5">
-                  <select
-                    value={form[field.key] ?? ""}
-                    onChange={(e) => {
-                      setAdministratorDraft("");
-                      updateField(field.key, e.target.value);
-                    }}
-                    className={modalInputClass}
-                  >
-                    <option value="">—</option>
-                    {form[field.key] &&
-                      !(ADMINISTRATOR_OPTIONS as readonly string[]).includes(
-                        form[field.key],
-                      ) && <option value={form[field.key]}>{form[field.key]}</option>}
-                    {ADMINISTRATOR_OPTIONS.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={administratorDraft}
-                    onChange={(e) => {
-                      setAdministratorDraft(e.target.value);
-                      updateField(field.key, e.target.value);
-                    }}
-                    placeholder="+ Agregar administrador"
-                    className={modalInputClass}
-                  />
-                </div>
+                <OpenVocabularyField
+                  key={entry.id}
+                  options={ADMINISTRATOR_OPTIONS}
+                  value={form[field.key] ?? ""}
+                  onChange={(v) => updateField(field.key, v)}
+                  addPlaceholder="+ Agregar administrador"
+                />
+              </ModalField>
+            ) : field.key === "manager" ? (
+              <ModalField key={field.key} label={field.label}>
+                <OpenVocabularyField
+                  key={entry.id}
+                  options={MANAGER_OPTIONS}
+                  value={form[field.key] ?? ""}
+                  onChange={(v) => updateField(field.key, v)}
+                  addPlaceholder="+ Agregar gestor"
+                />
               </ModalField>
             ) : (
               <ModalField key={field.key} label={field.label}>
