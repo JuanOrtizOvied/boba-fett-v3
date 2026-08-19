@@ -10,3 +10,12 @@ export const GEOGRAPHIC_FOCUS_OPTIONS = [
   "Latam ex-Perú",
   "Perú",
 ] as const;
+
+export const ASSET_CLASS_OPTIONS = [
+  "Inmobiliario Directo",
+  "Mercados Publicos - Fijo",
+  "Mercados Publicos - Variable",
+  "Mercados Privados",
+  "Club deals",
+  "Cash y Otros",
+] as const;

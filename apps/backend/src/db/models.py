@@ -70,6 +70,31 @@ def _check_geographic_focus(allocations: list[AssetAllocation]) -> None:
     _check_allocation_sum(allocations, "Foco geográfico")
 
 
+ASSET_CLASS_OPTIONS = [
+    "Inmobiliario Directo",
+    "Mercados Publicos - Fijo",
+    "Mercados Publicos - Variable",
+    "Mercados Privados",
+    "Club deals",
+    "Cash y Otros",
+]
+
+
+def _check_asset_class(allocations: list[AssetAllocation]) -> None:
+    """Enforces the closed vocabulary for `product_catalog.asset_class`
+    going forward (same rules as `_check_geographic_focus`, mirrored for
+    the catalog edit modal's "Clase de activo" field). Pre-existing rows
+    with legacy free-text names are untouched since this only runs when
+    `asset_class` is included in the request."""
+    names = [a.name for a in allocations]
+    invalid = sorted(set(names) - set(ASSET_CLASS_OPTIONS))
+    if invalid:
+        raise ValueError(f"Clase(s) de activo inválida(s): {', '.join(invalid)}")
+    if len(names) != len(set(names)):
+        raise ValueError("No se permiten clases de activo duplicadas")
+    _check_allocation_sum(allocations, "Clase de activo")
+
+
 class ProductCreate(BaseModel):
     name: str
     provider: str = ""
@@ -186,6 +211,12 @@ class CatalogProductUpdate(BaseModel):
     def _validate_geographic_focus(self) -> CatalogProductUpdate:
         if self.geographic_focus is not None:
             _check_geographic_focus(self.geographic_focus)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_asset_class(self) -> CatalogProductUpdate:
+        if self.asset_class is not None:
+            _check_asset_class(self.asset_class)
         return self
 
 

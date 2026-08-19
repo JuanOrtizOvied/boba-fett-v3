@@ -18,7 +18,7 @@ import { useUrlSearch } from "@/hooks/useUrlSearch";
 import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
 import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
-import { GEOGRAPHIC_FOCUS_OPTIONS } from "@/lib/catalogOptions";
+import { ASSET_CLASS_OPTIONS, GEOGRAPHIC_FOCUS_OPTIONS } from "@/lib/catalogOptions";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "alternative_names", label: "Nombres alternativos" },
@@ -379,6 +379,14 @@ const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: "return_rate", label: "Rendimiento" },
 ];
 
+function allocationSum(rows: AssetAllocation[]): number {
+  return rows.reduce((sum, a) => sum + (a.percentage || 0), 0);
+}
+
+function isAllocationInvalid(rows: AssetAllocation[]): boolean {
+  return rows.length > 0 && Math.abs(allocationSum(rows) - 100) >= 0.5;
+}
+
 function EditCatalogModal({
   entry,
   onClose,
@@ -390,6 +398,7 @@ function EditCatalogModal({
 }) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [geographicFocus, setGeographicFocus] = useState<AssetAllocation[]>([]);
+  const [assetClass, setAssetClass] = useState<AssetAllocation[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -397,12 +406,9 @@ function EditCatalogModal({
     if (!entry) return;
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
-      if (field.key === "geographic_focus") continue;
+      if (field.key === "geographic_focus" || field.key === "asset_class") continue;
       const val = entry[field.key as keyof CatalogProduct];
-      if (
-        (field.key === "underlying" || field.key === "asset_class") &&
-        Array.isArray(val)
-      ) {
+      if (field.key === "underlying" && Array.isArray(val)) {
         initial[field.key] = val
           .map((v) =>
             typeof v === "object" && v && "name" in v
@@ -418,6 +424,7 @@ function EditCatalogModal({
     }
     setForm(initial);
     setGeographicFocus(entry.geographic_focus ?? []);
+    setAssetClass(entry.asset_class ?? []);
     setErrorMessage(null);
   }, [entry]);
 
@@ -432,22 +439,33 @@ function EditCatalogModal({
 
   if (!entry) return null;
 
-  const geoTotal = geographicFocus.reduce((sum, a) => sum + (a.percentage || 0), 0);
-  const geoInvalid = geographicFocus.length > 0 && Math.abs(geoTotal - 100) >= 0.5;
+  const geoTotal = allocationSum(geographicFocus);
+  const geoInvalid = isAllocationInvalid(geographicFocus);
+  const assetClassTotal = allocationSum(assetClass);
+  const assetClassInvalid = isAllocationInvalid(assetClass);
 
   const handleSave = async () => {
     setErrorMessage(null);
+    const invalidMessages: string[] = [];
     if (geoInvalid) {
-      setErrorMessage(
-        `El foco geográfico debe sumar 100% (actual: ${geoTotal.toFixed(1)}%)`,
+      invalidMessages.push(
+        `Foco geográfico debe sumar 100% (actual: ${geoTotal.toFixed(1)}%)`,
       );
+    }
+    if (assetClassInvalid) {
+      invalidMessages.push(
+        `Clase de activo debe sumar 100% (actual: ${assetClassTotal.toFixed(1)}%)`,
+      );
+    }
+    if (invalidMessages.length > 0) {
+      setErrorMessage(invalidMessages.join(" · "));
       return;
     }
     setIsSubmitting(true);
     try {
       const patch: Record<string, unknown> = {};
       for (const field of EDITABLE_FIELDS) {
-        if (field.key === "geographic_focus") continue;
+        if (field.key === "geographic_focus" || field.key === "asset_class") continue;
         if (field.key === "alternative_names") {
           const current = (form[field.key] ?? "")
             .split("\n")
@@ -457,7 +475,7 @@ function EditCatalogModal({
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
-        } else if (field.key === "underlying" || field.key === "asset_class") {
+        } else if (field.key === "underlying") {
           const lines = (form[field.key] ?? "")
             .split("\n")
             .map((s) => s.trim())
@@ -468,7 +486,7 @@ function EditCatalogModal({
               ? { name: match[1].trim(), percentage: parseFloat(match[2]) }
               : { name: line, percentage: 0 };
           });
-          const original = entry[field.key as "underlying" | "asset_class"] ?? [];
+          const original = entry.underlying ?? [];
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
@@ -486,6 +504,11 @@ function EditCatalogModal({
       const geoOriginal = (entry.geographic_focus ?? []) as AssetAllocation[];
       if (JSON.stringify(geographicFocus) !== JSON.stringify(geoOriginal)) {
         patch.geographic_focus = geographicFocus;
+      }
+
+      const assetClassOriginal = (entry.asset_class ?? []) as AssetAllocation[];
+      if (JSON.stringify(assetClass) !== JSON.stringify(assetClassOriginal)) {
+        patch.asset_class = assetClass;
       }
 
       if (Object.keys(patch).length === 0) {
@@ -559,38 +582,46 @@ function EditCatalogModal({
         </div>
 
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
-          {EDITABLE_FIELDS.filter((field) => field.key !== "geographic_focus").map(
-            (field) =>
-              field.key === "alternative_names" ? (
-                <ModalField key={field.key} label={field.label}>
-                  <textarea
-                    rows={3}
-                    placeholder="One name per line"
-                    value={form[field.key] ?? ""}
-                    onChange={(e) => updateField(field.key, e.target.value)}
-                    className={modalInputClass + " resize-y"}
-                  />
-                </ModalField>
-              ) : field.key === "underlying" || field.key === "asset_class" ? (
-                <ModalField key={field.key} label={field.label}>
-                  <textarea
-                    rows={3}
-                    placeholder="Name: percentage% (one per line)"
-                    value={form[field.key] ?? ""}
-                    onChange={(e) => updateField(field.key, e.target.value)}
-                    className={modalInputClass + " resize-y"}
-                  />
-                </ModalField>
-              ) : (
-                <ModalField key={field.key} label={field.label}>
-                  <input
-                    value={form[field.key] ?? ""}
-                    onChange={(e) => updateField(field.key, e.target.value)}
-                    className={modalInputClass}
-                  />
-                </ModalField>
-              ),
+          {EDITABLE_FIELDS.filter(
+            (field) => field.key !== "geographic_focus" && field.key !== "asset_class",
+          ).map((field) =>
+            field.key === "alternative_names" ? (
+              <ModalField key={field.key} label={field.label}>
+                <textarea
+                  rows={3}
+                  placeholder="One name per line"
+                  value={form[field.key] ?? ""}
+                  onChange={(e) => updateField(field.key, e.target.value)}
+                  className={modalInputClass + " resize-y"}
+                />
+              </ModalField>
+            ) : field.key === "underlying" ? (
+              <ModalField key={field.key} label={field.label}>
+                <textarea
+                  rows={3}
+                  placeholder="Name: percentage% (one per line)"
+                  value={form[field.key] ?? ""}
+                  onChange={(e) => updateField(field.key, e.target.value)}
+                  className={modalInputClass + " resize-y"}
+                />
+              </ModalField>
+            ) : (
+              <ModalField key={field.key} label={field.label}>
+                <input
+                  value={form[field.key] ?? ""}
+                  onChange={(e) => updateField(field.key, e.target.value)}
+                  className={modalInputClass}
+                />
+              </ModalField>
+            ),
           )}
+          <ModalField label="Clase de activo">
+            <AllocationListField
+              options={ASSET_CLASS_OPTIONS}
+              value={assetClass}
+              onChange={setAssetClass}
+            />
+          </ModalField>
           <ModalField label="Foco geográfico">
             <AllocationListField
               options={GEOGRAPHIC_FOCUS_OPTIONS}
@@ -612,7 +643,7 @@ function EditCatalogModal({
             </button>
             <button
               type="button"
-              disabled={isSubmitting || geoInvalid}
+              disabled={isSubmitting || geoInvalid || assetClassInvalid}
               onClick={() => void handleSave()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
             >
