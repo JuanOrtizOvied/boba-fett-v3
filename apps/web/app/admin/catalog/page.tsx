@@ -687,142 +687,160 @@ function EditCatalogModal({
         </div>
 
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
-          {EDITABLE_FIELDS.filter(
-            (field) =>
-              field.key !== "geographic_focus" &&
-              field.key !== "asset_class" &&
-              field.key !== "underlying",
-          ).map((field) =>
-            field.key === "alternative_names" ? (
-              <ModalField key={field.key} label={field.label}>
-                <textarea
-                  rows={3}
-                  placeholder="One name per line"
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass + " resize-y"}
-                />
-              </ModalField>
-            ) : field.key === "commission" ? (
-              <ModalField key={field.key} label={field.label} required>
-                <input
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={
-                    modalInputClass +
-                    (commissionInvalid ? " border-red-400 focus:border-red-500" : "")
-                  }
-                />
-              </ModalField>
-            ) : field.key === "currency" ? (
-              <ModalField key={field.key} label={field.label}>
-                <select
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass}
-                >
-                  <option value="">—</option>
-                  {form[field.key] &&
-                    !(CURRENCY_OPTIONS as readonly string[]).includes(form[field.key]) && (
-                      <option value={form[field.key]}>{form[field.key]}</option>
-                    )}
-                  {CURRENCY_OPTIONS.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </ModalField>
-            ) : field.key === "administrator" ? (
-              <ModalField key={field.key} label={field.label}>
-                <OpenVocabularyField
-                  key={entry.id}
-                  options={ADMINISTRATOR_OPTIONS}
-                  value={form[field.key] ?? ""}
-                  onChange={(v) => updateField(field.key, v)}
-                  addPlaceholder="+ Agregar administrador"
-                />
-              </ModalField>
-            ) : field.key === "manager" ? (
-              <ModalField key={field.key} label={field.label}>
-                <OpenVocabularyField
-                  key={entry.id}
-                  options={MANAGER_OPTIONS}
-                  value={form[field.key] ?? ""}
-                  onChange={(v) => updateField(field.key, v)}
-                  addPlaceholder="+ Agregar gestor"
-                />
-              </ModalField>
-            ) : field.key === "return_rate" ? (
-              <ModalField key={field.key} label={field.label}>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-sabbi-neutral-500">min</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={returnRateMin}
-                    onChange={(e) => setReturnRateMin(e.target.value)}
-                    className={
-                      modalInputClass +
-                      " w-0 min-w-0 flex-1" +
-                      (returnRateIncomplete || returnRateOrderInvalid
-                        ? " border-red-400 focus:border-red-500"
-                        : "")
-                    }
-                  />
-                  <span className="text-sm text-sabbi-neutral-500">%</span>
-                  <span className="text-sabbi-neutral-400">-</span>
-                  <span className="text-xs text-sabbi-neutral-500">max</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={returnRateMax}
-                    onChange={(e) => setReturnRateMax(e.target.value)}
-                    className={
-                      modalInputClass +
-                      " w-0 min-w-0 flex-1" +
-                      (returnRateIncomplete || returnRateOrderInvalid
-                        ? " border-red-400 focus:border-red-500"
-                        : "")
-                    }
-                  />
-                  <span className="text-sm text-sabbi-neutral-500">%</span>
-                </div>
-              </ModalField>
-            ) : (
-              <ModalField key={field.key} label={field.label}>
-                <input
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass}
-                />
-              </ModalField>
-            ),
-          )}
-          <ModalField label="Clase de activo">
-            <AllocationListField
-              options={ASSET_CLASS_OPTIONS}
-              value={assetClass}
-              onChange={setAssetClass}
-              addLabel="Agregar clase de activo"
-            />
-          </ModalField>
-          <ModalField label="Foco geográfico">
-            <AllocationListField
-              options={GEOGRAPHIC_FOCUS_OPTIONS}
-              value={geographicFocus}
-              onChange={setGeographicFocus}
-              addLabel="Agregar foco geográfico"
-            />
-          </ModalField>
-          <ModalField label="Subyacente">
-            <AllocationListField
-              options={UNDERLYING_OPTIONS}
-              value={underlying}
-              onChange={setUnderlying}
-              addLabel="Agregar subyacente"
-            />
-          </ModalField>
+          {EDITABLE_FIELDS.map(({ key, label }) => {
+            switch (key) {
+              case "alternative_names":
+                return (
+                  <ModalField key={key} label={label}>
+                    <textarea
+                      rows={3}
+                      placeholder="One name per line"
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={modalInputClass + " resize-y"}
+                    />
+                  </ModalField>
+                );
+              case "asset_class":
+                return (
+                  <ModalField key={key} label={label}>
+                    <AllocationListField
+                      options={ASSET_CLASS_OPTIONS}
+                      value={assetClass}
+                      onChange={setAssetClass}
+                      addLabel="Agregar clase de activo"
+                    />
+                  </ModalField>
+                );
+              case "geographic_focus":
+                return (
+                  <ModalField key={key} label={label}>
+                    <AllocationListField
+                      options={GEOGRAPHIC_FOCUS_OPTIONS}
+                      value={geographicFocus}
+                      onChange={setGeographicFocus}
+                      addLabel="Agregar foco geográfico"
+                    />
+                  </ModalField>
+                );
+              case "underlying":
+                return (
+                  <ModalField key={key} label={label}>
+                    <AllocationListField
+                      options={UNDERLYING_OPTIONS}
+                      value={underlying}
+                      onChange={setUnderlying}
+                      addLabel="Agregar subyacente"
+                    />
+                  </ModalField>
+                );
+              case "commission":
+                return (
+                  <ModalField key={key} label={label} required>
+                    <input
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={
+                        modalInputClass +
+                        (commissionInvalid ? " border-red-400 focus:border-red-500" : "")
+                      }
+                    />
+                  </ModalField>
+                );
+              case "currency":
+                return (
+                  <ModalField key={key} label={label}>
+                    <select
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={modalInputClass}
+                    >
+                      <option value="">—</option>
+                      {form[key] && !(CURRENCY_OPTIONS as readonly string[]).includes(form[key]) && (
+                        <option value={form[key]}>{form[key]}</option>
+                      )}
+                      {CURRENCY_OPTIONS.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </ModalField>
+                );
+              case "administrator":
+                return (
+                  <ModalField key={key} label={label}>
+                    <OpenVocabularyField
+                      key={entry.id}
+                      options={ADMINISTRATOR_OPTIONS}
+                      value={form[key] ?? ""}
+                      onChange={(v) => updateField(key, v)}
+                      addPlaceholder="+ Agregar administrador"
+                    />
+                  </ModalField>
+                );
+              case "manager":
+                return (
+                  <ModalField key={key} label={label}>
+                    <OpenVocabularyField
+                      key={entry.id}
+                      options={MANAGER_OPTIONS}
+                      value={form[key] ?? ""}
+                      onChange={(v) => updateField(key, v)}
+                      addPlaceholder="+ Agregar gestor"
+                    />
+                  </ModalField>
+                );
+              case "return_rate":
+                return (
+                  <ModalField key={key} label={label}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-sabbi-neutral-500">min</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={returnRateMin}
+                        onChange={(e) => setReturnRateMin(e.target.value)}
+                        className={
+                          modalInputClass +
+                          " w-0 min-w-0 flex-1" +
+                          (returnRateIncomplete || returnRateOrderInvalid
+                            ? " border-red-400 focus:border-red-500"
+                            : "")
+                        }
+                      />
+                      <span className="text-sm text-sabbi-neutral-500">%</span>
+                      <span className="text-sabbi-neutral-400">-</span>
+                      <span className="text-xs text-sabbi-neutral-500">max</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={returnRateMax}
+                        onChange={(e) => setReturnRateMax(e.target.value)}
+                        className={
+                          modalInputClass +
+                          " w-0 min-w-0 flex-1" +
+                          (returnRateIncomplete || returnRateOrderInvalid
+                            ? " border-red-400 focus:border-red-500"
+                            : "")
+                        }
+                      />
+                      <span className="text-sm text-sabbi-neutral-500">%</span>
+                    </div>
+                  </ModalField>
+                );
+              default:
+                return (
+                  <ModalField key={key} label={label}>
+                    <input
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={modalInputClass}
+                    />
+                  </ModalField>
+                );
+            }
+          })}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">
