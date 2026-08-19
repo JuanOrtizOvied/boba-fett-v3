@@ -37,7 +37,7 @@ const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "administrator", label: "Administrador" },
   { key: "manager", label: "Gestor" },
   { key: "liquidity", label: "Liquidez" },
-  { key: "return_rate", label: "Rendimiento" },
+  { key: "return_rate", label: "Rentabilidad" },
 ];
 
 // Until pagination UI exists, request a high limit to preserve the
@@ -383,7 +383,7 @@ const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: "administrator", label: "Administrador" },
   { key: "manager", label: "Gestor" },
   { key: "liquidity", label: "Liquidez" },
-  { key: "return_rate", label: "Rendimiento" },
+  { key: "return_rate", label: "Rentabilidad" },
 ];
 
 function allocationSum(rows: AssetAllocation[]): number {
@@ -392,6 +392,17 @@ function allocationSum(rows: AssetAllocation[]): number {
 
 function isAllocationInvalid(rows: AssetAllocation[]): boolean {
   return rows.length > 0 && Math.abs(allocationSum(rows) - 100) >= 0.5;
+}
+
+/**
+ * Parses the "min% - max%" return_rate format. Legacy free-text values
+ * (e.g. "8% anual") or an already-empty field fall back to {min: "", max: ""}
+ * so they're left untouched on save instead of being reformatted.
+ */
+function parseReturnRate(raw: string): { min: string; max: string } {
+  const match = raw.trim().match(/^(\d+(?:\.\d+)?)%\s*-\s*(\d+(?:\.\d+)?)%$/);
+  if (!match) return { min: "", max: "" };
+  return { min: match[1], max: match[2] };
 }
 
 /**
@@ -461,6 +472,8 @@ function EditCatalogModal({
   const [geographicFocus, setGeographicFocus] = useState<AssetAllocation[]>([]);
   const [assetClass, setAssetClass] = useState<AssetAllocation[]>([]);
   const [underlying, setUnderlying] = useState<AssetAllocation[]>([]);
+  const [returnRateMin, setReturnRateMin] = useState("");
+  const [returnRateMax, setReturnRateMax] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -471,7 +484,8 @@ function EditCatalogModal({
       if (
         field.key === "geographic_focus" ||
         field.key === "asset_class" ||
-        field.key === "underlying"
+        field.key === "underlying" ||
+        field.key === "return_rate"
       )
         continue;
       const val = entry[field.key as keyof CatalogProduct];
@@ -482,6 +496,9 @@ function EditCatalogModal({
     setForm(initial);
     setGeographicFocus(entry.geographic_focus ?? []);
     setAssetClass(entry.asset_class ?? []);
+    const parsedReturnRate = parseReturnRate(String(entry.return_rate ?? ""));
+    setReturnRateMin(parsedReturnRate.min);
+    setReturnRateMax(parsedReturnRate.max);
     setUnderlying(entry.underlying ?? []);
     setErrorMessage(null);
   }, [entry]);
@@ -504,6 +521,12 @@ function EditCatalogModal({
   const underlyingTotal = allocationSum(underlying);
   const underlyingInvalid = isAllocationInvalid(underlying);
   const commissionInvalid = (form.commission ?? "").trim() === "";
+  const returnRateIncomplete =
+    (returnRateMin === "") !== (returnRateMax === "");
+  const returnRateOrderInvalid =
+    returnRateMin !== "" &&
+    returnRateMax !== "" &&
+    parseFloat(returnRateMin) > parseFloat(returnRateMax);
 
   const handleSave = async () => {
     setErrorMessage(null);
@@ -526,6 +549,12 @@ function EditCatalogModal({
     if (commissionInvalid) {
       invalidMessages.push("La comisión es obligatoria");
     }
+    if (returnRateIncomplete) {
+      invalidMessages.push("Rentabilidad: completa mínimo y máximo, o deja ambos vacíos");
+    }
+    if (returnRateOrderInvalid) {
+      invalidMessages.push("Rentabilidad: el mínimo no puede ser mayor al máximo");
+    }
     if (invalidMessages.length > 0) {
       setErrorMessage(invalidMessages.join(" · "));
       return;
@@ -537,7 +566,8 @@ function EditCatalogModal({
         if (
           field.key === "geographic_focus" ||
           field.key === "asset_class" ||
-          field.key === "underlying"
+          field.key === "underlying" ||
+          field.key === "return_rate"
         )
           continue;
         if (field.key === "alternative_names") {
@@ -573,6 +603,17 @@ function EditCatalogModal({
       const underlyingOriginal = (entry.underlying ?? []) as AssetAllocation[];
       if (JSON.stringify(underlying) !== JSON.stringify(underlyingOriginal)) {
         patch.underlying = underlying;
+      }
+
+      const returnRateOriginal = parseReturnRate(String(entry.return_rate ?? ""));
+      if (
+        returnRateMin !== returnRateOriginal.min ||
+        returnRateMax !== returnRateOriginal.max
+      ) {
+        patch.return_rate =
+          returnRateMin === "" && returnRateMax === ""
+            ? ""
+            : `${returnRateMin}% - ${returnRateMax}%`;
       }
 
       if (Object.keys(patch).length === 0) {
@@ -712,6 +753,42 @@ function EditCatalogModal({
                   addPlaceholder="+ Agregar gestor"
                 />
               </ModalField>
+            ) : field.key === "return_rate" ? (
+              <ModalField key={field.key} label={field.label}>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-sabbi-neutral-500">min</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={returnRateMin}
+                    onChange={(e) => setReturnRateMin(e.target.value)}
+                    className={
+                      modalInputClass +
+                      " w-0 min-w-0 flex-1" +
+                      (returnRateIncomplete || returnRateOrderInvalid
+                        ? " border-red-400 focus:border-red-500"
+                        : "")
+                    }
+                  />
+                  <span className="text-sm text-sabbi-neutral-500">%</span>
+                  <span className="text-sabbi-neutral-400">-</span>
+                  <span className="text-xs text-sabbi-neutral-500">max</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={returnRateMax}
+                    onChange={(e) => setReturnRateMax(e.target.value)}
+                    className={
+                      modalInputClass +
+                      " w-0 min-w-0 flex-1" +
+                      (returnRateIncomplete || returnRateOrderInvalid
+                        ? " border-red-400 focus:border-red-500"
+                        : "")
+                    }
+                  />
+                  <span className="text-sm text-sabbi-neutral-500">%</span>
+                </div>
+              </ModalField>
             ) : (
               <ModalField key={field.key} label={field.label}>
                 <input
@@ -765,7 +842,9 @@ function EditCatalogModal({
                 geoInvalid ||
                 assetClassInvalid ||
                 underlyingInvalid ||
-                commissionInvalid
+                commissionInvalid ||
+                returnRateIncomplete ||
+                returnRateOrderInvalid
               }
               onClick={() => void handleSave()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
