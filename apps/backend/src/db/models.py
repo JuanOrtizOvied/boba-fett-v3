@@ -277,6 +277,12 @@ class CatalogProductUpdate(BaseModel):
             _check_underlying(self.underlying)
         return self
 
+    @model_validator(mode="after")
+    def _validate_commission(self) -> CatalogProductUpdate:
+        if self.commission is not None and self.commission.strip() == "":
+            raise ValueError("La comisión es obligatoria")
+        return self
+
 
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]
 

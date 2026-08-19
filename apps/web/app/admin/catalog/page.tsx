@@ -446,6 +446,7 @@ function EditCatalogModal({
   const assetClassInvalid = isAllocationInvalid(assetClass);
   const underlyingTotal = allocationSum(underlying);
   const underlyingInvalid = isAllocationInvalid(underlying);
+  const commissionInvalid = (form.commission ?? "").trim() === "";
 
   const handleSave = async () => {
     setErrorMessage(null);
@@ -464,6 +465,9 @@ function EditCatalogModal({
       invalidMessages.push(
         `Subyacentes debe sumar 100% (actual: ${underlyingTotal.toFixed(1)}%)`,
       );
+    }
+    if (commissionInvalid) {
+      invalidMessages.push("La comisión es obligatoria");
     }
     if (invalidMessages.length > 0) {
       setErrorMessage(invalidMessages.join(" · "));
@@ -601,6 +605,17 @@ function EditCatalogModal({
                   className={modalInputClass + " resize-y"}
                 />
               </ModalField>
+            ) : field.key === "commission" ? (
+              <ModalField key={field.key} label={field.label} required>
+                <input
+                  value={form[field.key] ?? ""}
+                  onChange={(e) => updateField(field.key, e.target.value)}
+                  className={
+                    modalInputClass +
+                    (commissionInvalid ? " border-red-400 focus:border-red-500" : "")
+                  }
+                />
+              </ModalField>
             ) : (
               <ModalField key={field.key} label={field.label}>
                 <input
@@ -649,7 +664,13 @@ function EditCatalogModal({
             </button>
             <button
               type="button"
-              disabled={isSubmitting || geoInvalid || assetClassInvalid || underlyingInvalid}
+              disabled={
+                isSubmitting ||
+                geoInvalid ||
+                assetClassInvalid ||
+                underlyingInvalid ||
+                commissionInvalid
+              }
               onClick={() => void handleSave()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
             >
@@ -665,12 +686,16 @@ function EditCatalogModal({
 const modalInputClass =
   "rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
 
-const ModalField: FC<{ label: string; children: ReactNode }> = ({
+const ModalField: FC<{ label: string; children: ReactNode; required?: boolean }> = ({
   label,
   children,
+  required,
 }) => (
   <label className="flex flex-col gap-1 text-sm">
-    <span className="text-xs font-medium text-sabbi-neutral-700">{label}</span>
+    <span className="text-xs font-medium text-sabbi-neutral-700">
+      {label}
+      {required && <span className="text-red-600"> *</span>}
+    </span>
     {children}
   </label>
 );
