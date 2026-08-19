@@ -11,6 +11,8 @@ export const GEOGRAPHIC_FOCUS_OPTIONS = [
   "Perú",
 ] as const;
 
+export const CURRENCY_OPTIONS = ["Dólares", "Soles"] as const;
+
 export const ASSET_CLASS_OPTIONS = [
   "Inmobiliario Directo",
   "Mercados Publicos - Fijo",

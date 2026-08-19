@@ -131,6 +131,9 @@ UNDERLYING_OPTIONS = [
 ]
 
 
+CURRENCY_OPTIONS = ["Dólares", "Soles"]
+
+
 def _check_underlying(allocations: list[AssetAllocation]) -> None:
     """Enforces the closed vocabulary for `product_catalog.underlying`
     going forward (same rules as `_check_geographic_focus`/
@@ -281,6 +284,16 @@ class CatalogProductUpdate(BaseModel):
     def _validate_commission(self) -> CatalogProductUpdate:
         if self.commission is not None and self.commission.strip() == "":
             raise ValueError("La comisión es obligatoria")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_currency(self) -> CatalogProductUpdate:
+        if (
+            self.currency is not None
+            and self.currency.strip() != ""
+            and self.currency not in CURRENCY_OPTIONS
+        ):
+            raise ValueError(f"Moneda inválida: {self.currency}")
         return self
 
 

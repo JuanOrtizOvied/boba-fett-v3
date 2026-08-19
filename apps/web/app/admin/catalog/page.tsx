@@ -20,6 +20,7 @@ import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
 import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
 import {
   ASSET_CLASS_OPTIONS,
+  CURRENCY_OPTIONS,
   GEOGRAPHIC_FOCUS_OPTIONS,
   UNDERLYING_OPTIONS,
 } from "@/lib/catalogOptions";
@@ -615,6 +616,25 @@ function EditCatalogModal({
                     (commissionInvalid ? " border-red-400 focus:border-red-500" : "")
                   }
                 />
+              </ModalField>
+            ) : field.key === "currency" ? (
+              <ModalField key={field.key} label={field.label}>
+                <select
+                  value={form[field.key] ?? ""}
+                  onChange={(e) => updateField(field.key, e.target.value)}
+                  className={modalInputClass}
+                >
+                  <option value="">—</option>
+                  {form[field.key] &&
+                    !(CURRENCY_OPTIONS as readonly string[]).includes(form[field.key]) && (
+                      <option value={form[field.key]}>{form[field.key]}</option>
+                    )}
+                  {CURRENCY_OPTIONS.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
               </ModalField>
             ) : (
               <ModalField key={field.key} label={field.label}>
