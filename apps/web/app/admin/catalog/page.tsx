@@ -11,12 +11,14 @@ import {
 } from "react";
 import { EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { CatalogProduct } from "@/lib/portfolio-types";
+import type { AssetAllocation, CatalogProduct } from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useUrlSearch } from "@/hooks/useUrlSearch";
 import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
+import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
+import { GEOGRAPHIC_FOCUS_OPTIONS } from "@/lib/catalogOptions";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "alternative_names", label: "Nombres alternativos" },
@@ -31,13 +33,12 @@ const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "return_rate", label: "Rendimiento" },
 ];
 
-// Hasta que exista UI de paginación, se pide un límite alto para
-// conservar el comportamiento actual de "tabla entera" (el default
-// del backend es 50).
+// Until pagination UI exists, request a high limit to preserve the
+// current "whole table" behavior (the backend default is 50).
 const CATALOG_PAGE_SIZE = 1000;
 
 export default function AdminCatalogPage() {
-  // useUrlSearch → useSearchParams requiere un boundary <Suspense> en App Router.
+  // useUrlSearch → useSearchParams requires a <Suspense> boundary in App Router.
   return (
     <Suspense
       fallback={<p className="text-sm text-sabbi-neutral-600">Cargando…</p>}
@@ -55,7 +56,7 @@ function CatalogPageContent() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<CatalogProduct | null>(null);
 
-  // -- Búsqueda: input ↔ URL ↔ debounce --------------------------------
+  // -- Search: input ↔ URL ↔ debounce --------------------------------
   const [searchInput, setSearchInput] = useUrlSearch("search");
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [isFetching, setIsFetching] = useState(false);
@@ -110,7 +111,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
   useEffect(() => {
     const term = debouncedSearch.trim();
 
-    // Cancelar petición anterior si el usuario escribe rápido
+    // Cancel the previous request if the user types quickly
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -120,7 +121,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
 
     loadCatalog(term, controller.signal)
       .catch((err: unknown) => {
-        // Ignorar errores de cancelación (cuando el usuario escribe de nuevo)
+        // Ignore cancellation errors (when the user types again)
         if (err instanceof Error && err.name === "AbortError") return;
         if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : "Error desconocido");
@@ -130,7 +131,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         if (!controller.signal.aborted) setIsFetching(false);
       });
 
-    // Limpiar al desmontar
+    // Clean up on unmount
     return () => controller.abort();
   }, [debouncedSearch, loadCatalog]);
 
@@ -163,7 +164,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     );
   };
 
-  // Determinar si estamos en modo búsqueda para el mensaje de vacío
+  // Determine whether we're in search mode for the empty-state message
   const isSearchMode = debouncedSearch.trim() !== "";
 
   return (
@@ -388,6 +389,7 @@ function EditCatalogModal({
   onSaved: (updated: CatalogProduct) => void;
 }) {
   const [form, setForm] = useState<Record<string, string>>({});
+  const [geographicFocus, setGeographicFocus] = useState<AssetAllocation[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -395,11 +397,10 @@ function EditCatalogModal({
     if (!entry) return;
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
+      if (field.key === "geographic_focus") continue;
       const val = entry[field.key as keyof CatalogProduct];
       if (
-        (field.key === "underlying" ||
-          field.key === "geographic_focus" ||
-          field.key === "asset_class") &&
+        (field.key === "underlying" || field.key === "asset_class") &&
         Array.isArray(val)
       ) {
         initial[field.key] = val
@@ -416,6 +417,7 @@ function EditCatalogModal({
       }
     }
     setForm(initial);
+    setGeographicFocus(entry.geographic_focus ?? []);
     setErrorMessage(null);
   }, [entry]);
 
@@ -430,12 +432,22 @@ function EditCatalogModal({
 
   if (!entry) return null;
 
+  const geoTotal = geographicFocus.reduce((sum, a) => sum + (a.percentage || 0), 0);
+  const geoInvalid = geographicFocus.length > 0 && Math.abs(geoTotal - 100) >= 0.5;
+
   const handleSave = async () => {
     setErrorMessage(null);
+    if (geoInvalid) {
+      setErrorMessage(
+        `El foco geográfico debe sumar 100% (actual: ${geoTotal.toFixed(1)}%)`,
+      );
+      return;
+    }
     setIsSubmitting(true);
     try {
       const patch: Record<string, unknown> = {};
       for (const field of EDITABLE_FIELDS) {
+        if (field.key === "geographic_focus") continue;
         if (field.key === "alternative_names") {
           const current = (form[field.key] ?? "")
             .split("\n")
@@ -445,11 +457,7 @@ function EditCatalogModal({
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
-        } else if (
-          field.key === "underlying" ||
-          field.key === "geographic_focus" ||
-          field.key === "asset_class"
-        ) {
+        } else if (field.key === "underlying" || field.key === "asset_class") {
           const lines = (form[field.key] ?? "")
             .split("\n")
             .map((s) => s.trim())
@@ -460,9 +468,7 @@ function EditCatalogModal({
               ? { name: match[1].trim(), percentage: parseFloat(match[2]) }
               : { name: line, percentage: 0 };
           });
-          const original =
-            entry[field.key as "underlying" | "geographic_focus" | "asset_class"] ??
-            [];
+          const original = entry[field.key as "underlying" | "asset_class"] ?? [];
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
@@ -476,6 +482,12 @@ function EditCatalogModal({
           }
         }
       }
+
+      const geoOriginal = (entry.geographic_focus ?? []) as AssetAllocation[];
+      if (JSON.stringify(geographicFocus) !== JSON.stringify(geoOriginal)) {
+        patch.geographic_focus = geographicFocus;
+      }
+
       if (Object.keys(patch).length === 0) {
         onClose();
         return;
@@ -489,7 +501,24 @@ function EditCatalogModal({
         },
       );
       if (!res.ok) {
-        throw new Error(`No se pudo actualizar (status ${res.status})`);
+        let detail = `No se pudo actualizar (status ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body?.detail) {
+            detail = Array.isArray(body.detail)
+              ? body.detail
+                  .map((d: unknown) =>
+                    d && typeof d === "object" && "msg" in d
+                      ? String((d as { msg: unknown }).msg)
+                      : JSON.stringify(d),
+                  )
+                  .join("; ")
+              : String(body.detail);
+          }
+        } catch {
+          // Response wasn't JSON; keep the generic message.
+        }
+        throw new Error(detail);
       }
       const updated: CatalogProduct = await res.json();
       onSaved(updated);
@@ -530,39 +559,45 @@ function EditCatalogModal({
         </div>
 
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
-          {EDITABLE_FIELDS.map((field) =>
-            field.key === "alternative_names" ? (
-              <ModalField key={field.key} label={field.label}>
-                <textarea
-                  rows={3}
-                  placeholder="One name per line"
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass + " resize-y"}
-                />
-              </ModalField>
-            ) : field.key === "underlying" ||
-              field.key === "geographic_focus" ||
-              field.key === "asset_class" ? (
-              <ModalField key={field.key} label={field.label}>
-                <textarea
-                  rows={3}
-                  placeholder="Name: percentage% (one per line)"
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass + " resize-y"}
-                />
-              </ModalField>
-            ) : (
-              <ModalField key={field.key} label={field.label}>
-                <input
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass}
-                />
-              </ModalField>
-            ),
+          {EDITABLE_FIELDS.filter((field) => field.key !== "geographic_focus").map(
+            (field) =>
+              field.key === "alternative_names" ? (
+                <ModalField key={field.key} label={field.label}>
+                  <textarea
+                    rows={3}
+                    placeholder="One name per line"
+                    value={form[field.key] ?? ""}
+                    onChange={(e) => updateField(field.key, e.target.value)}
+                    className={modalInputClass + " resize-y"}
+                  />
+                </ModalField>
+              ) : field.key === "underlying" || field.key === "asset_class" ? (
+                <ModalField key={field.key} label={field.label}>
+                  <textarea
+                    rows={3}
+                    placeholder="Name: percentage% (one per line)"
+                    value={form[field.key] ?? ""}
+                    onChange={(e) => updateField(field.key, e.target.value)}
+                    className={modalInputClass + " resize-y"}
+                  />
+                </ModalField>
+              ) : (
+                <ModalField key={field.key} label={field.label}>
+                  <input
+                    value={form[field.key] ?? ""}
+                    onChange={(e) => updateField(field.key, e.target.value)}
+                    className={modalInputClass}
+                  />
+                </ModalField>
+              ),
           )}
+          <ModalField label="Foco geográfico">
+            <AllocationListField
+              options={GEOGRAPHIC_FOCUS_OPTIONS}
+              value={geographicFocus}
+              onChange={setGeographicFocus}
+            />
+          </ModalField>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">
@@ -577,7 +612,7 @@ function EditCatalogModal({
             </button>
             <button
               type="button"
-              disabled={isSubmitting}
+              disabled={isSubmitting || geoInvalid}
               onClick={() => void handleSave()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
             >

@@ -46,6 +46,30 @@ def _check_allocation_sum(allocations: list[AssetAllocation], label: str) -> Non
             raise ValueError(f"{label} must sum to 100% (got {total:.1f}%)")
 
 
+GEOGRAPHIC_FOCUS_OPTIONS = [
+    "EEUU",
+    "Desarrollados ex-US",
+    "Emergentes ex-Perú",
+    "Latam ex-Perú",
+    "Perú",
+]
+
+
+def _check_geographic_focus(allocations: list[AssetAllocation]) -> None:
+    """Enforces the closed vocabulary for `geographic_focus` going forward
+    (`sdd/product-catalog-approval` — catalog edit modal geographic focus
+    rules). Pre-existing rows with legacy free-text names are untouched
+    since this only runs when `geographic_focus` is included in the
+    request."""
+    names = [a.name for a in allocations]
+    invalid = sorted(set(names) - set(GEOGRAPHIC_FOCUS_OPTIONS))
+    if invalid:
+        raise ValueError(f"Foco(s) geográfico(s) inválido(s): {', '.join(invalid)}")
+    if len(names) != len(set(names)):
+        raise ValueError("No se permiten focos geográficos duplicados")
+    _check_allocation_sum(allocations, "Foco geográfico")
+
+
 class ProductCreate(BaseModel):
     name: str
     provider: str = ""
@@ -157,6 +181,12 @@ class CatalogProductUpdate(BaseModel):
     liquidity: str | None = None
     return_rate: str | None = None
     alternative_names: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _validate_geographic_focus(self) -> CatalogProductUpdate:
+        if self.geographic_focus is not None:
+            _check_geographic_focus(self.geographic_focus)
+        return self
 
 
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]
