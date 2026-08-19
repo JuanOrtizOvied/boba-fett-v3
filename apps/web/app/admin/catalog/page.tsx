@@ -19,6 +19,7 @@ import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
 import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
 import {
+  ADMINISTRATOR_OPTIONS,
   ASSET_CLASS_OPTIONS,
   CURRENCY_OPTIONS,
   GEOGRAPHIC_FOCUS_OPTIONS,
@@ -405,6 +406,7 @@ function EditCatalogModal({
   const [geographicFocus, setGeographicFocus] = useState<AssetAllocation[]>([]);
   const [assetClass, setAssetClass] = useState<AssetAllocation[]>([]);
   const [underlying, setUnderlying] = useState<AssetAllocation[]>([]);
+  const [administratorDraft, setAdministratorDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -427,6 +429,7 @@ function EditCatalogModal({
     setGeographicFocus(entry.geographic_focus ?? []);
     setAssetClass(entry.asset_class ?? []);
     setUnderlying(entry.underlying ?? []);
+    setAdministratorDraft("");
     setErrorMessage(null);
   }, [entry]);
 
@@ -635,6 +638,39 @@ function EditCatalogModal({
                     </option>
                   ))}
                 </select>
+              </ModalField>
+            ) : field.key === "administrator" ? (
+              <ModalField key={field.key} label={field.label}>
+                <div className="flex flex-col gap-1.5">
+                  <select
+                    value={form[field.key] ?? ""}
+                    onChange={(e) => {
+                      setAdministratorDraft("");
+                      updateField(field.key, e.target.value);
+                    }}
+                    className={modalInputClass}
+                  >
+                    <option value="">—</option>
+                    {form[field.key] &&
+                      !(ADMINISTRATOR_OPTIONS as readonly string[]).includes(
+                        form[field.key],
+                      ) && <option value={form[field.key]}>{form[field.key]}</option>}
+                    {ADMINISTRATOR_OPTIONS.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={administratorDraft}
+                    onChange={(e) => {
+                      setAdministratorDraft(e.target.value);
+                      updateField(field.key, e.target.value);
+                    }}
+                    placeholder="+ Agregar administrador"
+                    className={modalInputClass}
+                  />
+                </div>
               </ModalField>
             ) : (
               <ModalField key={field.key} label={field.label}>
