@@ -15,10 +15,12 @@ export function AllocationListField({
   options,
   value,
   onChange,
+  addLabel,
 }: {
   options: readonly string[];
   value: AssetAllocation[];
   onChange: (next: AssetAllocation[]) => void;
+  addLabel: string;
 }) {
   const total = value.reduce((sum, row) => sum + (row.percentage || 0), 0);
   const isBalanced = value.length === 0 || Math.abs(total - 100) < 0.5;
@@ -95,7 +97,7 @@ export function AllocationListField({
         className="flex w-fit items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-sabbi-primary hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <PlusIcon size={12} />
-        Agregar foco geográfico
+        {addLabel}
       </button>
 
       <p className={`text-xs ${isBalanced ? "text-sabbi-neutral-500" : "text-red-600"}`}>
