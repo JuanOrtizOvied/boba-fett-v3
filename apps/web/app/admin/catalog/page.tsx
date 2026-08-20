@@ -11,12 +11,21 @@ import {
 } from "react";
 import { EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { CatalogProduct } from "@/lib/portfolio-types";
+import type { AssetAllocation, CatalogProduct } from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useUrlSearch } from "@/hooks/useUrlSearch";
 import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
+import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
+import {
+  ADMINISTRATOR_OPTIONS,
+  ASSET_CLASS_OPTIONS,
+  CURRENCY_OPTIONS,
+  GEOGRAPHIC_FOCUS_OPTIONS,
+  MANAGER_OPTIONS,
+  UNDERLYING_OPTIONS,
+} from "@/lib/catalogOptions";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "alternative_names", label: "Nombres alternativos" },
@@ -28,16 +37,15 @@ const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "administrator", label: "Administrador" },
   { key: "manager", label: "Gestor" },
   { key: "liquidity", label: "Liquidez" },
-  { key: "return_rate", label: "Rendimiento" },
+  { key: "return_rate", label: "Rentabilidad" },
 ];
 
-// Hasta que exista UI de paginación, se pide un límite alto para
-// conservar el comportamiento actual de "tabla entera" (el default
-// del backend es 50).
+// Until pagination UI exists, request a high limit to preserve the
+// current "whole table" behavior (the backend default is 50).
 const CATALOG_PAGE_SIZE = 1000;
 
 export default function AdminCatalogPage() {
-  // useUrlSearch → useSearchParams requiere un boundary <Suspense> en App Router.
+  // useUrlSearch → useSearchParams requires a <Suspense> boundary in App Router.
   return (
     <Suspense
       fallback={<p className="text-sm text-sabbi-neutral-600">Cargando…</p>}
@@ -55,7 +63,7 @@ function CatalogPageContent() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<CatalogProduct | null>(null);
 
-  // -- Búsqueda: input ↔ URL ↔ debounce --------------------------------
+  // -- Search: input ↔ URL ↔ debounce --------------------------------
   const [searchInput, setSearchInput] = useUrlSearch("search");
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [isFetching, setIsFetching] = useState(false);
@@ -110,7 +118,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
   useEffect(() => {
     const term = debouncedSearch.trim();
 
-    // Cancelar petición anterior si el usuario escribe rápido
+    // Cancel the previous request if the user types quickly
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -120,7 +128,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
 
     loadCatalog(term, controller.signal)
       .catch((err: unknown) => {
-        // Ignorar errores de cancelación (cuando el usuario escribe de nuevo)
+        // Ignore cancellation errors (when the user types again)
         if (err instanceof Error && err.name === "AbortError") return;
         if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : "Error desconocido");
@@ -130,7 +138,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         if (!controller.signal.aborted) setIsFetching(false);
       });
 
-    // Limpiar al desmontar
+    // Clean up on unmount
     return () => controller.abort();
   }, [debouncedSearch, loadCatalog]);
 
@@ -163,7 +171,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     );
   };
 
-  // Determinar si estamos en modo búsqueda para el mensaje de vacío
+  // Determine whether we're in search mode for the empty-state message
   const isSearchMode = debouncedSearch.trim() !== "";
 
   return (
@@ -284,7 +292,8 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         <button
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
-          className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+          className="rounded-lg bg-sabbi-primary px-4 py-2 text-sm font-medium 
+          text-white transition-colors hover:bg-sabbi-primary-hover"
         >
           Agregar
         </button>
@@ -374,8 +383,81 @@ const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: "administrator", label: "Administrador" },
   { key: "manager", label: "Gestor" },
   { key: "liquidity", label: "Liquidez" },
-  { key: "return_rate", label: "Rendimiento" },
+  { key: "return_rate", label: "Rentabilidad" },
 ];
+
+function allocationSum(rows: AssetAllocation[]): number {
+  return rows.reduce((sum, a) => sum + (a.percentage || 0), 0);
+}
+
+function isAllocationInvalid(rows: AssetAllocation[]): boolean {
+  return rows.length > 0 && Math.abs(allocationSum(rows) - 100) >= 0.5;
+}
+
+/**
+ * Parses the "min% - max%" return_rate format. Legacy free-text values
+ * (e.g. "8% anual") or an already-empty field fall back to {min: "", max: ""}
+ * so they're left untouched on save instead of being reformatted.
+ */
+function parseReturnRate(raw: string): { min: string; max: string } {
+  const match = raw.trim().match(/^(\d+(?:\.\d+)?)%\s*-\s*(\d+(?:\.\d+)?)%$/);
+  if (!match) return { min: "", max: "" };
+  return { min: match[1], max: match[2] };
+}
+
+/**
+ * Open-vocabulary field: a <select> of reference names (plus the current
+ * value as an extra option when it's a legacy/free-text value not in the
+ * list) with an always-visible "add new" text input below it. Unlike
+ * AllocationListField's fields, nothing here is enforced on the backend —
+ * `options` is UI-only reference data.
+ *
+ * Pass `key={entry.id}` from the caller so the draft input resets when a
+ * different catalog entry is loaded.
+ */
+function OpenVocabularyField({
+  options,
+  value,
+  onChange,
+  addPlaceholder,
+}: {
+  options: readonly string[];
+  value: string;
+  onChange: (next: string) => void;
+  addPlaceholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <select
+        value={value}
+        onChange={(e) => {
+          setDraft("");
+          onChange(e.target.value);
+        }}
+        className={modalInputClass}
+      >
+        <option value="">—</option>
+        {value && !options.includes(value) && <option value={value}>{value}</option>}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      <input
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          onChange(e.target.value);
+        }}
+        placeholder={addPlaceholder}
+        className={modalInputClass}
+      />
+    </div>
+  );
+}
 
 function EditCatalogModal({
   entry,
@@ -387,6 +469,11 @@ function EditCatalogModal({
   onSaved: (updated: CatalogProduct) => void;
 }) {
   const [form, setForm] = useState<Record<string, string>>({});
+  const [geographicFocus, setGeographicFocus] = useState<AssetAllocation[]>([]);
+  const [assetClass, setAssetClass] = useState<AssetAllocation[]>([]);
+  const [underlying, setUnderlying] = useState<AssetAllocation[]>([]);
+  const [returnRateMin, setReturnRateMin] = useState("");
+  const [returnRateMax, setReturnRateMax] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -394,27 +481,25 @@ function EditCatalogModal({
     if (!entry) return;
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
-      const val = entry[field.key as keyof CatalogProduct];
       if (
-        (field.key === "underlying" ||
-          field.key === "geographic_focus" ||
-          field.key === "asset_class") &&
-        Array.isArray(val)
-      ) {
-        initial[field.key] = val
-          .map((v) =>
-            typeof v === "object" && v && "name" in v
-              ? `${(v as { name: string; percentage: number }).name}: ${(v as { name: string; percentage: number }).percentage}%`
-              : String(v),
-          )
-          .join("\n");
-      } else {
-        initial[field.key] = Array.isArray(val)
-          ? val.join("\n")
-          : String(val ?? "");
-      }
+        field.key === "geographic_focus" ||
+        field.key === "asset_class" ||
+        field.key === "underlying" ||
+        field.key === "return_rate"
+      )
+        continue;
+      const val = entry[field.key as keyof CatalogProduct];
+      initial[field.key] = Array.isArray(val)
+        ? val.join("\n")
+        : String(val ?? "");
     }
     setForm(initial);
+    setGeographicFocus(entry.geographic_focus ?? []);
+    setAssetClass(entry.asset_class ?? []);
+    const parsedReturnRate = parseReturnRate(String(entry.return_rate ?? ""));
+    setReturnRateMin(parsedReturnRate.min);
+    setReturnRateMax(parsedReturnRate.max);
+    setUnderlying(entry.underlying ?? []);
     setErrorMessage(null);
   }, [entry]);
 
@@ -429,39 +514,68 @@ function EditCatalogModal({
 
   if (!entry) return null;
 
+  const geoTotal = allocationSum(geographicFocus);
+  const geoInvalid = isAllocationInvalid(geographicFocus);
+  const assetClassTotal = allocationSum(assetClass);
+  const assetClassInvalid = isAllocationInvalid(assetClass);
+  const underlyingTotal = allocationSum(underlying);
+  const underlyingInvalid = isAllocationInvalid(underlying);
+  const commissionInvalid = (form.commission ?? "").trim() === "";
+  const returnRateIncomplete =
+    (returnRateMin === "") !== (returnRateMax === "");
+  const returnRateOrderInvalid =
+    returnRateMin !== "" &&
+    returnRateMax !== "" &&
+    parseFloat(returnRateMin) > parseFloat(returnRateMax);
+
   const handleSave = async () => {
     setErrorMessage(null);
+    const invalidMessages: string[] = [];
+    if (geoInvalid) {
+      invalidMessages.push(
+        `Foco geográfico debe sumar 100% (actual: ${geoTotal.toFixed(1)}%)`,
+      );
+    }
+    if (assetClassInvalid) {
+      invalidMessages.push(
+        `Clase de activo debe sumar 100% (actual: ${assetClassTotal.toFixed(1)}%)`,
+      );
+    }
+    if (underlyingInvalid) {
+      invalidMessages.push(
+        `Subyacentes debe sumar 100% (actual: ${underlyingTotal.toFixed(1)}%)`,
+      );
+    }
+    if (commissionInvalid) {
+      invalidMessages.push("La comisión es obligatoria");
+    }
+    if (returnRateIncomplete) {
+      invalidMessages.push("Rentabilidad: completa mínimo y máximo, o deja ambos vacíos");
+    }
+    if (returnRateOrderInvalid) {
+      invalidMessages.push("Rentabilidad: el mínimo no puede ser mayor al máximo");
+    }
+    if (invalidMessages.length > 0) {
+      setErrorMessage(invalidMessages.join(" · "));
+      return;
+    }
     setIsSubmitting(true);
     try {
       const patch: Record<string, unknown> = {};
       for (const field of EDITABLE_FIELDS) {
+        if (
+          field.key === "geographic_focus" ||
+          field.key === "asset_class" ||
+          field.key === "underlying" ||
+          field.key === "return_rate"
+        )
+          continue;
         if (field.key === "alternative_names") {
           const current = (form[field.key] ?? "")
             .split("\n")
             .map((s) => s.trim())
             .filter(Boolean);
           const original = (entry.alternative_names ?? []) as string[];
-          if (JSON.stringify(current) !== JSON.stringify(original)) {
-            patch[field.key] = current;
-          }
-        } else if (
-          field.key === "underlying" ||
-          field.key === "geographic_focus" ||
-          field.key === "asset_class"
-        ) {
-          const lines = (form[field.key] ?? "")
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          const current = lines.map((line) => {
-            const match = line.match(/^(.+?):\s*(\d+(?:\.\d+)?)%?$/);
-            return match
-              ? { name: match[1].trim(), percentage: parseFloat(match[2]) }
-              : { name: line, percentage: 0 };
-          });
-          const original =
-            entry[field.key as "underlying" | "geographic_focus" | "asset_class"] ??
-            [];
           if (JSON.stringify(current) !== JSON.stringify(original)) {
             patch[field.key] = current;
           }
@@ -475,6 +589,33 @@ function EditCatalogModal({
           }
         }
       }
+
+      const geoOriginal = (entry.geographic_focus ?? []) as AssetAllocation[];
+      if (JSON.stringify(geographicFocus) !== JSON.stringify(geoOriginal)) {
+        patch.geographic_focus = geographicFocus;
+      }
+
+      const assetClassOriginal = (entry.asset_class ?? []) as AssetAllocation[];
+      if (JSON.stringify(assetClass) !== JSON.stringify(assetClassOriginal)) {
+        patch.asset_class = assetClass;
+      }
+
+      const underlyingOriginal = (entry.underlying ?? []) as AssetAllocation[];
+      if (JSON.stringify(underlying) !== JSON.stringify(underlyingOriginal)) {
+        patch.underlying = underlying;
+      }
+
+      const returnRateOriginal = parseReturnRate(String(entry.return_rate ?? ""));
+      if (
+        returnRateMin !== returnRateOriginal.min ||
+        returnRateMax !== returnRateOriginal.max
+      ) {
+        patch.return_rate =
+          returnRateMin === "" && returnRateMax === ""
+            ? ""
+            : `${returnRateMin}% - ${returnRateMax}%`;
+      }
+
       if (Object.keys(patch).length === 0) {
         onClose();
         return;
@@ -488,7 +629,24 @@ function EditCatalogModal({
         },
       );
       if (!res.ok) {
-        throw new Error(`No se pudo actualizar (status ${res.status})`);
+        let detail = `No se pudo actualizar (status ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body?.detail) {
+            detail = Array.isArray(body.detail)
+              ? body.detail
+                  .map((d: unknown) =>
+                    d && typeof d === "object" && "msg" in d
+                      ? String((d as { msg: unknown }).msg)
+                      : JSON.stringify(d),
+                  )
+                  .join("; ")
+              : String(body.detail);
+          }
+        } catch {
+          // Response wasn't JSON; keep the generic message.
+        }
+        throw new Error(detail);
       }
       const updated: CatalogProduct = await res.json();
       onSaved(updated);
@@ -529,39 +687,160 @@ function EditCatalogModal({
         </div>
 
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
-          {EDITABLE_FIELDS.map((field) =>
-            field.key === "alternative_names" ? (
-              <ModalField key={field.key} label={field.label}>
-                <textarea
-                  rows={3}
-                  placeholder="One name per line"
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass + " resize-y"}
-                />
-              </ModalField>
-            ) : field.key === "underlying" ||
-              field.key === "geographic_focus" ||
-              field.key === "asset_class" ? (
-              <ModalField key={field.key} label={field.label}>
-                <textarea
-                  rows={3}
-                  placeholder="Name: percentage% (one per line)"
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass + " resize-y"}
-                />
-              </ModalField>
-            ) : (
-              <ModalField key={field.key} label={field.label}>
-                <input
-                  value={form[field.key] ?? ""}
-                  onChange={(e) => updateField(field.key, e.target.value)}
-                  className={modalInputClass}
-                />
-              </ModalField>
-            ),
-          )}
+          {EDITABLE_FIELDS.map(({ key, label }) => {
+            switch (key) {
+              case "alternative_names":
+                return (
+                  <ModalField key={key} label={label}>
+                    <textarea
+                      rows={3}
+                      placeholder="One name per line"
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={modalInputClass + " resize-y"}
+                    />
+                  </ModalField>
+                );
+              case "asset_class":
+                return (
+                  <ModalField key={key} label={label}>
+                    <AllocationListField
+                      options={ASSET_CLASS_OPTIONS}
+                      value={assetClass}
+                      onChange={setAssetClass}
+                      addLabel="Agregar clase de activo"
+                    />
+                  </ModalField>
+                );
+              case "geographic_focus":
+                return (
+                  <ModalField key={key} label={label}>
+                    <AllocationListField
+                      options={GEOGRAPHIC_FOCUS_OPTIONS}
+                      value={geographicFocus}
+                      onChange={setGeographicFocus}
+                      addLabel="Agregar foco geográfico"
+                    />
+                  </ModalField>
+                );
+              case "underlying":
+                return (
+                  <ModalField key={key} label={label}>
+                    <AllocationListField
+                      options={UNDERLYING_OPTIONS}
+                      value={underlying}
+                      onChange={setUnderlying}
+                      addLabel="Agregar subyacente"
+                    />
+                  </ModalField>
+                );
+              case "commission":
+                return (
+                  <ModalField key={key} label={label} required>
+                    <input
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={
+                        modalInputClass +
+                        (commissionInvalid ? " border-red-400 focus:border-red-500" : "")
+                      }
+                    />
+                  </ModalField>
+                );
+              case "currency":
+                return (
+                  <ModalField key={key} label={label}>
+                    <select
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={modalInputClass}
+                    >
+                      <option value="">—</option>
+                      {form[key] && !(CURRENCY_OPTIONS as readonly string[]).includes(form[key]) && (
+                        <option value={form[key]}>{form[key]}</option>
+                      )}
+                      {CURRENCY_OPTIONS.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </ModalField>
+                );
+              case "administrator":
+                return (
+                  <ModalField key={key} label={label}>
+                    <OpenVocabularyField
+                      key={entry.id}
+                      options={ADMINISTRATOR_OPTIONS}
+                      value={form[key] ?? ""}
+                      onChange={(v) => updateField(key, v)}
+                      addPlaceholder="+ Agregar administrador"
+                    />
+                  </ModalField>
+                );
+              case "manager":
+                return (
+                  <ModalField key={key} label={label}>
+                    <OpenVocabularyField
+                      key={entry.id}
+                      options={MANAGER_OPTIONS}
+                      value={form[key] ?? ""}
+                      onChange={(v) => updateField(key, v)}
+                      addPlaceholder="+ Agregar gestor"
+                    />
+                  </ModalField>
+                );
+              case "return_rate":
+                return (
+                  <ModalField key={key} label={label}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-sabbi-neutral-500">min</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={returnRateMin}
+                        onChange={(e) => setReturnRateMin(e.target.value)}
+                        className={
+                          modalInputClass +
+                          " w-0 min-w-0 flex-1" +
+                          (returnRateIncomplete || returnRateOrderInvalid
+                            ? " border-red-400 focus:border-red-500"
+                            : "")
+                        }
+                      />
+                      <span className="text-sm text-sabbi-neutral-500">%</span>
+                      <span className="text-sabbi-neutral-400">-</span>
+                      <span className="text-xs text-sabbi-neutral-500">max</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={returnRateMax}
+                        onChange={(e) => setReturnRateMax(e.target.value)}
+                        className={
+                          modalInputClass +
+                          " w-0 min-w-0 flex-1" +
+                          (returnRateIncomplete || returnRateOrderInvalid
+                            ? " border-red-400 focus:border-red-500"
+                            : "")
+                        }
+                      />
+                      <span className="text-sm text-sabbi-neutral-500">%</span>
+                    </div>
+                  </ModalField>
+                );
+              default:
+                return (
+                  <ModalField key={key} label={label}>
+                    <input
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={modalInputClass}
+                    />
+                  </ModalField>
+                );
+            }
+          })}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">
@@ -576,7 +855,15 @@ function EditCatalogModal({
             </button>
             <button
               type="button"
-              disabled={isSubmitting}
+              disabled={
+                isSubmitting ||
+                geoInvalid ||
+                assetClassInvalid ||
+                underlyingInvalid ||
+                commissionInvalid ||
+                returnRateIncomplete ||
+                returnRateOrderInvalid
+              }
               onClick={() => void handleSave()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
             >
@@ -592,12 +879,16 @@ function EditCatalogModal({
 const modalInputClass =
   "rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
 
-const ModalField: FC<{ label: string; children: ReactNode }> = ({
+const ModalField: FC<{ label: string; children: ReactNode; required?: boolean }> = ({
   label,
   children,
+  required,
 }) => (
   <label className="flex flex-col gap-1 text-sm">
-    <span className="text-xs font-medium text-sabbi-neutral-700">{label}</span>
+    <span className="text-xs font-medium text-sabbi-neutral-700">
+      {label}
+      {required && <span className="text-red-600"> *</span>}
+    </span>
     {children}
   </label>
 );

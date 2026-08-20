@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { useUrlSearch } from "@/hooks/useUrlSearch";
 
   /**
    * Visual component for the search input in the administration panel.

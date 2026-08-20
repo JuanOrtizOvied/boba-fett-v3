@@ -46,6 +46,110 @@ def _check_allocation_sum(allocations: list[AssetAllocation], label: str) -> Non
             raise ValueError(f"{label} must sum to 100% (got {total:.1f}%)")
 
 
+GEOGRAPHIC_FOCUS_OPTIONS = [
+    "EEUU",
+    "Desarrollados ex-US",
+    "Emergentes ex-Perú",
+    "Latam ex-Perú",
+    "Perú",
+]
+
+
+def _check_geographic_focus(allocations: list[AssetAllocation]) -> None:
+    """Enforces the closed vocabulary for `geographic_focus` going forward
+    (`sdd/product-catalog-approval` — catalog edit modal geographic focus
+    rules). Pre-existing rows with legacy free-text names are untouched
+    since this only runs when `geographic_focus` is included in the
+    request."""
+    names = [a.name for a in allocations]
+    invalid = sorted(set(names) - set(GEOGRAPHIC_FOCUS_OPTIONS))
+    if invalid:
+        raise ValueError(f"Foco(s) geográfico(s) inválido(s): {', '.join(invalid)}")
+    if len(names) != len(set(names)):
+        raise ValueError("No se permiten focos geográficos duplicados")
+    _check_allocation_sum(allocations, "Foco geográfico")
+
+
+ASSET_CLASS_OPTIONS = [
+    "Inmobiliario Directo",
+    "Mercados Publicos - Fijo",
+    "Mercados Publicos - Variable",
+    "Mercados Privados",
+    "Club deals",
+    "Cash y Otros",
+]
+
+
+def _check_asset_class(allocations: list[AssetAllocation]) -> None:
+    """Enforces the closed vocabulary for `product_catalog.asset_class`
+    going forward (same rules as `_check_geographic_focus`, mirrored for
+    the catalog edit modal's "Clase de activo" field). Pre-existing rows
+    with legacy free-text names are untouched since this only runs when
+    `asset_class` is included in the request."""
+    names = [a.name for a in allocations]
+    invalid = sorted(set(names) - set(ASSET_CLASS_OPTIONS))
+    if invalid:
+        raise ValueError(f"Clase(s) de activo inválida(s): {', '.join(invalid)}")
+    if len(names) != len(set(names)):
+        raise ValueError("No se permiten clases de activo duplicadas")
+    _check_allocation_sum(allocations, "Clase de activo")
+
+
+UNDERLYING_OPTIONS = [
+    "Acciones Peru",
+    "Bonos Corporativos Investment Grade (AAA–BBB)",
+    "Bonos High Yield",
+    "Bonos Latinoamérica",
+    "Bonos Mercados Emergentes (Global)",
+    "Bonos Perú",
+    "Cash",
+    "Club Deals Deuda Privada Peru",
+    "Club Deals Deuda Privada Usa y otros",
+    "Club Deals Otros Peru",
+    "Club Deals Otros USA",
+    "Club Deals Real Estate Peru",
+    "Club Deals Real Estate USA y Otros",
+    "Commodities",
+    "Cripto",
+    "Desarrollados ex US",
+    "Hedge Funds",
+    "Infrastructure Privada",
+    "Mercados Emergentes ex Perú",
+    "Oro",
+    "Private Credit  Subordinated",
+    "Private Credit Senior",
+    "Private Equity",
+    "Propiedades Directas Exterior",
+    "Propiedades Directas Perú",
+    "Real Estate Privado (Fondos)",
+    "REITs Públicos",
+    "US Large Cap",
+    "US Mid & Small Cap",
+    "US Treasuries – Largo Plazo",
+    "US Treasuries Corto Plazo",
+    "Venture Capital",
+]
+
+
+CURRENCY_OPTIONS = ["Dólares", "Soles"]
+
+
+def _check_underlying(allocations: list[AssetAllocation]) -> None:
+    """Enforces the closed vocabulary for `product_catalog.underlying`
+    going forward (same rules as `_check_geographic_focus`/
+    `_check_asset_class`, mirrored for the catalog edit modal's
+    "Subyacentes" field). Pre-existing rows with legacy free-text names
+    are untouched since this only runs when `underlying` is included in
+    the request."""
+    names = [a.name for a in allocations]
+    invalid = sorted(set(names) - set(UNDERLYING_OPTIONS))
+    if invalid:
+        raise ValueError(f"Subyacente(s) inválido(s): {', '.join(invalid)}")
+    if len(names) != len(set(names)):
+        raise ValueError("No se permiten subyacentes duplicados")
+    _check_allocation_sum(allocations, "Subyacente")
+
+
 class ProductCreate(BaseModel):
     name: str
     provider: str = ""
@@ -157,6 +261,40 @@ class CatalogProductUpdate(BaseModel):
     liquidity: str | None = None
     return_rate: str | None = None
     alternative_names: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _validate_geographic_focus(self) -> CatalogProductUpdate:
+        if self.geographic_focus is not None:
+            _check_geographic_focus(self.geographic_focus)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_asset_class(self) -> CatalogProductUpdate:
+        if self.asset_class is not None:
+            _check_asset_class(self.asset_class)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_underlying(self) -> CatalogProductUpdate:
+        if self.underlying is not None:
+            _check_underlying(self.underlying)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_commission(self) -> CatalogProductUpdate:
+        if self.commission is not None and self.commission.strip() == "":
+            raise ValueError("La comisión es obligatoria")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_currency(self) -> CatalogProductUpdate:
+        if (
+            self.currency is not None
+            and self.currency.strip() != ""
+            and self.currency not in CURRENCY_OPTIONS
+        ):
+            raise ValueError(f"Moneda inválida: {self.currency}")
+        return self
 
 
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]
