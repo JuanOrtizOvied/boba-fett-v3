@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useUrlSearch } from "@/hooks/useUrlSearch";
 import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
+import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "alternative_names", label: "Nombres alternativos" },
@@ -59,6 +60,7 @@ function CatalogPageContent() {
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [isFetching, setIsFetching] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const isDebouncing =
     searchInput.trim() !== debouncedSearch.trim() &&
@@ -85,6 +87,25 @@ function CatalogPageContent() {
     },
     [],
   );
+
+const refetchCatalog = useCallback(async (): Promise<void> => {
+  abortRef.current?.abort();
+
+  const controller = new AbortController();
+  abortRef.current = controller;
+
+  try {
+    await loadCatalog(debouncedSearch.trim(), controller.signal);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return;
+    }
+
+    if (!controller.signal.aborted) {
+      throw err;
+    }
+  }
+}, [loadCatalog, debouncedSearch]);
 
   useEffect(() => {
     const term = debouncedSearch.trim();
@@ -148,7 +169,7 @@ function CatalogPageContent() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold text-sabbi-neutral-900">
+      <h1 className="text-lg font-semibold text-sabbi-neutral-900">
           Catálogo
         </h1>
         <div className="w-full sm:w-80">
@@ -259,6 +280,15 @@ function CatalogPageContent() {
           </div>
         )
       )}
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setIsCreateModalOpen(true)}
+          className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+        >
+          Agregar
+        </button>
+      </div>
 
       <ConfirmDeleteDialog
         open={confirmDeleteId !== null}
@@ -273,6 +303,12 @@ function CatalogPageContent() {
         onClose={() => setEditingEntry(null)}
         onSaved={handleUpdated}
       />
+      {isCreateModalOpen && (
+        <CreateCatalogModal
+          onClose={() => setIsCreateModalOpen(false)}
+          onSaved={refetchCatalog}
+        />
+      )}
     </div>
   );
 }
