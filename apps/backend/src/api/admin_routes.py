@@ -162,11 +162,18 @@ async def list_all_products(
 @router.get("/catalog/entries")
 async def list_catalog_entries(
     catalog_repo: CatalogRepository = Depends(_catalog_repo),
+    search: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[dict]:
     """List all `product_catalog` entries
     (`sdd/product-catalog-approval/spec` — "Catalog Listing")."""
-    entries = await catalog_repo.list_all()
-    return [e.model_dump() for e in entries]
+    search_term = search.strip() if search is not None else None
+    if search_term == "":
+        search_term = None
+
+    entries = await catalog_repo.get_catalog(search_term, limit, offset)
+    return entries#[e.model_dump() for e in entries]
 
 
 @router.post("/catalog/approve", status_code=201)
