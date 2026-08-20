@@ -125,7 +125,7 @@ function convertMessages(api: ApiMessage[], threadCreatedAt?: string | null): Th
         }
       }
 
-      if (parts.length && parts.some((p) => p.type === "text")) {
+      if (parts.length) {
         result.push({
           role: "assistant",
           id: msg.id,
