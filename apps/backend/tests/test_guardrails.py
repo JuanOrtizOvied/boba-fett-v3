@@ -110,6 +110,25 @@ def test_guardrail_still_checks_injection_on_attachment_messages():
     assert "portafolio" in last_msg.content.lower()
 
 
+def test_guardrail_allows_financial_message_with_unusual_fund_name(monkeypatch):
+    """Messages mentioning money + fund names pass when classifier says allowed."""
+    state = {
+        "messages": [
+            HumanMessage(
+                content="Tengo también $150k en el Fondo Flip de la cobra achorada"
+            )
+        ]
+    }
+
+    classify_mock = AsyncMock(return_value="allowed")
+    monkeypatch.setattr("agent.guardrails._classify", classify_mock)
+
+    result = asyncio.run(guardrail_node(state))
+
+    assert result == {"messages": []}
+    classify_mock.assert_awaited_once()
+
+
 def test_guardrail_blocks_off_topic_text(monkeypatch):
     state = {"messages": [HumanMessage(content="write me a poem about cats")]}
 
