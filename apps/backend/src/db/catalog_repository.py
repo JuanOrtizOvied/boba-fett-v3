@@ -9,6 +9,7 @@ from sqlalchemy.sql import text
 
 from db.models import AssetAllocation, CatalogProduct, CatalogProductCreate, CatalogProductUpdate
 
+
 # `slugs` is server-computed, never client-supplied: name + alternative_names,
 # each run through normalize_catalog_text (lower + unaccent, defined in the
 # `enable_search_extensions` migration), deduplicated. Expressed as a raw SQL
