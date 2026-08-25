@@ -9,6 +9,19 @@ from sqlalchemy.sql import text
 
 from db.models import AssetAllocation, CatalogProduct, CatalogProductCreate, CatalogProductUpdate
 
+# `slugs` is server-computed, never client-supplied: name + alternative_names,
+# each run through normalize_catalog_text (lower + unaccent, defined in the
+# `enable_search_extensions` migration), deduplicated. Expressed as a raw SQL
+# fragment (not Python) so every write path — insert, approval-replace, and
+# the dynamic update() — derives it identically to the migration backfill.
+def _slugs_expr(name_expr: str, alternative_names_expr: str) -> str:
+    return (
+        "(SELECT COALESCE(ARRAY_AGG(DISTINCT normalize_catalog_text(btrim(v))), '{}') "
+        f"FROM unnest(array_prepend({name_expr}, {alternative_names_expr})) AS v "
+        "WHERE v IS NOT NULL AND btrim(v) <> '')"
+    )
+
+
 # Define the table object for SQLAlchemy Core expressions
 metadata = MetaData()
 product_catalog_table = Table(
@@ -149,13 +162,14 @@ class CatalogRepository:
             return None
 
         row = await self.pool.fetchrow(
-            """
+            f"""
             INSERT INTO product_catalog
                 (name, asset_class, geographic_focus,
                  underlying, commission, currency, administrator, manager,
                  liquidity, return_rate, approved_from_product_id,
-                 alternative_names, approved_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+                 alternative_names, slugs, approved_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                {_slugs_expr("$1", "COALESCE($12::text[], '{}'::text[])")}, now())
             RETURNING *
             """,
             data.name,
@@ -177,7 +191,7 @@ class CatalogRepository:
         self, catalog_id: int, data: CatalogProductCreate
     ) -> CatalogProduct | None:
         row = await self.pool.fetchrow(
-            """
+            f"""
             UPDATE product_catalog
             SET name = $2,
                 asset_class = $3,
@@ -194,6 +208,10 @@ class CatalogRepository:
                     WHEN cardinality($13::text[]) > 0 THEN $13
                     ELSE alternative_names
                 END,
+                slugs = {_slugs_expr(
+                    "$2",
+                    "CASE WHEN cardinality($13::text[]) > 0 THEN $13 ELSE alternative_names END",
+                )},
                 approved_at = now()
             WHERE id = $1
             RETURNING *
@@ -235,8 +253,29 @@ class CatalogRepository:
                 "SELECT * FROM product_catalog WHERE id = $1", catalog_id
             )
             return self._row_to_catalog_product(row) if row else None
-        set_clause = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(fields))
-        values = [catalog_id, *fields.values()]
+
+        values: list[object] = [catalog_id]
+        placeholders: dict[str, str] = {}
+        set_parts: list[str] = []
+        for key, value in fields.items():
+            values.append(value)
+            placeholders[key] = f"${len(values)}"
+            set_parts.append(f"{key} = {placeholders[key]}")
+
+        # slugs is derived from name + alternative_names, so it must be
+        # recomputed whenever either changes — even if only one of the two
+        # is present in this partial update. The side not being updated is
+        # read from the table's own (unchanged) column value.
+        if "name" in fields or "alternative_names" in fields:
+            name_expr = placeholders.get("name", "name")
+            alt_expr = (
+                f"{placeholders['alternative_names']}::text[]"
+                if "alternative_names" in fields
+                else "COALESCE(alternative_names, '{}'::text[])"
+            )
+            set_parts.append(f"slugs = {_slugs_expr(name_expr, alt_expr)}")
+
+        set_clause = ", ".join(set_parts)
         row = await self.pool.fetchrow(
             f"UPDATE product_catalog SET {set_clause} WHERE id = $1 RETURNING *",
             *values,
@@ -302,6 +341,7 @@ class CatalogRepository:
             liquidity=row["liquidity"] or "",
             return_rate=row["return_rate"] or "",
             alternative_names=list(row["alternative_names"] or []),
+            slugs=list(row["slugs"] or []),
             approved_from_product_id=row["approved_from_product_id"],
             approved_at=(
                 row["approved_at"].isoformat() if row["approved_at"] is not None else None

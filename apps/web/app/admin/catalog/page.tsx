@@ -9,7 +9,7 @@ import {
   type FC,
   type ReactNode,
 } from "react";
-import { EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
+import { EditIcon, PlusIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { AssetAllocation, CatalogProduct } from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
@@ -395,14 +395,18 @@ function isAllocationInvalid(rows: AssetAllocation[]): boolean {
 }
 
 /**
- * Parses the "min% - max%" return_rate format. Legacy free-text values
- * (e.g. "8% anual") or an already-empty field fall back to {min: "", max: ""}
- * so they're left untouched on save instead of being reformatted.
+ * Parses the return_rate format — either "min% - max%" or, since max is
+ * optional, a bare "min%". Legacy free-text values (e.g. "8% anual") or an
+ * already-empty field fall back to {min: "", max: ""} so they're left
+ * untouched on save instead of being reformatted.
  */
 function parseReturnRate(raw: string): { min: string; max: string } {
-  const match = raw.trim().match(/^(\d+(?:\.\d+)?)%\s*-\s*(\d+(?:\.\d+)?)%$/);
-  if (!match) return { min: "", max: "" };
-  return { min: match[1], max: match[2] };
+  const trimmed = raw.trim();
+  const rangeMatch = trimmed.match(/^(\d+(?:\.\d+)?)%\s*-\s*(\d+(?:\.\d+)?)%$/);
+  if (rangeMatch) return { min: rangeMatch[1], max: rangeMatch[2] };
+  const singleMatch = trimmed.match(/^(\d+(?:\.\d+)?)%$/);
+  if (singleMatch) return { min: singleMatch[1], max: "" };
+  return { min: "", max: "" };
 }
 
 /**
@@ -415,18 +419,105 @@ function parseReturnRate(raw: string): { min: string; max: string } {
  * Pass `key={entry.id}` from the caller so the draft input resets when a
  * different catalog entry is loaded.
  */
+
+/**
+ * Free-text list field: shows existing entries as removable rows, plus an
+ * always-visible "add new" input. Unlike OpenVocabularyField (one value,
+ * updates live per keystroke), this appends to an array — a new entry only
+ * commits on Enter, since there's no single slot to update in place.
+ * Case/whitespace-insensitive duplicates are silently ignored.
+ *
+ * Pass `key={entry.id}` from the caller so the draft input resets when a
+ * different catalog entry is loaded.
+ */
+function NameListField({
+  value,
+  onChange,
+  addPlaceholder,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  addPlaceholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const canAdd = draft.trim().length >= 3;
+
+  const addName = () => {
+    const trimmed = draft.trim();
+    if (trimmed.length < 3) return;
+    const isDuplicate = value.some(
+      (v) => v.trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (!isDuplicate) {
+      onChange([...value, trimmed]);
+    }
+    setDraft("");
+  };
+
+  const removeAt = (index: number) => {
+    onChange(value.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {value.map((name, index) => (
+        <div key={name} className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900">
+            {name}
+          </span>
+          <button
+            type="button"
+            aria-label={`Quitar ${name}`}
+            onClick={() => removeAt(index)}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100 hover:text-red-600"
+          >
+            <XIcon size={14} />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <input
+          name="alternative_name_draft"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addName();
+            }
+          }}
+          placeholder={addPlaceholder}
+          className={modalInputClass + " min-w-0 flex-1"}
+        />
+        <button
+          type="button"
+          aria-label="Agregar nombre alternativo"
+          disabled={!canAdd}
+          onClick={addName}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-sabbi-primary hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <PlusIcon size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OpenVocabularyField({
   options,
   value,
   onChange,
   addPlaceholder,
+  invalid,
 }: {
   options: readonly string[];
   value: string;
   onChange: (next: string) => void;
   addPlaceholder: string;
+  invalid?: boolean;
 }) {
   const [draft, setDraft] = useState("");
+  const invalidClass = invalid ? " border-red-400 focus:border-red-500" : "";
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -436,7 +527,7 @@ function OpenVocabularyField({
           setDraft("");
           onChange(e.target.value);
         }}
-        className={modalInputClass}
+        className={modalInputClass + invalidClass}
       >
         <option value="">—</option>
         {value && !options.includes(value) && <option value={value}>{value}</option>}
@@ -469,6 +560,7 @@ function EditCatalogModal({
   onSaved: (updated: CatalogProduct) => void;
 }) {
   const [form, setForm] = useState<Record<string, string>>({});
+  const [alternativeNames, setAlternativeNames] = useState<string[]>([]);
   const [geographicFocus, setGeographicFocus] = useState<AssetAllocation[]>([]);
   const [assetClass, setAssetClass] = useState<AssetAllocation[]>([]);
   const [underlying, setUnderlying] = useState<AssetAllocation[]>([]);
@@ -482,6 +574,7 @@ function EditCatalogModal({
     const initial: Record<string, string> = {};
     for (const field of EDITABLE_FIELDS) {
       if (
+        field.key === "alternative_names" ||
         field.key === "geographic_focus" ||
         field.key === "asset_class" ||
         field.key === "underlying" ||
@@ -494,6 +587,7 @@ function EditCatalogModal({
         : String(val ?? "");
     }
     setForm(initial);
+    setAlternativeNames(entry.alternative_names ?? []);
     setGeographicFocus(entry.geographic_focus ?? []);
     setAssetClass(entry.asset_class ?? []);
     const parsedReturnRate = parseReturnRate(String(entry.return_rate ?? ""));
@@ -514,15 +608,21 @@ function EditCatalogModal({
 
   if (!entry) return null;
 
+  const nameInvalid = (form.name ?? "").trim() === "";
   const geoTotal = allocationSum(geographicFocus);
+  const geoEmpty = geographicFocus.length === 0;
   const geoInvalid = isAllocationInvalid(geographicFocus);
   const assetClassTotal = allocationSum(assetClass);
+  const assetClassEmpty = assetClass.length === 0;
   const assetClassInvalid = isAllocationInvalid(assetClass);
   const underlyingTotal = allocationSum(underlying);
+  const underlyingEmpty = underlying.length === 0;
   const underlyingInvalid = isAllocationInvalid(underlying);
   const commissionInvalid = (form.commission ?? "").trim() === "";
-  const returnRateIncomplete =
-    (returnRateMin === "") !== (returnRateMax === "");
+  const currencyInvalid = (form.currency ?? "").trim() === "";
+  const administratorInvalid = (form.administrator ?? "").trim() === "";
+  const managerInvalid = (form.manager ?? "").trim() === "";
+  const returnRateMinRequired = returnRateMin.trim() === "";
   const returnRateOrderInvalid =
     returnRateMin !== "" &&
     returnRateMax !== "" &&
@@ -531,17 +631,26 @@ function EditCatalogModal({
   const handleSave = async () => {
     setErrorMessage(null);
     const invalidMessages: string[] = [];
-    if (geoInvalid) {
-      invalidMessages.push(
-        `Foco geográfico debe sumar 100% (actual: ${geoTotal.toFixed(1)}%)`,
-      );
+    if (nameInvalid) {
+      invalidMessages.push("El nombre es obligatorio");
     }
-    if (assetClassInvalid) {
+    if (assetClassEmpty) {
+      invalidMessages.push("Clase de activo es obligatorio");
+    } else if (assetClassInvalid) {
       invalidMessages.push(
         `Clase de activo debe sumar 100% (actual: ${assetClassTotal.toFixed(1)}%)`,
       );
     }
-    if (underlyingInvalid) {
+    if (geoEmpty) {
+      invalidMessages.push("Foco geográfico es obligatorio");
+    } else if (geoInvalid) {
+      invalidMessages.push(
+        `Foco geográfico debe sumar 100% (actual: ${geoTotal.toFixed(1)}%)`,
+      );
+    }
+    if (underlyingEmpty) {
+      invalidMessages.push("Subyacente es obligatorio");
+    } else if (underlyingInvalid) {
       invalidMessages.push(
         `Subyacentes debe sumar 100% (actual: ${underlyingTotal.toFixed(1)}%)`,
       );
@@ -549,8 +658,17 @@ function EditCatalogModal({
     if (commissionInvalid) {
       invalidMessages.push("La comisión es obligatoria");
     }
-    if (returnRateIncomplete) {
-      invalidMessages.push("Rentabilidad: completa mínimo y máximo, o deja ambos vacíos");
+    if (currencyInvalid) {
+      invalidMessages.push("La moneda es obligatoria");
+    }
+    if (administratorInvalid) {
+      invalidMessages.push("El administrador es obligatorio");
+    }
+    if (managerInvalid) {
+      invalidMessages.push("El gestor es obligatorio");
+    }
+    if (returnRateMinRequired) {
+      invalidMessages.push("Rentabilidad: el mínimo es obligatorio");
     }
     if (returnRateOrderInvalid) {
       invalidMessages.push("Rentabilidad: el mínimo no puede ser mayor al máximo");
@@ -564,30 +682,23 @@ function EditCatalogModal({
       const patch: Record<string, unknown> = {};
       for (const field of EDITABLE_FIELDS) {
         if (
+          field.key === "alternative_names" ||
           field.key === "geographic_focus" ||
           field.key === "asset_class" ||
           field.key === "underlying" ||
           field.key === "return_rate"
         )
           continue;
-        if (field.key === "alternative_names") {
-          const current = (form[field.key] ?? "")
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          const original = (entry.alternative_names ?? []) as string[];
-          if (JSON.stringify(current) !== JSON.stringify(original)) {
-            patch[field.key] = current;
-          }
-        } else {
-          const current = form[field.key]?.trim() ?? "";
-          const original = String(
-            entry[field.key as keyof CatalogProduct] ?? "",
-          );
-          if (current !== original) {
-            patch[field.key] = current;
-          }
+        const current = form[field.key]?.trim() ?? "";
+        const original = String(entry[field.key as keyof CatalogProduct] ?? "");
+        if (current !== original) {
+          patch[field.key] = current;
         }
+      }
+
+      const alternativeNamesOriginal = (entry.alternative_names ?? []) as string[];
+      if (JSON.stringify(alternativeNames) !== JSON.stringify(alternativeNamesOriginal)) {
+        patch.alternative_names = alternativeNames;
       }
 
       const geoOriginal = (entry.geographic_focus ?? []) as AssetAllocation[];
@@ -611,9 +722,11 @@ function EditCatalogModal({
         returnRateMax !== returnRateOriginal.max
       ) {
         patch.return_rate =
-          returnRateMin === "" && returnRateMax === ""
+          returnRateMin === ""
             ? ""
-            : `${returnRateMin}% - ${returnRateMax}%`;
+            : returnRateMax === ""
+              ? `${returnRateMin}%`
+              : `${returnRateMin}% - ${returnRateMax}%`;
       }
 
       if (Object.keys(patch).length === 0) {
@@ -692,45 +805,47 @@ function EditCatalogModal({
               case "alternative_names":
                 return (
                   <ModalField key={key} label={label}>
-                    <textarea
-                      rows={3}
-                      placeholder="One name per line"
-                      value={form[key] ?? ""}
-                      onChange={(e) => updateField(key, e.target.value)}
-                      className={modalInputClass + " resize-y"}
+                    <NameListField
+                      key={entry.id}
+                      value={alternativeNames}
+                      onChange={setAlternativeNames}
+                      addPlaceholder="+ Agregar nombre alternativo"
                     />
                   </ModalField>
                 );
               case "asset_class":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} required>
                     <AllocationListField
                       options={ASSET_CLASS_OPTIONS}
                       value={assetClass}
                       onChange={setAssetClass}
                       addLabel="Agregar clase de activo"
+                      required
                     />
                   </ModalField>
                 );
               case "geographic_focus":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} required>
                     <AllocationListField
                       options={GEOGRAPHIC_FOCUS_OPTIONS}
                       value={geographicFocus}
                       onChange={setGeographicFocus}
                       addLabel="Agregar foco geográfico"
+                      required
                     />
                   </ModalField>
                 );
               case "underlying":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} required>
                     <AllocationListField
                       options={UNDERLYING_OPTIONS}
                       value={underlying}
                       onChange={setUnderlying}
                       addLabel="Agregar subyacente"
+                      required
                     />
                   </ModalField>
                 );
@@ -749,11 +864,14 @@ function EditCatalogModal({
                 );
               case "currency":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} required>
                     <select
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
-                      className={modalInputClass}
+                      className={
+                        modalInputClass +
+                        (currencyInvalid ? " border-red-400 focus:border-red-500" : "")
+                      }
                     >
                       <option value="">—</option>
                       {form[key] && !(CURRENCY_OPTIONS as readonly string[]).includes(form[key]) && (
@@ -769,25 +887,27 @@ function EditCatalogModal({
                 );
               case "administrator":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} required>
                     <OpenVocabularyField
                       key={entry.id}
                       options={ADMINISTRATOR_OPTIONS}
                       value={form[key] ?? ""}
                       onChange={(v) => updateField(key, v)}
                       addPlaceholder="+ Agregar administrador"
+                      invalid={administratorInvalid}
                     />
                   </ModalField>
                 );
               case "manager":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} required>
                     <OpenVocabularyField
                       key={entry.id}
                       options={MANAGER_OPTIONS}
                       value={form[key] ?? ""}
                       onChange={(v) => updateField(key, v)}
                       addPlaceholder="+ Agregar gestor"
+                      invalid={managerInvalid}
                     />
                   </ModalField>
                 );
@@ -795,7 +915,9 @@ function EditCatalogModal({
                 return (
                   <ModalField key={key} label={label}>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-sabbi-neutral-500">min</span>
+                      <span className="text-xs text-sabbi-neutral-500">
+                        min<span className="text-red-600">*</span>
+                      </span>
                       <input
                         type="number"
                         step="0.01"
@@ -804,7 +926,7 @@ function EditCatalogModal({
                         className={
                           modalInputClass +
                           " w-0 min-w-0 flex-1" +
-                          (returnRateIncomplete || returnRateOrderInvalid
+                          (returnRateMinRequired || returnRateOrderInvalid
                             ? " border-red-400 focus:border-red-500"
                             : "")
                         }
@@ -820,13 +942,24 @@ function EditCatalogModal({
                         className={
                           modalInputClass +
                           " w-0 min-w-0 flex-1" +
-                          (returnRateIncomplete || returnRateOrderInvalid
-                            ? " border-red-400 focus:border-red-500"
-                            : "")
+                          (returnRateOrderInvalid ? " border-red-400 focus:border-red-500" : "")
                         }
                       />
                       <span className="text-sm text-sabbi-neutral-500">%</span>
                     </div>
+                  </ModalField>
+                );
+              case "name":
+                return (
+                  <ModalField key={key} label={label} required>
+                    <input
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      className={
+                        modalInputClass +
+                        (nameInvalid ? " border-red-400 focus:border-red-500" : "")
+                      }
+                    />
                   </ModalField>
                 );
               default:
@@ -857,11 +990,18 @@ function EditCatalogModal({
               type="button"
               disabled={
                 isSubmitting ||
+                nameInvalid ||
+                geoEmpty ||
                 geoInvalid ||
+                assetClassEmpty ||
                 assetClassInvalid ||
+                underlyingEmpty ||
                 underlyingInvalid ||
                 commissionInvalid ||
-                returnRateIncomplete ||
+                currencyInvalid ||
+                administratorInvalid ||
+                managerInvalid ||
+                returnRateMinRequired ||
                 returnRateOrderInvalid
               }
               onClick={() => void handleSave()}
@@ -884,11 +1024,16 @@ const ModalField: FC<{ label: string; children: ReactNode; required?: boolean }>
   children,
   required,
 }) => (
-  <label className="flex flex-col gap-1 text-sm">
+  // Plain <div>, not <label> — a bare <label> auto-forwards clicks on any
+  // non-interactive spot inside it to the first form control it contains,
+  // which silently "steals" clicks meant for other rows/buttons once a
+  // field has more than one control (AllocationListField, NameListField,
+  // OpenVocabularyField, the return_rate min/max pair).
+  <div className="flex flex-col gap-1 text-sm">
     <span className="text-xs font-medium text-sabbi-neutral-700">
       {label}
       {required && <span className="text-red-600"> *</span>}
     </span>
     {children}
-  </label>
+  </div>
 );
