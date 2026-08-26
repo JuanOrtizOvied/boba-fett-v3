@@ -7,7 +7,14 @@ from sqlalchemy import Column, Integer, MetaData, Table, Text, case, func, or_, 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
-from db.models import AssetAllocation, CatalogProduct, CatalogProductCreate, CatalogProductUpdate
+from db.models import (
+    Administrator,
+    AssetAllocation,
+    CatalogProduct,
+    CatalogProductCreate,
+    CatalogProductUpdate,
+    Manager,
+)
 
 
 # `slugs` is server-computed, never client-supplied: name + alternative_names,
@@ -168,9 +175,9 @@ class CatalogRepository:
                 (name, asset_class, geographic_focus,
                  underlying, commission, currency, administrator, manager,
                  liquidity, return_rate, approved_from_product_id,
-                 alternative_names, slugs, approved_at)
+                 alternative_names, slugs, administrator_score, manager_score, approved_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                {_slugs_expr("$1", "COALESCE($12::text[], '{}'::text[])")}, now())
+                {_slugs_expr("$1", "COALESCE($12::text[], '{}'::text[])")}, $13, $14, now())
             RETURNING *
             """,
             data.name,
@@ -185,6 +192,8 @@ class CatalogRepository:
             data.return_rate,
             data.approved_from_product_id,
             data.alternative_names,
+            data.administrator_score,
+            data.manager_score,
         )
         return self._row_to_catalog_product(row)
 
@@ -213,6 +222,8 @@ class CatalogRepository:
                     "$2",
                     "CASE WHEN cardinality($13::text[]) > 0 THEN $13 ELSE alternative_names END",
                 )},
+                administrator_score = $14,
+                manager_score = $15,
                 approved_at = now()
             WHERE id = $1
             RETURNING *
@@ -230,6 +241,8 @@ class CatalogRepository:
             data.return_rate,
             data.approved_from_product_id,
             data.alternative_names,
+            data.administrator_score,
+            data.manager_score,
         )
         return self._row_to_catalog_product(row) if row else None
 
@@ -289,6 +302,56 @@ class CatalogRepository:
         )
         return row is not None
 
+    async def list_administrators(self) -> list[Administrator]:
+        rows = await self.pool.fetch(
+            "SELECT id, name, score, score_is_fixed FROM administrator ORDER BY name ASC"
+        )
+        return [Administrator(**dict(r)) for r in rows]
+
+    async def list_managers(self) -> list[Manager]:
+        rows = await self.pool.fetch(
+            "SELECT id, name, score FROM manager ORDER BY name ASC"
+        )
+        return [Manager(**dict(r)) for r in rows]
+
+    async def create_administrator(self, name: str, score: int) -> Administrator | None:
+        """Inserts a new administrator (`task_fffceb1e` — persisting
+        free-text names typed in the catalog edit modal). Returns `None` on
+        a case/whitespace-insensitive duplicate instead of inserting, same
+        convention as `insert_if_not_duplicate`. New entries are always
+        `score_is_fixed=true` — the "Cash o efectivo" manual-score exception
+        is a fixed, pre-seeded special case, not something admins create."""
+        existing = await self.pool.fetchrow(
+            "SELECT id FROM administrator WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1",
+            name,
+        )
+        if existing is not None:
+            return None
+        row = await self.pool.fetchrow(
+            """
+            INSERT INTO administrator (name, score, score_is_fixed)
+            VALUES ($1, $2, true)
+            RETURNING id, name, score, score_is_fixed
+            """,
+            name,
+            score,
+        )
+        return Administrator(**dict(row))
+
+    async def create_manager(self, name: str, score: int) -> Manager | None:
+        existing = await self.pool.fetchrow(
+            "SELECT id FROM manager WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1",
+            name,
+        )
+        if existing is not None:
+            return None
+        row = await self.pool.fetchrow(
+            "INSERT INTO manager (name, score) VALUES ($1, $2) RETURNING id, name, score",
+            name,
+            score,
+        )
+        return Manager(**dict(row))
+
     async def search(self, query: str, limit: int = 5) -> list[CatalogProduct]:
         rows = await self.pool.fetch(
             """
@@ -342,6 +405,8 @@ class CatalogRepository:
             liquidity=row["liquidity"] or "",
             return_rate=row["return_rate"] or "",
             alternative_names=list(row["alternative_names"] or []),
+            administrator_score=row["administrator_score"],
+            manager_score=row["manager_score"],
             slugs=list(row["slugs"] or []),
             approved_from_product_id=row["approved_from_product_id"],
             approved_at=(

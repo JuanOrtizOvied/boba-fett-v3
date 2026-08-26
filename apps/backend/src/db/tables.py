@@ -7,6 +7,7 @@ asyncpg — this module is never imported at request time.
 
 from sqlalchemy import (
     ARRAY,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -92,6 +93,31 @@ product_catalog = Table(
     Column("approved_at", DateTime(timezone=True)),
     Column("alternative_names", ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("slugs", ARRAY(Text), server_default=text("'{}'::text[]")),
+    Column("administrator_score", Integer),
+    Column("manager_score", Integer),
+)
+
+# Reference entities behind the catalog edit modal's Administrador/Gestor
+# dropdowns. `administrator.score_is_fixed=false` marks "Cash o efectivo":
+# its risk score depends on which bank actually holds the cash for a given
+# product, so it's entered manually per product instead of coming from here.
+administrator = Table(
+    "administrator",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", Text, unique=True, nullable=False),
+    Column("score", Integer),
+    Column("score_is_fixed", Boolean, nullable=False, server_default=text("true")),
+    Column("created_at", DateTime(timezone=True), server_default=text("now()")),
+)
+
+manager = Table(
+    "manager",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", Text, unique=True, nullable=False),
+    Column("score", Integer),
+    Column("created_at", DateTime(timezone=True), server_default=text("now()")),
 )
 
 portfolio_snapshots = Table(

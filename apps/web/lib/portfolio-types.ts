@@ -110,8 +110,25 @@ export interface CatalogProduct {
   liquidity: string;
   return_rate: string;
   alternative_names: string[];
+  administrator_score: number | null;
+  manager_score: number | null;
   approved_from_product_id: string | null;
   approved_at: string | null;
+}
+
+/** Mirrors `db.models.Administrator` — one row from `GET /admin/administrators`. */
+export interface AdministratorEntity {
+  id: number;
+  name: string;
+  score: number | null;
+  score_is_fixed: boolean;
+}
+
+/** Mirrors `db.models.Manager` — one row from `GET /admin/managers`. */
+export interface ManagerEntity {
+  id: number;
+  name: string;
+  score: number | null;
 }
 
 /**

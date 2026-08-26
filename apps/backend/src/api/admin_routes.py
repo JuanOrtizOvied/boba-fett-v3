@@ -18,7 +18,12 @@ from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
 from db.catalog_repository import CatalogRepository
-from db.models import CatalogProductCreate, CatalogProductUpdate
+from db.models import (
+    AdministratorCreate,
+    CatalogProductCreate,
+    CatalogProductUpdate,
+    ManagerCreate,
+)
 from db.repository import ProductRepository
 from db.versioning import VersioningRepository
 
@@ -247,6 +252,51 @@ async def delete_catalog_entry(
         raise HTTPException(
             status_code=404, detail=f"Catalog entry {catalog_id} not found"
         )
+
+
+@router.get("/administrators")
+async def list_administrators(
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> list[dict]:
+    """Backs the catalog edit modal's Administrador dropdown — replaces the
+    old hardcoded ADMINISTRATOR_OPTIONS array with real entities + scores."""
+    entries = await catalog_repo.list_administrators()
+    return [e.model_dump() for e in entries]
+
+
+@router.post("/administrators", status_code=201)
+async def create_administrator(
+    data: AdministratorCreate,
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> dict:
+    """Persists a new administrator typed into the modal's "+ Agregar"
+    input (`task_fffceb1e`), with its required score. Returns 409 on a
+    case/whitespace-insensitive duplicate name."""
+    entry = await catalog_repo.create_administrator(data.name, data.score)
+    if entry is None:
+        raise HTTPException(status_code=409, detail="Administrator already exists")
+    return entry.model_dump()
+
+
+@router.get("/managers")
+async def list_managers(
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> list[dict]:
+    """Backs the catalog edit modal's Gestor dropdown — replaces the old
+    hardcoded MANAGER_OPTIONS array with real entities + scores."""
+    entries = await catalog_repo.list_managers()
+    return [e.model_dump() for e in entries]
+
+
+@router.post("/managers", status_code=201)
+async def create_manager(
+    data: ManagerCreate,
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> dict:
+    entry = await catalog_repo.create_manager(data.name, data.score)
+    if entry is None:
+        raise HTTPException(status_code=409, detail="Manager already exists")
+    return entry.model_dump()
 
 
 @router.get("/threads")
