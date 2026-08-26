@@ -224,6 +224,8 @@ class CatalogProduct(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     alternative_names: list[str] = Field(default_factory=list)
+    administrator_score: int | None = None
+    manager_score: int | None = None
     slugs: list[str] = Field(
         default_factory=list,
         description=(
@@ -253,6 +255,8 @@ class CatalogProductCreate(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     alternative_names: list[str] = Field(default_factory=list)
+    administrator_score: int | None = Field(default=None, ge=1, le=10)
+    manager_score: int | None = Field(default=None, ge=1, le=10)
     approved_from_product_id: str | None = None
     catalog_product_id: int | None = None
 
@@ -269,6 +273,8 @@ class CatalogProductUpdate(BaseModel):
     liquidity: str | None = None
     return_rate: str | None = None
     alternative_names: list[str] | None = None
+    administrator_score: int | None = Field(default=None, ge=1, le=10)
+    manager_score: int | None = Field(default=None, ge=1, le=10)
 
     @model_validator(mode="after")
     def _validate_geographic_focus(self) -> CatalogProductUpdate:
@@ -303,6 +309,53 @@ class CatalogProductUpdate(BaseModel):
         ):
             raise ValueError(f"Moneda inválida: {self.currency}")
         return self
+
+    @model_validator(mode="after")
+    def _validate_administrator_score(self) -> CatalogProductUpdate:
+        """Score always travels with its name in one PATCH — the frontend
+        sends whatever it displayed (autocompleted from `administrator`, or
+        manually entered for "Cash o efectivo"). The backend never re-derives
+        it, so it just requires both together."""
+        if (
+            self.administrator is not None
+            and self.administrator.strip() != ""
+            and self.administrator_score is None
+        ):
+            raise ValueError("El score del administrador es obligatorio")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_manager_score(self) -> CatalogProductUpdate:
+        if (
+            self.manager is not None
+            and self.manager.strip() != ""
+            and self.manager_score is None
+        ):
+            raise ValueError("El score del gestor es obligatorio")
+        return self
+
+
+class Administrator(BaseModel):
+    id: int
+    name: str
+    score: int | None = None
+    score_is_fixed: bool = True
+
+
+class Manager(BaseModel):
+    id: int
+    name: str
+    score: int | None = None
+
+
+class AdministratorCreate(BaseModel):
+    name: str = Field(min_length=1)
+    score: int = Field(ge=1, le=10)
+
+
+class ManagerCreate(BaseModel):
+    name: str = Field(min_length=1)
+    score: int = Field(ge=1, le=10)
 
 
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]

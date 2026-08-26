@@ -11,7 +11,12 @@ import {
 } from "react";
 import { EditIcon, PlusIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { AssetAllocation, CatalogProduct } from "@/lib/portfolio-types";
+import type {
+  AdministratorEntity,
+  AssetAllocation,
+  CatalogProduct,
+  ManagerEntity,
+} from "@/lib/portfolio-types";
 import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useUrlSearch } from "@/hooks/useUrlSearch";
@@ -19,11 +24,9 @@ import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
 import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
 import {
-  ADMINISTRATOR_OPTIONS,
   ASSET_CLASS_OPTIONS,
   CURRENCY_OPTIONS,
   GEOGRAPHIC_FOCUS_OPTIONS,
-  MANAGER_OPTIONS,
   UNDERLYING_OPTIONS,
 } from "@/lib/catalogOptions";
 
@@ -410,15 +413,109 @@ function parseReturnRate(raw: string): { min: string; max: string } {
 }
 
 /**
- * Open-vocabulary field: a <select> of reference names (plus the current
- * value as an extra option when it's a legacy/free-text value not in the
- * list) with an always-visible "add new" text input below it. Unlike
- * AllocationListField's fields, nothing here is enforced on the backend —
- * `options` is UI-only reference data.
+ * Administrador/Gestor field: a <select> of real entities (fetched from
+ * `GET /admin/administrators` / `/managers`, plus the current value as an
+ * extra option when it's a legacy/free-text value not in the list) paired
+ * with a score input, plus an always-visible "add new" text input below.
+ *
+ * Selecting an entity autofills its score, locked read-only — unless
+ * `score_is_fixed` is false ("Cash o efectivo": the real risk depends on
+ * which bank holds the cash for that specific product, so it's entered
+ * manually per product instead of coming from the entity). Typing a brand
+ * new name always requires a manually-entered score, since there's no
+ * entity to autofill from yet — `EditCatalogModal.handleSave` persists it
+ * as a new entity via POST before saving the catalog entry itself.
  *
  * Pass `key={entry.id}` from the caller so the draft input resets when a
  * different catalog entry is loaded.
  */
+function ScoredVocabularyField({
+  entities,
+  name,
+  score,
+  onNameChange,
+  onScoreChange,
+  addPlaceholder,
+  nameInvalid,
+  scoreInvalid,
+}: {
+  entities: { name: string; score: number | null; score_is_fixed?: boolean }[];
+  name: string;
+  score: number | null;
+  onNameChange: (name: string) => void;
+  onScoreChange: (score: number | null) => void;
+  addPlaceholder: string;
+  nameInvalid?: boolean;
+  scoreInvalid?: boolean;
+}) {
+  const [draft, setDraft] = useState("");
+  const matched = entities.find((e) => e.name === name);
+  const scoreEditable = !matched || matched.score_is_fixed === false;
+  const nameInvalidClass = nameInvalid ? " border-red-400 focus:border-red-500" : "";
+  const scoreInvalidClass = scoreInvalid ? " border-red-400 focus:border-red-500" : "";
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <select
+          value={name}
+          onChange={(e) => {
+            setDraft("");
+            const selectedName = e.target.value;
+            onNameChange(selectedName);
+            const found = entities.find((en) => en.name === selectedName);
+            onScoreChange(found && found.score_is_fixed !== false ? found.score : null);
+          }}
+          className={modalInputClass + " min-w-0 flex-1" + nameInvalidClass}
+        >
+          <option value="">—</option>
+          {name && !entities.some((e) => e.name === name) && (
+            <option value={name}>{name}</option>
+          )}
+          {entities.map((e) => (
+            <option key={e.name} value={e.name}>
+              {e.name}
+            </option>
+          ))}
+        </select>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          step={1}
+          value={score ?? ""}
+          disabled={!scoreEditable}
+          onChange={(e) =>
+            onScoreChange(e.target.value === "" ? null : Number(e.target.value))
+          }
+          placeholder="Score"
+          aria-label={`Score de ${addPlaceholder.replace("+ Agregar ", "")}`}
+          className={
+            modalInputClass +
+            " w-20 shrink-0" +
+            scoreInvalidClass +
+            (!scoreEditable ? " bg-sabbi-neutral-100 text-sabbi-neutral-500" : "")
+          }
+        />
+      </div>
+      <input
+        value={draft}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (draft === "" && next !== "") {
+            // Starting a brand-new free-text entry — any previously
+            // autofilled/locked score no longer applies to this name.
+            onScoreChange(null);
+          }
+          setDraft(next);
+          onNameChange(next);
+        }}
+        placeholder={addPlaceholder}
+        className={modalInputClass}
+      />
+    </div>
+  );
+}
 
 /**
  * Free-text list field: shows existing entries as removable rows, plus an
@@ -503,53 +600,6 @@ function NameListField({
   );
 }
 
-function OpenVocabularyField({
-  options,
-  value,
-  onChange,
-  addPlaceholder,
-  invalid,
-}: {
-  options: readonly string[];
-  value: string;
-  onChange: (next: string) => void;
-  addPlaceholder: string;
-  invalid?: boolean;
-}) {
-  const [draft, setDraft] = useState("");
-  const invalidClass = invalid ? " border-red-400 focus:border-red-500" : "";
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <select
-        value={value}
-        onChange={(e) => {
-          setDraft("");
-          onChange(e.target.value);
-        }}
-        className={modalInputClass + invalidClass}
-      >
-        <option value="">—</option>
-        {value && !options.includes(value) && <option value={value}>{value}</option>}
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-      <input
-        value={draft}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          onChange(e.target.value);
-        }}
-        placeholder={addPlaceholder}
-        className={modalInputClass}
-      />
-    </div>
-  );
-}
-
 function EditCatalogModal({
   entry,
   onClose,
@@ -566,8 +616,30 @@ function EditCatalogModal({
   const [underlying, setUnderlying] = useState<AssetAllocation[]>([]);
   const [returnRateMin, setReturnRateMin] = useState("");
   const [returnRateMax, setReturnRateMax] = useState("");
+  const [administratorScore, setAdministratorScore] = useState<number | null>(null);
+  const [managerScore, setManagerScore] = useState<number | null>(null);
+  const [administratorEntities, setAdministratorEntities] = useState<AdministratorEntity[]>([]);
+  const [managerEntities, setManagerEntities] = useState<ManagerEntity[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Fetched once for the modal's lifetime (not re-fetched per open) — backs
+  // the Administrador/Gestor dropdowns, replacing the old hardcoded
+  // ADMINISTRATOR_OPTIONS/MANAGER_OPTIONS arrays.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [adminRes, managerRes] = await Promise.all([
+          fetchWithAuth("/api/admin/administrators"),
+          fetchWithAuth("/api/admin/managers"),
+        ]);
+        if (adminRes.ok) setAdministratorEntities(await adminRes.json());
+        if (managerRes.ok) setManagerEntities(await managerRes.json());
+      } catch {
+        // Dropdowns just stay empty; the free-text "add new" input still works.
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!entry) return;
@@ -594,6 +666,8 @@ function EditCatalogModal({
     setReturnRateMin(parsedReturnRate.min);
     setReturnRateMax(parsedReturnRate.max);
     setUnderlying(entry.underlying ?? []);
+    setAdministratorScore(entry.administrator_score ?? null);
+    setManagerScore(entry.manager_score ?? null);
     setErrorMessage(null);
   }, [entry]);
 
@@ -622,6 +696,8 @@ function EditCatalogModal({
   const currencyInvalid = (form.currency ?? "").trim() === "";
   const administratorInvalid = (form.administrator ?? "").trim() === "";
   const managerInvalid = (form.manager ?? "").trim() === "";
+  const administratorScoreMissing = !administratorInvalid && administratorScore === null;
+  const managerScoreMissing = !managerInvalid && managerScore === null;
   const returnRateMinRequired = returnRateMin.trim() === "";
   const returnRateOrderInvalid =
     returnRateMin !== "" &&
@@ -666,6 +742,12 @@ function EditCatalogModal({
     }
     if (managerInvalid) {
       invalidMessages.push("El gestor es obligatorio");
+    }
+    if (administratorScoreMissing) {
+      invalidMessages.push("El score del administrador es obligatorio");
+    }
+    if (managerScoreMissing) {
+      invalidMessages.push("El score del gestor es obligatorio");
     }
     if (returnRateMinRequired) {
       invalidMessages.push("Rentabilidad: el mínimo es obligatorio");
@@ -727,6 +809,56 @@ function EditCatalogModal({
             : returnRateMax === ""
               ? `${returnRateMin}%`
               : `${returnRateMin}% - ${returnRateMax}%`;
+      }
+
+      // administrator_score/manager_score live in their own state, not
+      // `form` — force them into the patch whenever the name changed too,
+      // even if the score's raw value happens to match the original. The
+      // backend requires both together in one PATCH whenever the name is
+      // present (CatalogProductUpdate._validate_administrator_score).
+      if ("administrator" in patch || administratorScore !== (entry.administrator_score ?? null)) {
+        patch.administrator_score = administratorScore;
+      }
+      if ("manager" in patch || managerScore !== (entry.manager_score ?? null)) {
+        patch.manager_score = managerScore;
+      }
+
+      // A brand-new name typed into "+ Agregar..." isn't in the fetched
+      // entity list yet — persist it as a reusable entity (task_fffceb1e).
+      // Best-effort: a failure here (e.g. a race against another admin
+      // adding the same name) doesn't block saving the catalog entry
+      // itself, which stores this name+score directly either way.
+      const administratorName = form.administrator?.trim() ?? "";
+      if (
+        administratorName &&
+        administratorScore !== null &&
+        !administratorEntities.some((a) => a.name === administratorName)
+      ) {
+        try {
+          await fetchWithAuth("/api/admin/administrators", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: administratorName, score: administratorScore }),
+          });
+        } catch {
+          // best-effort — see comment above
+        }
+      }
+      const managerName = form.manager?.trim() ?? "";
+      if (
+        managerName &&
+        managerScore !== null &&
+        !managerEntities.some((m) => m.name === managerName)
+      ) {
+        try {
+          await fetchWithAuth("/api/admin/managers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: managerName, score: managerScore }),
+          });
+        } catch {
+          // best-effort — see comment above
+        }
       }
 
       if (Object.keys(patch).length === 0) {
@@ -888,26 +1020,32 @@ function EditCatalogModal({
               case "administrator":
                 return (
                   <ModalField key={key} label={label} required>
-                    <OpenVocabularyField
+                    <ScoredVocabularyField
                       key={entry.id}
-                      options={ADMINISTRATOR_OPTIONS}
-                      value={form[key] ?? ""}
-                      onChange={(v) => updateField(key, v)}
+                      entities={administratorEntities}
+                      name={form[key] ?? ""}
+                      score={administratorScore}
+                      onNameChange={(v) => updateField(key, v)}
+                      onScoreChange={setAdministratorScore}
                       addPlaceholder="+ Agregar administrador"
-                      invalid={administratorInvalid}
+                      nameInvalid={administratorInvalid}
+                      scoreInvalid={administratorScoreMissing}
                     />
                   </ModalField>
                 );
               case "manager":
                 return (
                   <ModalField key={key} label={label} required>
-                    <OpenVocabularyField
+                    <ScoredVocabularyField
                       key={entry.id}
-                      options={MANAGER_OPTIONS}
-                      value={form[key] ?? ""}
-                      onChange={(v) => updateField(key, v)}
+                      entities={managerEntities}
+                      name={form[key] ?? ""}
+                      score={managerScore}
+                      onNameChange={(v) => updateField(key, v)}
+                      onScoreChange={setManagerScore}
                       addPlaceholder="+ Agregar gestor"
-                      invalid={managerInvalid}
+                      nameInvalid={managerInvalid}
+                      scoreInvalid={managerScoreMissing}
                     />
                   </ModalField>
                 );
@@ -1001,6 +1139,8 @@ function EditCatalogModal({
                 currencyInvalid ||
                 administratorInvalid ||
                 managerInvalid ||
+                administratorScoreMissing ||
+                managerScoreMissing ||
                 returnRateMinRequired ||
                 returnRateOrderInvalid
               }

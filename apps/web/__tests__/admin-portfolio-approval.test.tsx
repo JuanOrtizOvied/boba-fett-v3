@@ -43,6 +43,8 @@ const CATALOG_ENTRY: CatalogProduct = {
   liquidity: "T+2",
   return_rate: "8%",
   alternative_names: [],
+  administrator_score: null,
+  manager_score: null,
   approved_from_product_id: null,
   approved_at: null,
 };
