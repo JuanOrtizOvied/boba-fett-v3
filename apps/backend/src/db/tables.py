@@ -91,6 +91,7 @@ product_catalog = Table(
     Column("approved_from_product_id", Text),
     Column("approved_at", DateTime(timezone=True)),
     Column("alternative_names", ARRAY(Text), server_default=text("'{}'::text[]")),
+    Column("slugs", ARRAY(Text), server_default=text("'{}'::text[]")),
 )
 
 portfolio_snapshots = Table(

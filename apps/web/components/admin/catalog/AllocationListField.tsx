@@ -16,14 +16,18 @@ export function AllocationListField({
   value,
   onChange,
   addLabel,
+  required,
 }: {
   options: readonly string[];
   value: AssetAllocation[];
   onChange: (next: AssetAllocation[]) => void;
   addLabel: string;
+  required?: boolean;
 }) {
+  const isEmpty = value.length === 0;
   const total = value.reduce((sum, row) => sum + (row.percentage || 0), 0);
-  const isBalanced = value.length === 0 || Math.abs(total - 100) < 0.5;
+  const isBalanced = isEmpty || Math.abs(total - 100) < 0.5;
+  const isRequiredAndEmpty = required && isEmpty;
   const allUsed = options.every((o) => value.some((row) => row.name === o));
 
   const optionsForRow = (index: number): string[] => {
@@ -100,8 +104,14 @@ export function AllocationListField({
         {addLabel}
       </button>
 
-      <p className={`text-xs ${isBalanced ? "text-sabbi-neutral-500" : "text-red-600"}`}>
-        Total: {total.toFixed(1)}%{!isBalanced && " — debe sumar 100%"}
+      <p
+        className={`text-xs ${
+          isBalanced && !isRequiredAndEmpty ? "text-sabbi-neutral-500" : "text-red-600"
+        }`}
+      >
+        {isRequiredAndEmpty
+          ? "Obligatorio — agrega al menos una fila"
+          : `Total: ${total.toFixed(1)}%${!isBalanced ? " — debe sumar 100%" : ""}`}
       </p>
     </div>
   );

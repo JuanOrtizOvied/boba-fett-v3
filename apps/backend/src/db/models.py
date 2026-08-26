@@ -224,6 +224,14 @@ class CatalogProduct(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     alternative_names: list[str] = Field(default_factory=list)
+    slugs: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Server-computed from name + alternative_names on every "
+            "write (normalize_catalog_text: lowercased, unaccented). "
+            "Read-only — never accepted from CatalogProductCreate/Update."
+        ),
+    )
     approved_from_product_id: str | None = None
     approved_at: str | None = None
 

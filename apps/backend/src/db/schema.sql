@@ -191,6 +191,33 @@ ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS alternative_names TEXT[] DE
 CREATE INDEX IF NOT EXISTS idx_catalog_name_trgm
     ON product_catalog USING gin (name gin_trgm_ops);
 
+-- Mirrors migrations/versions/a1b2c3d4e5f6_enable_search_extensions.py.
+-- Needed here too: insert/update/replace on product_catalog now call
+-- normalize_catalog_text() to compute `slugs`, not just the read-side
+-- search in get_catalog().
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+CREATE OR REPLACE FUNCTION normalize_catalog_text(input_text text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+STRICT
+AS $$
+    SELECT lower(unaccent(input_text));
+$$;
+
+-- Mirrors migrations/versions/c3d4e5f6a1b2_add_slugs_to_product_catalog.py.
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS slugs TEXT[] DEFAULT '{}';
+
+UPDATE product_catalog
+SET slugs = (
+    SELECT COALESCE(ARRAY_AGG(DISTINCT normalize_catalog_text(btrim(v))), '{}')
+    FROM unnest(array_prepend(name, COALESCE(alternative_names, '{}'::text[]))) AS v
+    WHERE v IS NOT NULL AND btrim(v) <> ''
+)
+WHERE slugs = '{}';
+
 -- Portfolio Versioning: Snapshots
 CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
