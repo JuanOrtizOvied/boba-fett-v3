@@ -413,6 +413,24 @@ function parseReturnRate(raw: string): { min: string; max: string } {
 }
 
 /**
+ * Resolves the score to show for a saved administrator/manager name: the
+ * per-product snapshot if one was ever saved, otherwise the entity's
+ * current score IF the match is unambiguous (score_is_fixed !== false).
+ * Returns null when genuinely nothing can be prefilled ("Cash o efectivo",
+ * or a name no longer in the entity list) — that's still a real gap the
+ * admin must fill in manually, not a bug.
+ */
+function prefillScore(
+  savedScore: number | null,
+  name: string,
+  entities: { name: string; score: number | null; score_is_fixed?: boolean }[],
+): number | null {
+  if (savedScore !== null) return savedScore;
+  const matched = entities.find((e) => e.name === name);
+  return matched && matched.score_is_fixed !== false ? matched.score : null;
+}
+
+/**
  * Administrador/Gestor field: a <select> of real entities (fetched from
  * `GET /admin/administrators` / `/managers`, plus the current value as an
  * extra option when it's a legacy/free-text value not in the list) paired
@@ -666,10 +684,29 @@ function EditCatalogModal({
     setReturnRateMin(parsedReturnRate.min);
     setReturnRateMax(parsedReturnRate.max);
     setUnderlying(entry.underlying ?? []);
-    setAdministratorScore(entry.administrator_score ?? null);
-    setManagerScore(entry.manager_score ?? null);
     setErrorMessage(null);
   }, [entry]);
+
+  // Separate from the effect above so it can depend on the entity lists too
+  // (fetched async, may not be ready on the very first render) without
+  // re-running the rest of the form init whenever they resolve.
+  //
+  // Legacy entries have administrator_score/manager_score = NULL (this
+  // migration didn't backfill them, unlike `slugs`) — falling back to null
+  // here left the score field empty AND locked read-only whenever the saved
+  // name matched a fixed-score entity, with no way to fix it short of
+  // reselecting the same name from the dropdown. If the saved name
+  // unambiguously matches a fixed-score entity, there's nothing actually
+  // uncertain about it, so prefill from that entity instead of leaving it
+  // blocked. Stays empty only for genuine ambiguity: "Cash o efectivo"
+  // (score_is_fixed=false) or a legacy name no longer in the entity list.
+  useEffect(() => {
+    if (!entry) return;
+    setAdministratorScore(
+      prefillScore(entry.administrator_score ?? null, entry.administrator, administratorEntities),
+    );
+    setManagerScore(prefillScore(entry.manager_score ?? null, entry.manager, managerEntities));
+  }, [entry, administratorEntities, managerEntities]);
 
   useEffect(() => {
     if (!entry) return;
