@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import asyncpg
-from sqlalchemy import Column, Integer, MetaData, Table, Text, case, func, or_, select
+from sqlalchemy import Column, Integer, MetaData, Table, Text, case, func, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
@@ -49,6 +49,7 @@ product_catalog_table = Table(
     Column("approved_from_product_id", Text()),
     Column("approved_at", Text()),
     Column("alternative_names", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
+    Column("slugs", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
 )
 
 class CatalogRepository:
@@ -58,8 +59,17 @@ class CatalogRepository:
     async def get_catalog(self, search: str | None, limit: int, offset: int) -> list[dict]:
         """Fetches the product catalog with optional search and pagination.
 
-        Uses SQLAlchemy Core for expression construction.
-        The name column has a trigram index; aliases are searched functionally.
+        Uses SQLAlchemy Core for expression construction. Matches against
+        `slugs` — the server-computed, already-normalized (lower + unaccent)
+        array of name + alternative_names (see `_slugs_expr`) — instead of
+        querying `name`/`alternative_names` separately. This also fixes
+        accent-insensitivity for `name` itself (the old `name ILIKE` branch
+        never ran `normalize_catalog_text`, so an unaccented query missed
+        accented names unless an alias happened to carry the match).
+        `idx_catalog_slugs_trgm` (see migrations) indexes this exact
+        `catalog_slugs_text(slugs)` expression — `array_to_string` itself is
+        STABLE, not IMMUTABLE, so it can't be indexed directly (42P17);
+        `catalog_slugs_text` is a thin SQL wrapper declared IMMUTABLE.
         """
         # Base selection
         query = select(product_catalog_table)
@@ -68,30 +78,13 @@ class CatalogRepository:
             # Normalize the search input
             normalized_input = func.normalize_catalog_text(search)
 
-            # The name column can leverage the trigram index.
-            # Alias searching remains functional because alternative_names
-            # cannot be indexed using the previous expression strategy.
-
-            name_match = product_catalog_table.c.name.ilike(
-                func.concat("%", search, "%")
-            )
-
-            alt_names_match = func.normalize_catalog_text(
-                func.array_to_string(
-                    func.coalesce(
-                        product_catalog_table.c.alternative_names,
-                        postgresql.array([], type_=Text)
-                    ),
-                    " "
-                )
+            # `slugs` elements are already normalized at write time, so no
+            # normalize_catalog_text() call is needed on the read side.
+            slugs_match = func.catalog_slugs_text(
+                product_catalog_table.c.slugs
             ).like(func.concat("%", normalized_input, "%"))
 
-            query = query.where(
-                or_(
-                    name_match,
-                    alt_names_match
-                )
-            )
+            query = query.where(slugs_match)
 
             # Ranking logic
             # 1. Exact Match

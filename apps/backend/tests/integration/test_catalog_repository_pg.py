@@ -96,6 +96,55 @@ async def test_replace_from_approval_updates_existing_entry(test_pool):
 
 
 # ---------------------------------------------------------------------------
+# get_catalog — search against `slugs`
+# ---------------------------------------------------------------------------
+
+
+async def test_get_catalog_search_matches_name_ignoring_accents(test_pool):
+    """`slugs` normalizes with unaccent, so an unaccented query must still
+    find an accented name — the old `name ILIKE` branch didn't unaccent."""
+    repo = CatalogRepository(test_pool)
+    created = await repo.insert_if_not_duplicate(_entry(name="Múltiplo Fund"))
+
+    results = await repo.get_catalog("multiplo", 50, 0)
+
+    assert any(r["id"] == created.id for r in results)
+
+
+async def test_get_catalog_search_matches_alternative_name(test_pool):
+    repo = CatalogRepository(test_pool)
+    created = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo XYZ", alternative_names=["Alias Buscable"])
+    )
+
+    results = await repo.get_catalog("Alias Buscable", 50, 0)
+
+    assert any(r["id"] == created.id for r in results)
+
+
+async def test_get_catalog_search_ranks_exact_name_match_before_partial(test_pool):
+    repo = CatalogRepository(test_pool)
+    exact = await repo.insert_if_not_duplicate(_entry(name="Renta Fija"))
+    partial = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo de Renta Fija Plus", commission="2%")
+    )
+
+    results = await repo.get_catalog("Renta Fija", 50, 0)
+
+    ids = [r["id"] for r in results]
+    assert ids.index(exact.id) < ids.index(partial.id)
+
+
+async def test_get_catalog_search_excludes_non_matching_entries(test_pool):
+    repo = CatalogRepository(test_pool)
+    await repo.insert_if_not_duplicate(_entry(name="Unrelated Fund"))
+
+    results = await repo.get_catalog("NoSuchSlugAnywhere", 50, 0)
+
+    assert results == []
+
+
+# ---------------------------------------------------------------------------
 # list_all
 # ---------------------------------------------------------------------------
 
