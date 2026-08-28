@@ -147,6 +147,9 @@ export interface CatalogProductCreate {
   manager?: string;
   liquidity?: string;
   return_rate?: string;
+  alternative_names?: string[];
+  administrator_score?: number | null;
+  manager_score?: number | null;
   approved_from_product_id?: string | null;
   catalog_product_id?: number | null;
 }
