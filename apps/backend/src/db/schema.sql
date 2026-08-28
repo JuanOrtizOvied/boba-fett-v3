@@ -416,6 +416,22 @@ INSERT INTO manager (name, score) VALUES
     ('Zest Capital', 4)
 ON CONFLICT (name) DO NOTHING;
 
+-- Mirrors migrations/versions/e5f6a1b2c3d4_add_catalog_slugs_trgm_index.py.
+-- array_to_string() is STABLE, not IMMUTABLE, so it can't be used directly
+-- in an index expression (Postgres error 42P17) — wrap it the same way
+-- normalize_catalog_text() wraps unaccent() above.
+CREATE OR REPLACE FUNCTION catalog_slugs_text(input_slugs text[])
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    SELECT array_to_string(input_slugs, ' ');
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_catalog_slugs_trgm
+    ON product_catalog USING gin (catalog_slugs_text(slugs) gin_trgm_ops);
+
 -- Portfolio Versioning: Snapshots
 CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
