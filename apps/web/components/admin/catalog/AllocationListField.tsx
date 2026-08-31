@@ -77,9 +77,13 @@ export function AllocationListField({
             max={100}
             step="0.1"
             value={row.percentage}
-            onChange={(e) =>
-              updateRow(index, { percentage: Number(e.target.value) || 0 })
-            }
+            onChange={(e) => {
+              // `max`/`min` on <input type="number"> only affect the spinner
+              // buttons, not typed input — clamp here so a row can't exceed
+              // the backend's AssetAllocation.percentage bound (0-100).
+              const parsed = Number(e.target.value) || 0;
+              updateRow(index, { percentage: Math.min(100, Math.max(0, parsed)) });
+            }}
             className="w-20 rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary"
           />
           <span className="text-sm text-sabbi-neutral-500">%</span>
