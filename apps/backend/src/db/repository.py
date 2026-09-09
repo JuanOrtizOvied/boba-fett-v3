@@ -65,8 +65,8 @@ class ProductRepository:
                (id, user_id, name, provider, amount,
                 underlying, asset_class, geographic_focus,
                 commission, currency, administrator, manager, liquidity,
-                return_rate, catalog_product_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
+                return_rate, isin, distribution, catalog_product_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)""",
             product_id,
             user_id,
             data.name,
@@ -81,6 +81,8 @@ class ProductRepository:
             data.manager,
             data.liquidity,
             data.return_rate,
+            data.isin,
+            data.distribution,
             data.catalog_product_id,
         )
         product = Product(id=product_id, user_id=user_id, **data.model_dump())
@@ -310,5 +312,7 @@ class ProductRepository:
             manager=row.get("manager", "") or "",
             liquidity=row.get("liquidity", "") or "",
             return_rate=row.get("return_rate", "") or "",
+            isin=row.get("isin", "") or "",
+            distribution=row.get("distribution", "") or "",
             catalog_product_id=row.get("catalog_product_id"),
         )

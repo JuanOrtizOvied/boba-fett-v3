@@ -58,6 +58,8 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS manager TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS liquidity TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS return_rate TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_product_id INTEGER;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS isin TEXT DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS distribution TEXT DEFAULT '';
 
 -- Migration: normalize legacy category labels, backfill into asset_class,
 -- then drop category (asset_class absorbs its role — same taxonomy values).
@@ -152,7 +154,9 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     administrator TEXT DEFAULT '',
     manager TEXT DEFAULT '',
     liquidity TEXT DEFAULT '',
-    return_rate TEXT DEFAULT ''
+    return_rate TEXT DEFAULT '',
+    isin TEXT DEFAULT '',
+    distribution TEXT DEFAULT ''
 );
 
 -- Migration: product_catalog asset_class TEXT -> JSONB array
@@ -236,6 +240,8 @@ CREATE TABLE IF NOT EXISTS manager (
 
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS administrator_score INTEGER;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS manager_score INTEGER;
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS isin TEXT DEFAULT '';
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS distribution TEXT DEFAULT '';
 
 INSERT INTO administrator (name, score, score_is_fixed) VALUES
     ('ACRES Sociedad Titulizadora S.A', 5, true),
