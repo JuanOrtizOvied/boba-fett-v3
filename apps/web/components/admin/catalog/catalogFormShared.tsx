@@ -24,6 +24,8 @@ export const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: "manager", label: "Gestor" },
   { key: "liquidity", label: "Liquidez" },
   { key: "return_rate", label: "Rentabilidad" },
+  { key: "isin", label: "ISIN" },
+  { key: "distribution", label: "Distribución" },
 ];
 
 export const modalInputClass =
