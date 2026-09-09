@@ -144,9 +144,17 @@ export function ScoredVocabularyField({
           step={1}
           value={score ?? ""}
           disabled={!scoreEditable}
-          onChange={(e) =>
-            onScoreChange(e.target.value === "" ? null : Number(e.target.value))
-          }
+          onChange={(e) => {
+            if (e.target.value === "") {
+              onScoreChange(null);
+              return;
+            }
+            // `max`/`min` on <input type="number"> only affect the spinner
+            // buttons, not typed input — clamp here so the score can't
+            // exceed the backend's administrator_score/manager_score bound (1-10).
+            const parsed = Number(e.target.value) || 0;
+            onScoreChange(Math.min(10, Math.max(1, parsed)));
+          }}
           placeholder="Score"
           aria-label={`Score de ${addPlaceholder.replace("+ Agregar ", "")}`}
           className={
