@@ -36,6 +36,8 @@ class Product(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    isin: str = ""
+    distribution: str = ""
     catalog_product_id: int | None = None
 
 
@@ -163,6 +165,8 @@ class ProductCreate(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    isin: str = ""
+    distribution: str = ""
     catalog_product_id: int | None = None
 
     @model_validator(mode="after")
@@ -186,6 +190,8 @@ class ProductUpdate(BaseModel):
     manager: str | None = None
     liquidity: str | None = None
     return_rate: str | None = None
+    isin: str | None = None
+    distribution: str | None = None
     catalog_product_id: int | None = None
 
     @model_validator(mode="after")
@@ -196,6 +202,18 @@ class ProductUpdate(BaseModel):
             _check_allocation_sum(self.geographic_focus, "Geographic focus")
         if self.asset_class is not None:
             _check_allocation_sum(self.asset_class, "Asset class")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_isin(self) -> ProductUpdate:
+        if self.isin is not None and self.isin.strip() == "":
+            raise ValueError("El ISIN es obligatorio")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_distribution(self) -> ProductUpdate:
+        if self.distribution is not None and self.distribution.strip() == "":
+            raise ValueError("La distribución es obligatoria")
         return self
 
 
@@ -223,6 +241,8 @@ class CatalogProduct(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    isin: str = ""
+    distribution: str = ""
     alternative_names: list[str] = Field(default_factory=list)
     administrator_score: int | None = None
     manager_score: int | None = None
@@ -254,6 +274,8 @@ class CatalogProductCreate(BaseModel):
     manager: str = ""
     liquidity: str = ""
     return_rate: str = ""
+    isin: str = ""
+    distribution: str = ""
     alternative_names: list[str] = Field(default_factory=list)
     administrator_score: int | None = Field(default=None, ge=1, le=10)
     manager_score: int | None = Field(default=None, ge=1, le=10)
@@ -272,6 +294,8 @@ class CatalogProductUpdate(BaseModel):
     manager: str | None = None
     liquidity: str | None = None
     return_rate: str | None = None
+    isin: str | None = None
+    distribution: str | None = None
     alternative_names: list[str] | None = None
     administrator_score: int | None = Field(default=None, ge=1, le=10)
     manager_score: int | None = Field(default=None, ge=1, le=10)
@@ -298,6 +322,18 @@ class CatalogProductUpdate(BaseModel):
     def _validate_commission(self) -> CatalogProductUpdate:
         if self.commission is not None and self.commission.strip() == "":
             raise ValueError("La comisión es obligatoria")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_isin(self) -> CatalogProductUpdate:
+        if self.isin is not None and self.isin.strip() == "":
+            raise ValueError("El ISIN es obligatorio")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_distribution(self) -> CatalogProductUpdate:
+        if self.distribution is not None and self.distribution.strip() == "":
+            raise ValueError("La distribución es obligatoria")
         return self
 
     @model_validator(mode="after")

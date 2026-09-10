@@ -32,6 +32,8 @@ export interface Product {
   manager: string;
   liquidity: string;
   return_rate: string;
+  isin: string;
+  distribution: string;
   catalog_product_id: number | null;
 }
 
@@ -109,6 +111,8 @@ export interface CatalogProduct {
   manager: string;
   liquidity: string;
   return_rate: string;
+  isin: string;
+  distribution: string;
   alternative_names: string[];
   administrator_score: number | null;
   manager_score: number | null;
@@ -147,6 +151,8 @@ export interface CatalogProductCreate {
   manager?: string;
   liquidity?: string;
   return_rate?: string;
+  isin?: string;
+  distribution?: string;
   alternative_names?: string[];
   administrator_score?: number | null;
   manager_score?: number | null;

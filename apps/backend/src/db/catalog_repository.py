@@ -46,6 +46,8 @@ product_catalog_table = Table(
     Column("manager", Text, server_default=""),
     Column("liquidity", Text, server_default=""),
     Column("return_rate", Text, server_default=""),
+    Column("isin", Text, server_default=""),
+    Column("distribution", Text, server_default=""),
     Column("approved_from_product_id", Text()),
     Column("approved_at", Text()),
     Column("alternative_names", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
@@ -167,10 +169,11 @@ class CatalogRepository:
             INSERT INTO product_catalog
                 (name, asset_class, geographic_focus,
                  underlying, commission, currency, administrator, manager,
-                 liquidity, return_rate, approved_from_product_id,
+                 liquidity, return_rate, isin, distribution,
+                 approved_from_product_id,
                  alternative_names, slugs, administrator_score, manager_score, approved_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                {_slugs_expr("$1", "COALESCE($12::text[], '{}'::text[])")}, $13, $14, now())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                {_slugs_expr("$1", "COALESCE($14::text[], '{}'::text[])")}, $15, $16, now())
             RETURNING *
             """,
             data.name,
@@ -183,6 +186,8 @@ class CatalogRepository:
             data.manager,
             data.liquidity,
             data.return_rate,
+            data.isin,
+            data.distribution,
             data.approved_from_product_id,
             data.alternative_names,
             data.administrator_score,
@@ -206,17 +211,19 @@ class CatalogRepository:
                 manager = $9,
                 liquidity = $10,
                 return_rate = $11,
-                approved_from_product_id = $12,
+                isin = $12,
+                distribution = $13,
+                approved_from_product_id = $14,
                 alternative_names = CASE
-                    WHEN cardinality($13::text[]) > 0 THEN $13
+                    WHEN cardinality($15::text[]) > 0 THEN $15
                     ELSE alternative_names
                 END,
                 slugs = {_slugs_expr(
                     "$2",
-                    "CASE WHEN cardinality($13::text[]) > 0 THEN $13 ELSE alternative_names END",
+                    "CASE WHEN cardinality($15::text[]) > 0 THEN $15 ELSE alternative_names END",
                 )},
-                administrator_score = $14,
-                manager_score = $15,
+                administrator_score = $16,
+                manager_score = $17,
                 approved_at = now()
             WHERE id = $1
             RETURNING *
@@ -232,6 +239,8 @@ class CatalogRepository:
             data.manager,
             data.liquidity,
             data.return_rate,
+            data.isin,
+            data.distribution,
             data.approved_from_product_id,
             data.alternative_names,
             data.administrator_score,
@@ -397,6 +406,8 @@ class CatalogRepository:
             manager=row["manager"] or "",
             liquidity=row["liquidity"] or "",
             return_rate=row["return_rate"] or "",
+            isin=row["isin"] or "",
+            distribution=row["distribution"] or "",
             alternative_names=list(row["alternative_names"] or []),
             administrator_score=row["administrator_score"],
             manager_score=row["manager_score"],

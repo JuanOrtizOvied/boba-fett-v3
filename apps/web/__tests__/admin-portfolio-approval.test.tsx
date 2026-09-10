@@ -27,6 +27,8 @@ const PRODUCT: Product = {
   manager: "",
   liquidity: "",
   return_rate: "",
+  isin: "",
+  distribution: "",
   catalog_product_id: null,
 };
 
@@ -42,6 +44,8 @@ const CATALOG_ENTRY: CatalogProduct = {
   manager: "Manager Co",
   liquidity: "T+2",
   return_rate: "8%",
+  isin: "",
+  distribution: "",
   alternative_names: [],
   administrator_score: null,
   manager_score: null,
