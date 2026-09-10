@@ -522,7 +522,9 @@ CREATE TABLE IF NOT EXISTS portfolio_changes (
     operation TEXT NOT NULL CHECK (operation IN ('create', 'update', 'delete')),
     before_state JSONB,
     after_state JSONB,
-    source TEXT NOT NULL DEFAULT 'api' CHECK (source IN ('agent', 'api', 'admin')),
+    source TEXT NOT NULL DEFAULT 'api' CHECK (
+        source IN ('agent', 'api', 'admin', 'admin_ficha_import')
+    ),
     snapshot_id UUID REFERENCES portfolio_snapshots(id) ON DELETE SET NULL,
     metadata JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -577,3 +579,11 @@ DO $$ BEGIN
     ALTER TABLE portfolio_changes ALTER COLUMN after_state TYPE TEXT USING after_state::text;
   END IF;
 END $$;
+
+-- Migration: allow 'admin_ficha_import' as a portfolio_changes.source value
+-- (`sdd/admin-ficha-patrimonial/spec` — "Confirm creates all products" tags
+-- ficha-imported products with this source). Idempotent drop+re-add so it
+-- is safe to run against both pre-existing and brand-new databases.
+ALTER TABLE portfolio_changes DROP CONSTRAINT IF EXISTS changes_source_check;
+ALTER TABLE portfolio_changes ADD CONSTRAINT changes_source_check
+    CHECK (source IN ('agent', 'api', 'admin', 'admin_ficha_import'));

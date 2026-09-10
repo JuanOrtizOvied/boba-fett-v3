@@ -92,6 +92,75 @@ export interface EnrichedProposedProduct extends ProposedProduct {
 }
 
 /**
+ * Mirrors `db.models.SearchResult` — the unified result of the cascading
+ * L1 (catalog) -> L2 (Claude knowledge) -> L3 (Tavily web search) product
+ * search, as embedded in `FichaEnrichedRow.enriched`.
+ */
+export interface SearchResult {
+  name: string;
+  asset_class: AssetAllocation[];
+  geographic_focus: AssetAllocation[];
+  commission: string;
+  currency: string;
+  administrator: string;
+  manager: string;
+  liquidity: string;
+  return_rate: string;
+  underlying: AssetAllocation[];
+  catalog_product_id: number | null;
+  primary_source: FieldSource;
+  provenance: ProvenanceMap;
+}
+
+/**
+ * Mirrors `db.ficha_patrimonial.FichaClientInfo` — the ficha's row-5 client
+ * info, resolved to a `user_id` by `POST /admin/ficha-patrimonial/parse`.
+ */
+export interface FichaClientInfo {
+  email: string;
+  name: string;
+  phone: string;
+  user_id: string;
+}
+
+/**
+ * Mirrors `db.ficha_patrimonial.FichaParsedRow` — one raw product row
+ * (Excel rows 8+) before `cascade_search()` enrichment.
+ */
+export interface FichaParsedRow {
+  excel_row: number;
+  raw_name: string;
+  raw_tipo_activo: string;
+  raw_amount: number;
+  raw_currency: string;
+  raw_return_rate: string;
+  raw_pertenencia: string;
+  mapped_asset_class: string | null;
+  normalized_return_rate: string;
+}
+
+/**
+ * Mirrors `db.ficha_patrimonial.FichaEnrichedRow` — a parsed row merged with
+ * its `cascade_search()` result. `enrichment_failed` covers both raised
+ * exceptions and a true no-match cascade result (`admin_ficha_import` design
+ * discovery, PR2 apply-progress).
+ */
+export interface FichaEnrichedRow extends FichaParsedRow {
+  enriched: SearchResult | null;
+  enrichment_failed: boolean;
+}
+
+/**
+ * Mirrors `db.ficha_patrimonial.FichaParseResponse` — the response body of
+ * `POST /admin/ficha-patrimonial/parse` (`sdd/admin-ficha-patrimonial/spec`
+ * -> "Ficha Parse Endpoint").
+ */
+export interface FichaParseResponse {
+  client: FichaClientInfo;
+  rows: FichaEnrichedRow[];
+}
+
+/**
  * Mirrors `db.models.CatalogProduct` — a `product_catalog` row as returned by
  * `GET /admin/catalog/entries` (`sdd/product-catalog-approval/spec` ->
  * "Catalog Listing"). `approved_from_product_id`/`approved_at` are only set

@@ -280,13 +280,17 @@ def _sanitize_taxonomy(result: SearchResult) -> None:
     """Drop asset_class allocations whose name doesn't match the SABBI
     taxonomy. Invalid entries (e.g. "Diversificado" from a catalog entry)
     are wiped so _classify can re-attempt auto-classification or the agent
-    asks the user."""
-    if result.asset_class:
-        valid = [a for a in result.asset_class if _is_valid_asset_class(a.name)]
-        if len(valid) != len(result.asset_class):
-            result.asset_class = valid
-            if not valid:
-                result.provenance.pop("asset_class", None)
+    asks the user.  Catalog-sourced values are kept as-is — that data was
+    already reviewed by an admin."""
+    if not result.asset_class:
+        return
+    if result.provenance.get("asset_class") == "catalog":
+        return
+    valid = [a for a in result.asset_class if _is_valid_asset_class(a.name)]
+    if len(valid) != len(result.asset_class):
+        result.asset_class = valid
+        if not valid:
+            result.provenance.pop("asset_class", None)
 
 
 def _classify(result: SearchResult) -> None:

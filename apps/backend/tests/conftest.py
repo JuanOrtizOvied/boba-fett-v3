@@ -158,3 +158,57 @@ def tool_config(test_user_id: str) -> RunnableConfig:
     injects per-run, for direct `.ainvoke()` calls against portfolio
     tools (`agent.tools._user_id`)."""
     return {"configurable": {"user_id": test_user_id}}
+
+
+@pytest.fixture
+def build_ficha_workbook():
+    """Factory fixture building an in-memory `.xlsx` matching the "Ficha
+    Patrimonial" template shape consumed by
+    `db.ficha_patrimonial.parse_ficha_excel()` — client info in row 5,
+    headers in row 7, product rows starting at row 8 (columns C/J/K/L/M/N)
+    (`sdd/admin-ficha-patrimonial/spec` — "Excel Parsing — Sabbi Sheet").
+
+    Returns a builder callable so tests can vary the product rows, client
+    info, and whether a trailing "Total" row is written, without repeating
+    openpyxl boilerplate. Reused by `tests/test_ficha_patrimonial.py` and
+    (later) the parse-endpoint integration tests.
+    """
+    import io as _io
+
+    from openpyxl import Workbook
+
+    def _build(
+        products: list[dict[str, Any]] | None = None,
+        *,
+        client_name: str = "Juan Perez",
+        client_email: str = "juan.perez@example.com",
+        client_phone: str = "+51 999 999 999",
+        include_total_row: bool = True,
+        sheet_name: str = "Sabbi",
+    ) -> bytes:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = sheet_name
+
+        ws["D5"] = client_name
+        ws["M5"] = client_email
+        ws["O5"] = client_phone
+
+        row = 8
+        for product in products or []:
+            ws[f"C{row}"] = product.get("name", "")
+            ws[f"J{row}"] = product.get("tipo_activo", "")
+            ws[f"K{row}"] = product.get("currency", "")
+            ws[f"L{row}"] = product.get("pertenencia", "")
+            ws[f"M{row}"] = product.get("amount", 0)
+            ws[f"N{row}"] = product.get("return_rate", "")
+            row += 1
+
+        if include_total_row:
+            ws[f"C{row}"] = "Total"
+
+        buffer = _io.BytesIO()
+        wb.save(buffer)
+        return buffer.getvalue()
+
+    return _build

@@ -10,24 +10,44 @@ lifespan before this router is exercised — see `api/routes.py`.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+import asyncio
+import base64
 
+import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import ValidationError
+
+from agent.search import cascade_search
 from api.chat_routes import _graph_config, _serialize_message, _state_messages
 from auth.dependencies import require_admin
 from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
 from db.catalog_repository import CatalogRepository
+from db.ficha_patrimonial import (
+    FichaConfirmRequest,
+    FichaEnrichedRow,
+    FichaParsedRow,
+    FichaParseError,
+    FichaParseRequest,
+    FichaParseResponse,
+    parse_ficha_excel,
+)
 from db.models import (
     AdministratorCreate,
     CatalogProductCreate,
     CatalogProductUpdate,
     ManagerCreate,
+    ProductCreate,
 )
 from db.repository import ProductRepository
 from db.versioning import VersioningRepository
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+
+# Bounded concurrency for cascade_search enrichment calls during ficha parse
+# (spec: "Concurrency bounded" — no more than 3 in flight at once).
+_FICHA_ENRICHMENT_CONCURRENCY = 3
 
 
 def _user_repo(request: Request) -> UserRepository:
@@ -339,3 +359,102 @@ async def view_thread(thread_id: str, request: Request) -> dict:
         "message_count": len(messages),
         "last_message_at": getattr(state, "created_at", None),
     }
+
+
+# ---------------------------------------------------------------------------
+# Ficha Patrimonial bulk import (`sdd/admin-ficha-patrimonial/spec`)
+# ---------------------------------------------------------------------------
+
+
+async def _enrich_ficha_row(
+    row: FichaParsedRow, pool: asyncpg.Pool, semaphore: asyncio.Semaphore
+) -> FichaEnrichedRow:
+    """Enrich one parsed ficha row via `cascade_search()`, isolating
+    per-row failures so one bad/slow lookup never breaks the batch (spec:
+    "Per-row enrichment failure is isolated"). Excel-sourced currency wins
+    over whatever the cascade returns (spec: design.md — "Excel
+    amount/currency win; enriched fields fill gaps")."""
+    async with semaphore:
+        try:
+            result = await cascade_search(row.raw_name, pool)
+        except Exception:
+            result = None
+            failed = True
+        else:
+            failed = result is None
+
+    if result is not None and row.raw_currency:
+        result.currency = row.raw_currency
+        result.provenance.pop("currency", None)
+
+    return FichaEnrichedRow(**row.model_dump(), enriched=result, enrichment_failed=failed)
+
+
+@router.post("/ficha-patrimonial/parse")
+async def parse_ficha_patrimonial(
+    data: FichaParseRequest,
+    user_repo: UserRepository = Depends(_user_repo),
+    product_repo: ProductRepository = Depends(_product_repo),
+) -> FichaParseResponse:
+    """Parse and enrich an uploaded "Ficha Patrimonial" workbook for admin
+    review (`sdd/admin-ficha-patrimonial/spec` — "Ficha Parse Endpoint",
+    "Excel Parsing — Sabbi Sheet", "Batch Enrichment via cascade_search",
+    "Target User Resolution by Email"). Persists nothing — rows are only
+    written to the database via `/ficha-patrimonial/confirm`."""
+    try:
+        file_bytes = base64.b64decode(data.file_data, validate=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400, detail="El archivo no es un base64 válido"
+        ) from exc
+
+    try:
+        parsed = parse_ficha_excel(file_bytes)
+    except FichaParseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    user_row = await user_repo.get_by_email(parsed.client.email)
+    if user_row is not None:
+        parsed.client.user_id = str(user_row["id"])
+
+    semaphore = asyncio.Semaphore(_FICHA_ENRICHMENT_CONCURRENCY)
+    enriched_rows = await asyncio.gather(
+        *[_enrich_ficha_row(row, product_repo.pool, semaphore) for row in parsed.rows]
+    )
+
+    return FichaParseResponse(client=parsed.client, rows=list(enriched_rows))
+
+
+@router.post("/ficha-patrimonial/confirm", status_code=201)
+async def confirm_ficha_patrimonial(
+    data: FichaConfirmRequest,
+    user_repo: UserRepository = Depends(_user_repo),
+    product_repo: ProductRepository = Depends(_product_repo),
+) -> dict:
+    """Bulk-create every admin-reviewed ficha row atomically under one
+    target user (`sdd/admin-ficha-patrimonial/spec` — "Ficha Confirm
+    Endpoint", "Confirm creates all products", "Unknown email hard-fails",
+    "One invalid row rejects the whole batch"). All-or-nothing: any row
+    failure rolls back the whole batch and creates zero products."""
+    user_row = await user_repo.get_by_id(data.user_id)
+    if user_row is None:
+        raise HTTPException(
+            status_code=404, detail=f"Usuario '{data.user_id}' no encontrado"
+        )
+
+    product_ids: list[str] = []
+    try:
+        async with product_repo.pool.acquire() as conn:
+            async with conn.transaction():
+                for row in data.products:
+                    product = await product_repo.create(
+                        data.user_id,
+                        ProductCreate(**row.model_dump()),
+                        source="admin_ficha_import",
+                        conn=conn,
+                    )
+                    product_ids.append(product.id)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {"created_count": len(product_ids), "product_ids": product_ids}
