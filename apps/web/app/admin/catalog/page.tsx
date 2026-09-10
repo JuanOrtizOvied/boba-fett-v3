@@ -49,6 +49,8 @@ const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "manager", label: "Gestor" },
   { key: "liquidity", label: "Liquidez" },
   { key: "return_rate", label: "Rentabilidad" },
+  { key: "isin", label: "ISIN" },
+  { key: "distribution", label: "Distribución" },
 ];
 
 // Until pagination UI exists, request a high limit to preserve the
@@ -521,6 +523,8 @@ function EditCatalogModal({
   const currencyInvalid = (form.currency ?? "").trim() === "";
   const administratorInvalid = (form.administrator ?? "").trim() === "";
   const managerInvalid = (form.manager ?? "").trim() === "";
+  const isinInvalid = (form.isin ?? "").trim() === "";
+  const distributionInvalid = (form.distribution ?? "").trim() === "";
   const administratorScoreMissing = !administratorInvalid && administratorScore === null;
   const managerScoreMissing = !managerInvalid && managerScore === null;
   const returnRateMinRequired = returnRateMin.trim() === "";
@@ -925,6 +929,34 @@ function EditCatalogModal({
                     />
                   </ModalField>
                 );
+              case "isin":
+                return (
+                  <ModalField key={key} label={label} required>
+                    <input
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      placeholder="Agregar ISIN"
+                      className={
+                        modalInputClass +
+                        (isinInvalid ? " border-red-400 focus:border-red-500" : "")
+                      }
+                    />
+                  </ModalField>
+                );
+              case "distribution":
+                return (
+                  <ModalField key={key} label={label} required>
+                    <input
+                      value={form[key] ?? ""}
+                      onChange={(e) => updateField(key, e.target.value)}
+                      placeholder="Agregar distribución"
+                      className={
+                        modalInputClass +
+                        (distributionInvalid ? " border-red-400 focus:border-red-500" : "")
+                      }
+                    />
+                  </ModalField>
+                );
               default:
                 return (
                   <ModalField key={key} label={label}>
@@ -967,7 +999,9 @@ function EditCatalogModal({
                 administratorScoreMissing ||
                 managerScoreMissing ||
                 returnRateMinRequired ||
-                returnRateOrderInvalid
+                returnRateOrderInvalid ||
+                isinInvalid ||
+                distributionInvalid
               }
               onClick={() => void handleSave()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"

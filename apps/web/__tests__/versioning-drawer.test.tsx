@@ -49,6 +49,8 @@ const DETAIL: SnapshotDetail = {
       manager: "",
       liquidity: "",
       return_rate: "",
+      isin: "",
+      distribution: "",
       catalog_product_id: null,
     },
   ],

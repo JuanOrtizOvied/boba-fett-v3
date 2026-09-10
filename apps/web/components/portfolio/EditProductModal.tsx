@@ -65,6 +65,8 @@ export const EditProductModal: FC<EditProductModalProps> = ({
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("");
   const [amount, setAmount] = useState("");
+  const [isin, setIsin] = useState("");
+  const [distribution, setDistribution] = useState("");
   const [assetClassRows, setAssetClassRows] = useState<AssetClassRow[]>([]);
   const [rows, setRows] = useState<CompositionRow[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
@@ -77,6 +79,8 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setName(product.name);
       setProvider(product.provider);
       setAmount(String(product.amount));
+      setIsin(product.isin);
+      setDistribution(product.distribution);
       setAssetClassRows(
         product.asset_class.length
           ? product.asset_class.map((a) => ({
@@ -99,6 +103,8 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setName("");
       setProvider("");
       setAmount("");
+      setIsin("");
+      setDistribution("");
       setAssetClassRows([
         { key: nextRowKey(), name: defaultAssetClass ?? "inversiones_directas", percentage: "100" },
       ]);
@@ -191,6 +197,14 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setFormError("Ingresa un monto");
       return;
     }
+    if (!isin.trim()) {
+      setFormError("Ingresa el ISIN");
+      return;
+    }
+    if (!distribution.trim()) {
+      setFormError("Ingresa la distribución");
+      return;
+    }
     if (assetClassAlloc.length === 0) {
       setFormError("Agrega al menos una clase de activo");
       return;
@@ -218,6 +232,8 @@ export const EditProductModal: FC<EditProductModalProps> = ({
         name: trimmedName,
         provider: provider.trim(),
         amount: parsedAmount,
+        isin: isin.trim(),
+        distribution: distribution.trim(),
         asset_class: assetClassAlloc,
         underlying: composition,
       };
@@ -292,6 +308,22 @@ export const EditProductModal: FC<EditProductModalProps> = ({
                 min={0}
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="ISIN">
+              <input
+                value={isin}
+                onChange={(event) => setIsin(event.target.value)}
+                placeholder="Agregar ISIN"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Distribución">
+              <input
+                value={distribution}
+                onChange={(event) => setDistribution(event.target.value)}
+                placeholder="Agregar distribución"
                 className={inputClass}
               />
             </Field>

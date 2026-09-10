@@ -20,6 +20,8 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     manager: "",
     liquidity: "",
     return_rate: "",
+    isin: "",
+    distribution: "",
     catalog_product_id: null,
     ...overrides,
   };
