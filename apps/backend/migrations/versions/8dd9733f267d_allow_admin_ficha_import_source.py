@@ -1,14 +1,14 @@
 """allow_admin_ficha_import_source
 
-Revision ID: f6a1b2c3d4e5
-Revises: e5f6a1b2c3d4
+Revision ID: 8dd9733f267d
+Revises: f6a1b2c3d4e5
 Create Date: 2026-09-04 00:00:00.000000
 """
 
 from alembic import op
 
-revision = "f6a1b2c3d4e5"
-down_revision = "e5f6a1b2c3d4"
+revision = "8dd9733f267d"
+down_revision = "f6a1b2c3d4e5"
 branch_labels = None
 depends_on = None
 
