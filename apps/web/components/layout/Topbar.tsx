@@ -1,9 +1,10 @@
 "use client";
 
-import type { FC } from "react";
+import { useState, type FC } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DownloadIcon, SendIcon } from "@/components/icons/Icons";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 export type PortfolioView = "builder" | "resumen";
 
@@ -19,14 +20,26 @@ type TopbarProps = {
  */
 export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView }) => {
   const { user, logout } = useAuth();
+  const [isExporting, setIsExporting] = useState(false);
 
-  const handleExport = () => {
-    // Direct navigation, not fetch+blob — the browser handles the
-    // Content-Disposition download itself, zero extra JS bundle impact
-    // (`portfolio-dashboard.spec.md` → "Exportar portafolio a Excel"). The
-    // portfolio identity is resolved server-side from the `sabbi_access`
-    // cookie, not a client-supplied id.
-    window.open("/api/portfolio/me/export", "_blank");
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const res = await fetchWithAuth("/api/portfolio/me/export");
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition");
+      const match = disposition?.match(/filename="(.+)"/);
+      const filename = match?.[1] ?? "portafolio-sabbi.xlsx";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -62,12 +75,13 @@ export const Topbar: FC<TopbarProps> = ({ activeView, onChangeView }) => {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={handleExport}
+          onClick={() => void handleExport()}
+          disabled={isExporting}
           aria-label="Exportar"
           className="flex items-center gap-1.5 rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <DownloadIcon size={16} />
-          <span className="hidden sm:inline">Exportar</span>
+          <span className="hidden sm:inline">{isExporting ? "Exportando…" : "Exportar"}</span>
         </button>
         <span className="group relative">
           <button
