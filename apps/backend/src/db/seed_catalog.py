@@ -96,8 +96,6 @@ async def seed(path: str) -> int:
 
     pool = await get_pool()
 
-    score_cache: dict[str, int | None] = {}
-
     async with pool.acquire() as conn:
         admin_rows = await conn.fetch(
             "SELECT name, score FROM administrator"
