@@ -523,8 +523,6 @@ function EditCatalogModal({
   const currencyInvalid = (form.currency ?? "").trim() === "";
   const administratorInvalid = (form.administrator ?? "").trim() === "";
   const managerInvalid = (form.manager ?? "").trim() === "";
-  const isinInvalid = (form.isin ?? "").trim() === "";
-  const distributionInvalid = (form.distribution ?? "").trim() === "";
   const administratorScoreMissing = !administratorInvalid && administratorScore === null;
   const managerScoreMissing = !managerInvalid && managerScore === null;
   const returnRateMinRequired = returnRateMin.trim() === "";
@@ -931,29 +929,23 @@ function EditCatalogModal({
                 );
               case "isin":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
                       placeholder="Agregar ISIN"
-                      className={
-                        modalInputClass +
-                        (isinInvalid ? " border-red-400 focus:border-red-500" : "")
-                      }
+                      className={modalInputClass}
                     />
                   </ModalField>
                 );
               case "distribution":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
                       placeholder="Agregar distribución"
-                      className={
-                        modalInputClass +
-                        (distributionInvalid ? " border-red-400 focus:border-red-500" : "")
-                      }
+                      className={modalInputClass}
                     />
                   </ModalField>
                 );
@@ -999,9 +991,7 @@ function EditCatalogModal({
                 administratorScoreMissing ||
                 managerScoreMissing ||
                 returnRateMinRequired ||
-                returnRateOrderInvalid ||
-                isinInvalid ||
-                distributionInvalid
+                returnRateOrderInvalid
               }
               onClick={() => void handleSave()}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"

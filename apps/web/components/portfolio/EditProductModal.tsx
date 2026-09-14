@@ -197,14 +197,6 @@ export const EditProductModal: FC<EditProductModalProps> = ({
       setFormError("Ingresa un monto");
       return;
     }
-    if (!isin.trim()) {
-      setFormError("Ingresa el ISIN");
-      return;
-    }
-    if (!distribution.trim()) {
-      setFormError("Ingresa la distribución");
-      return;
-    }
     if (assetClassAlloc.length === 0) {
       setFormError("Agrega al menos una clase de activo");
       return;
@@ -399,7 +391,7 @@ export const EditProductModal: FC<EditProductModalProps> = ({
               Composición por subcategoría
             </p>
 
-            {selectableLeaves.length > 0 && (
+            {selectableLeaves.length > 0 && total < 100 && (
               <select
                 value=""
                 onChange={(e) => {
@@ -420,6 +412,12 @@ export const EditProductModal: FC<EditProductModalProps> = ({
                   </optgroup>
                 ))}
               </select>
+            )}
+
+            {selectableLeaves.length > 0 && total >= 100 && (
+              <p className="text-xs text-sabbi-neutral-500">
+                Reduce el porcentaje de alguna subcategoría para poder agregar otra.
+              </p>
             )}
 
             {rows.length > 0 && (
