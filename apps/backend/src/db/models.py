@@ -204,18 +204,6 @@ class ProductUpdate(BaseModel):
             _check_allocation_sum(self.asset_class, "Asset class")
         return self
 
-    @model_validator(mode="after")
-    def _validate_isin(self) -> ProductUpdate:
-        if self.isin is not None and self.isin.strip() == "":
-            raise ValueError("El ISIN es obligatorio")
-        return self
-
-    @model_validator(mode="after")
-    def _validate_distribution(self) -> ProductUpdate:
-        if self.distribution is not None and self.distribution.strip() == "":
-            raise ValueError("La distribución es obligatoria")
-        return self
-
 
 class SnapshotCreate(BaseModel):
     """Request body for `POST /portfolio/me/snapshots`
@@ -322,18 +310,6 @@ class CatalogProductUpdate(BaseModel):
     def _validate_commission(self) -> CatalogProductUpdate:
         if self.commission is not None and self.commission.strip() == "":
             raise ValueError("La comisión es obligatoria")
-        return self
-
-    @model_validator(mode="after")
-    def _validate_isin(self) -> CatalogProductUpdate:
-        if self.isin is not None and self.isin.strip() == "":
-            raise ValueError("El ISIN es obligatorio")
-        return self
-
-    @model_validator(mode="after")
-    def _validate_distribution(self) -> CatalogProductUpdate:
-        if self.distribution is not None and self.distribution.strip() == "":
-            raise ValueError("La distribución es obligatoria")
         return self
 
     @model_validator(mode="after")
