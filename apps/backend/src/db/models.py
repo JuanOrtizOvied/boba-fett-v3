@@ -9,8 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 class AssetAllocation(BaseModel):
     name: str = Field(
         description=(
-            "Canonical subcategory leaf, e.g. 'Deuda Privada', "
-            "'Renta Variable US Large Cap'"
+            "Canonical subcategory leaf, e.g. 'Deuda Privada', 'Renta Variable US Large Cap'"
         ),
     )
     percentage: float = Field(ge=0, le=100)
@@ -362,11 +361,7 @@ class CatalogProductUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_manager_score(self) -> CatalogProductUpdate:
-        if (
-            self.manager is not None
-            and self.manager.strip() != ""
-            and self.manager_score is None
-        ):
+        if self.manager is not None and self.manager.strip() != "" and self.manager_score is None:
             raise ValueError("El score del gestor es obligatorio")
         return self
 

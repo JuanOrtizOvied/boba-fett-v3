@@ -67,14 +67,10 @@ class UserRepository:
         )
 
     async def delete_refresh_token(self, token_hash: str) -> None:
-        await self.pool.execute(
-            "DELETE FROM refresh_tokens WHERE token_hash = $1", token_hash
-        )
+        await self.pool.execute("DELETE FROM refresh_tokens WHERE token_hash = $1", token_hash)
 
     async def get_active_thread_id(self, user_id: str) -> str | None:
-        row = await self.pool.fetchrow(
-            "SELECT active_thread_id FROM users WHERE id = $1", user_id
-        )
+        row = await self.pool.fetchrow("SELECT active_thread_id FROM users WHERE id = $1", user_id)
         return row["active_thread_id"] if row else None
 
     async def set_active_thread_id(self, user_id: str, thread_id: str) -> None:

@@ -163,10 +163,7 @@ async def export_portfolio(user: dict = Depends(get_current_user)) -> StreamingR
     filename = export_filename()
     return StreamingResponse(
         buffer,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument"
-            ".spreadsheetml.sheet"
-        ),
+        media_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -185,15 +182,11 @@ def _validate_uuid(value: str, *, field_name: str) -> None:
     try:
         uuid.UUID(value)
     except ValueError:
-        raise HTTPException(
-            status_code=422, detail=f"'{field_name}' is not a valid snapshot id"
-        )
+        raise HTTPException(status_code=422, detail=f"'{field_name}' is not a valid snapshot id")
 
 
 @app.post("/portfolio/me/snapshots", status_code=201)
-async def create_snapshot(
-    data: SnapshotCreate, user: dict = Depends(get_current_user)
-) -> dict:
+async def create_snapshot(data: SnapshotCreate, user: dict = Depends(get_current_user)) -> dict:
     """Create a named, immutable point-in-time snapshot of the current
     portfolio (SNAP-001). Empty portfolios are valid snapshots (SNAP-009)
     — `VersioningRepository.create_snapshot` never raises for that case.

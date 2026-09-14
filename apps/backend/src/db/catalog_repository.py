@@ -54,6 +54,7 @@ product_catalog_table = Table(
     Column("slugs", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
 )
 
+
 class CatalogRepository:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
@@ -82,9 +83,9 @@ class CatalogRepository:
 
             # `slugs` elements are already normalized at write time, so no
             # normalize_catalog_text() call is needed on the read side.
-            slugs_match = func.catalog_slugs_text(
-                product_catalog_table.c.slugs
-            ).like(func.concat("%", normalized_input, "%"))
+            slugs_match = func.catalog_slugs_text(product_catalog_table.c.slugs).like(
+                func.concat("%", normalized_input, "%")
+            )
 
             query = query.where(slugs_match)
 
@@ -97,12 +98,7 @@ class CatalogRepository:
             starts_with = (name_norm.like(func.concat(normalized_input, "%")), 2)
 
             query = query.order_by(
-                case(
-                    exact_match,
-                    starts_with,
-                    else_=3
-                ),
-                product_catalog_table.c.name.asc()
+                case(exact_match, starts_with, else_=3), product_catalog_table.c.name.asc()
             )
         else:
             query = query.order_by(product_catalog_table.c.name.asc())
@@ -137,14 +133,11 @@ class CatalogRepository:
             d["approved_at"] = approved_at.isoformat()
         return d
 
-
     async def list_all(self) -> list[CatalogProduct]:
         rows = await self.pool.fetch("SELECT * FROM product_catalog ORDER BY id")
         return [self._row_to_catalog_product(r) for r in rows]
 
-    async def insert_if_not_duplicate(
-        self, data: CatalogProductCreate
-    ) -> CatalogProduct | None:
+    async def insert_if_not_duplicate(self, data: CatalogProductCreate) -> CatalogProduct | None:
         """Insert a new catalog entry unless a normalized match already
         exists (`sdd/product-catalog-approval/design` — "Duplicate Detection
         SQL"). Matching is on name + asset_class, trimmed and
@@ -218,10 +211,12 @@ class CatalogRepository:
                     WHEN cardinality($15::text[]) > 0 THEN $15
                     ELSE alternative_names
                 END,
-                slugs = {_slugs_expr(
+                slugs = {
+                _slugs_expr(
                     "$2",
                     "CASE WHEN cardinality($15::text[]) > 0 THEN $15 ELSE alternative_names END",
-                )},
+                )
+            },
                 administrator_score = $16,
                 manager_score = $17,
                 approved_at = now()
@@ -248,22 +243,14 @@ class CatalogRepository:
         )
         return self._row_to_catalog_product(row) if row else None
 
-    async def update(
-        self, catalog_id: int, data: CatalogProductUpdate
-    ) -> CatalogProduct | None:
+    async def update(self, catalog_id: int, data: CatalogProductUpdate) -> CatalogProduct | None:
         fields = data.model_dump(exclude_none=True)
         if "underlying" in fields:
-            fields["underlying"] = json.dumps(
-                [a.model_dump() for a in data.underlying]
-            )
+            fields["underlying"] = json.dumps([a.model_dump() for a in data.underlying])
         if "geographic_focus" in fields:
-            fields["geographic_focus"] = json.dumps(
-                [a.model_dump() for a in data.geographic_focus]
-            )
+            fields["geographic_focus"] = json.dumps([a.model_dump() for a in data.geographic_focus])
         if "asset_class" in fields:
-            fields["asset_class"] = json.dumps(
-                [a.model_dump() for a in data.asset_class]
-            )
+            fields["asset_class"] = json.dumps([a.model_dump() for a in data.asset_class])
         if not fields:
             row = await self.pool.fetchrow(
                 "SELECT * FROM product_catalog WHERE id = $1", catalog_id
@@ -311,9 +298,7 @@ class CatalogRepository:
         return [Administrator(**dict(r)) for r in rows]
 
     async def list_managers(self) -> list[Manager]:
-        rows = await self.pool.fetch(
-            "SELECT id, name, score FROM manager ORDER BY name ASC"
-        )
+        rows = await self.pool.fetch("SELECT id, name, score FROM manager ORDER BY name ASC")
         return [Manager(**dict(r)) for r in rows]
 
     async def create_administrator(self, name: str, score: int) -> Administrator | None:

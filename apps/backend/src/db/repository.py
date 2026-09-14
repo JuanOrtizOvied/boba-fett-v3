@@ -21,9 +21,7 @@ class ProductRepository:
         return [self._row_to_product(r) for r in rows]
 
     async def get(self, product_id: str) -> Product | None:
-        row = await self.pool.fetchrow(
-            "SELECT * FROM products WHERE id = $1", product_id
-        )
+        row = await self.pool.fetchrow("SELECT * FROM products WHERE id = $1", product_id)
         return self._row_to_product(row) if row else None
 
     async def create(
@@ -47,9 +45,7 @@ class ProductRepository:
             return await self._create_impl(conn, user_id, data, source, metadata)
         async with self.pool.acquire() as acquired_conn:
             async with acquired_conn.transaction():
-                return await self._create_impl(
-                    acquired_conn, user_id, data, source, metadata
-                )
+                return await self._create_impl(acquired_conn, user_id, data, source, metadata)
 
     async def _create_impl(
         self,
@@ -117,9 +113,7 @@ class ProductRepository:
             return await self._update_impl(conn, product_id, data, source, metadata)
         async with self.pool.acquire() as acquired_conn:
             async with acquired_conn.transaction():
-                return await self._update_impl(
-                    acquired_conn, product_id, data, source, metadata
-                )
+                return await self._update_impl(acquired_conn, product_id, data, source, metadata)
 
     async def _update_impl(
         self,
@@ -138,17 +132,13 @@ class ProductRepository:
 
         updates = data.model_dump(exclude_none=True)
         if "underlying" in updates:
-            updates["underlying"] = json.dumps(
-                [a.model_dump() for a in data.underlying]
-            )
+            updates["underlying"] = json.dumps([a.model_dump() for a in data.underlying])
         if "geographic_focus" in updates:
             updates["geographic_focus"] = json.dumps(
                 [a.model_dump() for a in data.geographic_focus]
             )
         if "asset_class" in updates:
-            updates["asset_class"] = json.dumps(
-                [a.model_dump() for a in data.asset_class]
-            )
+            updates["asset_class"] = json.dumps([a.model_dump() for a in data.asset_class])
         if "amount" in updates:
             updates["amount"] = encrypt_amount(updates["amount"])
         if not updates:
@@ -198,9 +188,7 @@ class ProductRepository:
             return await self._delete_impl(conn, product_id, source, metadata)
         async with self.pool.acquire() as acquired_conn:
             async with acquired_conn.transaction():
-                return await self._delete_impl(
-                    acquired_conn, product_id, source, metadata
-                )
+                return await self._delete_impl(acquired_conn, product_id, source, metadata)
 
     async def _delete_impl(
         self,
@@ -271,8 +259,7 @@ class ProductRepository:
                 ac = alloc.name or "otros"
                 by_asset_class[ac] = by_asset_class.get(ac, 0) + p.amount * alloc.percentage / 100
         distribution = {
-            ac: amount / total * 100 if total else 0
-            for ac, amount in by_asset_class.items()
+            ac: amount / total * 100 if total else 0 for ac, amount in by_asset_class.items()
         }
         largest = max(products, key=lambda p: p.amount) if products else None
         return {

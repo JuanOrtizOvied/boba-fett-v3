@@ -8,6 +8,7 @@ plaintext (old unencrypted data) and Fernet tokens (new encrypted data),
 so a mixed dataset (e.g. mid-migration) reads correctly either way. A
 Fernet token always starts with the literal prefix "gAAAAA".
 """
+
 from __future__ import annotations
 
 import json

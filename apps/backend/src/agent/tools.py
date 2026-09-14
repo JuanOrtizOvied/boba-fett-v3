@@ -327,9 +327,7 @@ async def update_product(
             provider=provider,
             amount=amount,
             asset_class=(
-                _normalize_asset_class_allocations(asset_class)
-                if asset_class is not None
-                else None
+                _normalize_asset_class_allocations(asset_class) if asset_class is not None else None
             ),
             underlying=allocs,
         ),
@@ -350,9 +348,7 @@ async def delete_product(product_id: str, *, config: RunnableConfig) -> dict:
     """
     del config  # unused — product_id already scopes the delete
     repo = await _repository()
-    deleted = await repo.delete(
-        product_id, source="agent", metadata={"tool": "delete_product"}
-    )
+    deleted = await repo.delete(product_id, source="agent", metadata={"tool": "delete_product"})
     if not deleted:
         return {"status": "error", "message": f"Product {product_id} not found"}
     return {"status": "deleted", "product_id": product_id}
@@ -460,9 +456,7 @@ async def analyze_portfolio_drift(
     if total == 0:
         return {"status": "empty", "message": "Portfolio total is zero"}
 
-    target_map: dict[str, float] = {
-        t["asset_class"]: t["percentage"] for t in targets
-    }
+    target_map: dict[str, float] = {t["asset_class"]: t["percentage"] for t in targets}
     target_sum = sum(target_map.values())
     if abs(target_sum - 100) > 0.5:
         return {
@@ -505,14 +499,16 @@ async def analyze_portfolio_drift(
     suggestions = []
     for entry in out_of_band:
         action = "reduce" if entry["drift_pct"] > 0 else "increase"
-        suggestions.append({
-            "asset_class": entry["asset_class"],
-            "label": entry["label"],
-            "action": action,
-            "amount": abs(entry["delta_amount"]),
-            "from_pct": entry["current_pct"],
-            "to_pct": entry["target_pct"],
-        })
+        suggestions.append(
+            {
+                "asset_class": entry["asset_class"],
+                "label": entry["label"],
+                "action": action,
+                "amount": abs(entry["delta_amount"]),
+                "from_pct": entry["current_pct"],
+                "to_pct": entry["target_pct"],
+            }
+        )
 
     return {
         "status": "analyzed",

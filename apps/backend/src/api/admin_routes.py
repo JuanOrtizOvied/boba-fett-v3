@@ -198,7 +198,8 @@ async def list_catalog_entries(
         search_term = None
 
     entries = await catalog_repo.get_catalog(search_term, limit, offset)
-    return entries#[e.model_dump() for e in entries]
+    return entries  # [e.model_dump() for e in entries]
+
 
 @router.post("/catalog/create", status_code=201)
 async def create_catalog_entry(
@@ -240,9 +241,7 @@ async def approve_to_catalog(
 
     entry = await catalog_repo.insert_if_not_duplicate(data)
     if entry is None:
-        raise HTTPException(
-            status_code=409, detail="A matching catalog entry already exists"
-        )
+        raise HTTPException(status_code=409, detail="A matching catalog entry already exists")
     return entry.model_dump()
 
 
@@ -254,9 +253,7 @@ async def update_catalog_entry(
 ) -> dict:
     entry = await catalog_repo.update(catalog_id, data)
     if entry is None:
-        raise HTTPException(
-            status_code=404, detail=f"Catalog entry {catalog_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Catalog entry {catalog_id} not found")
     return entry.model_dump()
 
 
@@ -269,9 +266,7 @@ async def delete_catalog_entry(
     deletion is the only supported mutation after approval."""
     deleted = await catalog_repo.delete(catalog_id)
     if not deleted:
-        raise HTTPException(
-            status_code=404, detail=f"Catalog entry {catalog_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Catalog entry {catalog_id} not found")
 
 
 @router.get("/administrators")
@@ -404,9 +399,7 @@ async def parse_ficha_patrimonial(
     try:
         file_bytes = base64.b64decode(data.file_data, validate=True)
     except Exception as exc:
-        raise HTTPException(
-            status_code=400, detail="El archivo no es un base64 válido"
-        ) from exc
+        raise HTTPException(status_code=400, detail="El archivo no es un base64 válido") from exc
 
     try:
         parsed = parse_ficha_excel(file_bytes)
@@ -438,9 +431,7 @@ async def confirm_ficha_patrimonial(
     failure rolls back the whole batch and creates zero products."""
     user_row = await user_repo.get_by_id(data.user_id)
     if user_row is None:
-        raise HTTPException(
-            status_code=404, detail=f"Usuario '{data.user_id}' no encontrado"
-        )
+        raise HTTPException(status_code=404, detail=f"Usuario '{data.user_id}' no encontrado")
 
     product_ids: list[str] = []
     try:

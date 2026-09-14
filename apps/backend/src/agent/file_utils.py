@@ -96,11 +96,7 @@ def _word_to_text(data_b64: str, mime: str) -> str | None:
     tree = ElementTree.fromstring(xml_bytes)
     paragraphs: list[str] = []
     for para in tree.iter(f"{{{_WORDML_NS}}}p"):
-        texts = [
-            t.text
-            for t in para.iter(f"{{{_WORDML_NS}}}t")
-            if t.text
-        ]
+        texts = [t.text for t in para.iter(f"{{{_WORDML_NS}}}t") if t.text]
         if texts:
             paragraphs.append("".join(texts))
     return (

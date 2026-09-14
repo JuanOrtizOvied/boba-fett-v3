@@ -131,15 +131,19 @@ def _normalize_file_blocks(msg: AnyMessage) -> AnyMessage:
             if parsed is not None:
                 fixed.append({"type": "text", "text": parsed})
             elif mime.startswith("image/"):
-                fixed.append({
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": mime, "data": data},
-                })
+                fixed.append(
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": mime, "data": data},
+                    }
+                )
             elif mime == "application/pdf":
-                fixed.append({
-                    "type": "document",
-                    "source": {"type": "base64", "media_type": mime, "data": data},
-                })
+                fixed.append(
+                    {
+                        "type": "document",
+                        "source": {"type": "base64", "media_type": mime, "data": data},
+                    }
+                )
             else:
                 fixed.append({"type": "text", "text": "[Archivo adjunto]"})
         elif block.get("type") == "document":

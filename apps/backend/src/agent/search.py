@@ -105,9 +105,7 @@ class ExtractedProduct(BaseModel):
     underlying: list[_ExtractedAllocation] = Field(default_factory=list)
 
 
-def _merge_fields(
-    result: SearchResult, new_data: dict, source: FieldSource
-) -> SearchResult:
+def _merge_fields(result: SearchResult, new_data: dict, source: FieldSource) -> SearchResult:
     """Fill only the fields `result` doesn't already have, tagging each
     newly-filled field's provenance with `source`. Never overwrites a field
     that already has a value — this is what keeps catalog (L1) data
@@ -123,25 +121,20 @@ def _merge_fields(
     raw_underlying = new_data.get("underlying") or []
     if not result.underlying and raw_underlying:
         result.underlying = [
-            AssetAllocation(**a) if isinstance(a, dict) else a
-            for a in raw_underlying
+            AssetAllocation(**a) if isinstance(a, dict) else a for a in raw_underlying
         ]
         result.provenance["underlying"] = source
         filled_any = True
     raw_geo = new_data.get("geographic_focus") or []
     if not result.geographic_focus and raw_geo:
         result.geographic_focus = [
-            AssetAllocation(**a) if isinstance(a, dict) else a
-            for a in raw_geo
+            AssetAllocation(**a) if isinstance(a, dict) else a for a in raw_geo
         ]
         result.provenance["geographic_focus"] = source
         filled_any = True
     raw_ac = new_data.get("asset_class") or []
     if not result.asset_class and raw_ac:
-        result.asset_class = [
-            AssetAllocation(**a) if isinstance(a, dict) else a
-            for a in raw_ac
-        ]
+        result.asset_class = [AssetAllocation(**a) if isinstance(a, dict) else a for a in raw_ac]
         result.provenance["asset_class"] = source
         filled_any = True
     if filled_any and _SOURCE_RANK[source] > _SOURCE_RANK[result.primary_source]:

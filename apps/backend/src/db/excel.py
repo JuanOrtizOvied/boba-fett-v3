@@ -119,9 +119,7 @@ def _write_summary_sheet(wb: Workbook, products: list[Product]) -> None:
         ws.cell(row=row, column=1, value=ASSET_CLASS_LABELS.get(asset_class, asset_class))
         amount_cell = ws.cell(row=row, column=2, value=asset_class_total)
         amount_cell.number_format = CURRENCY_FORMAT
-        percent_cell = ws.cell(
-            row=row, column=3, value=(asset_class_total / total if total else 0)
-        )
+        percent_cell = ws.cell(row=row, column=3, value=(asset_class_total / total if total else 0))
         percent_cell.number_format = PERCENT_FORMAT
         ws.cell(row=row, column=4, value=len(entries))
         row += 1

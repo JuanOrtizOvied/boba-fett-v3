@@ -97,14 +97,10 @@ async def seed(path: str) -> int:
     pool = await get_pool()
 
     async with pool.acquire() as conn:
-        admin_rows = await conn.fetch(
-            "SELECT name, score FROM administrator"
-        )
+        admin_rows = await conn.fetch("SELECT name, score FROM administrator")
         admin_scores = {r["name"].lower().strip(): r["score"] for r in admin_rows}
 
-        mgr_rows = await conn.fetch(
-            "SELECT name, score FROM manager"
-        )
+        mgr_rows = await conn.fetch("SELECT name, score FROM manager")
         mgr_scores = {r["name"].lower().strip(): r["score"] for r in mgr_rows}
 
         await conn.execute("TRUNCATE product_catalog RESTART IDENTITY")

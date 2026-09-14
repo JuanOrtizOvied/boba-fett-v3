@@ -87,9 +87,7 @@ class VersioningRepository:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
 
-    async def create_snapshot(
-        self, user_id: str, name: str, description: str = ""
-    ) -> dict:
+    async def create_snapshot(self, user_id: str, name: str, description: str = "") -> dict:
         """Create an immutable snapshot of the user's current portfolio.
 
         Per SNAP-009, an empty portfolio is a VALID snapshot: it succeeds
@@ -118,8 +116,7 @@ class VersioningRepository:
                 )
 
                 current_products = {
-                    str(r["id"]): self._row_to_product(r).model_dump()
-                    for r in rows
+                    str(r["id"]): self._row_to_product(r).model_dump() for r in rows
                 }
 
                 latest = await conn.fetchrow(
@@ -135,8 +132,7 @@ class VersioningRepository:
                         latest["id"],
                     )
                     prev_products = {
-                        str(r["product_id"]): decrypt_json(r["product_data"])
-                        for r in prev_rows
+                        str(r["product_id"]): decrypt_json(r["product_data"]) for r in prev_rows
                     }
                     if current_products == prev_products:
                         raise SnapshotUnchangedError(
@@ -154,7 +150,7 @@ class VersioningRepository:
                         raw_ac = json.loads(raw_ac) if raw_ac else []
                     if not raw_ac:
                         raw_ac = [{"name": "otros", "percentage": 100}]
-                    for alloc in (raw_ac if isinstance(raw_ac, list) else []):
+                    for alloc in raw_ac if isinstance(raw_ac, list) else []:
                         if isinstance(alloc, dict):
                             ac_name = alloc.get("name") or "otros"
                             pct = alloc.get("percentage", 100)
@@ -213,9 +209,7 @@ class VersioningRepository:
                     "created_at": snapshot_row["created_at"].isoformat(),
                 }
 
-    async def list_snapshots(
-        self, user_id: str, limit: int = 50, offset: int = 0
-    ) -> list[dict]:
+    async def list_snapshots(self, user_id: str, limit: int = 50, offset: int = 0) -> list[dict]:
         """List snapshots for a user, newest first (SNAP-003).
 
         Returns summary rows only — no `snapshot_products` payload.
@@ -246,22 +240,14 @@ class VersioningRepository:
             if latest is None:
                 return True
 
-            rows = await conn.fetch(
-                "SELECT * FROM products WHERE user_id = $1", user_id
-            )
-            current = {
-                str(r["id"]): self._row_to_product(r).model_dump()
-                for r in rows
-            }
+            rows = await conn.fetch("SELECT * FROM products WHERE user_id = $1", user_id)
+            current = {str(r["id"]): self._row_to_product(r).model_dump() for r in rows}
 
             prev_rows = await conn.fetch(
                 "SELECT product_id, product_data FROM snapshot_products WHERE snapshot_id = $1",
                 latest["id"],
             )
-            prev = {
-                str(r["product_id"]): decrypt_json(r["product_data"])
-                for r in prev_rows
-            }
+            prev = {str(r["product_id"]): decrypt_json(r["product_data"]) for r in prev_rows}
             return current != prev
 
     async def get_snapshot(self, snapshot_id: str, user_id: str) -> dict | None:
@@ -293,9 +279,7 @@ class VersioningRepository:
         detail["products"] = [decrypt_json(r["product_data"]) for r in product_rows]
         return detail
 
-    async def compare_snapshots(
-        self, snapshot_a_id: str, snapshot_b_id: str, user_id: str
-    ) -> dict:
+    async def compare_snapshots(self, snapshot_a_id: str, snapshot_b_id: str, user_id: str) -> dict:
         """Compare two snapshots and return a structured diff (ADR-3).
 
         `snapshot_a_id` is always the baseline for `before`/`after`
@@ -324,9 +308,7 @@ class VersioningRepository:
             if owner is None:
                 raise SnapshotNotFoundError(f"Snapshot {snapshot_id} not found")
             if str(owner) != str(user_id):
-                raise SnapshotAccessError(
-                    f"Snapshot {snapshot_id} is not owned by this user"
-                )
+                raise SnapshotAccessError(f"Snapshot {snapshot_id} is not owned by this user")
 
         rows_a = await self.pool.fetch(
             "SELECT product_id, product_data FROM snapshot_products WHERE snapshot_id = $1",
@@ -478,8 +460,7 @@ class VersioningRepository:
             "product_count": row["product_count"],
             "total_amount": decrypt_amount(row["total_amount"]),
             "asset_class_summary": (
-                self._jsonb(row["asset_class_summary"])
-                if row.get("asset_class_summary") else []
+                self._jsonb(row["asset_class_summary"]) if row.get("asset_class_summary") else []
             ),
             "created_at": row["created_at"].isoformat(),
         }

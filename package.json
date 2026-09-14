@@ -14,10 +14,22 @@
     "dev:graph": "cd apps/backend && yarn dev:graph",
     "dev:api": "cd apps/backend && yarn dev:api",
     "build": "turbo run build",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "apps/backend/src/**/*.py": [
+      "ruff check --fix",
+      "ruff format"
+    ],
+    "apps/web/**/*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15",
     "turbo": "^2.0.0"
   }
 }
