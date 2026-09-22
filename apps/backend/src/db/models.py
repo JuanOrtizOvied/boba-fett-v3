@@ -217,6 +217,16 @@ class SnapshotCreate(BaseModel):
     description: str = ""
 
 
+class CatalogExportRequest(BaseModel):
+    """Request body for `POST /admin/catalog/export`
+    (`openspec/changes/catalog-export-and-filters` — "Export Selected
+    Catalog Entries to Excel"). An empty `ids` list is valid JSON, so the
+    "nothing selected" case is checked explicitly in the route handler
+    (400), not enforced here — the spec calls for 400, not Pydantic's 422."""
+
+    ids: list[int]
+
+
 class CatalogProduct(BaseModel):
     id: int
     name: str

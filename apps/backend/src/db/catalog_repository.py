@@ -30,6 +30,49 @@ def _slugs_expr(name_expr: str, alternative_names_expr: str) -> str:
     )
 
 
+def _pg_text_array_literal(values: list[str]) -> str:
+    """Safely-escaped `ARRAY[...]::text[]` literal for embedding directly
+    into a compiled SQL string. `get_catalog` compiles with
+    `literal_binds=True` and executes the resulting string via
+    `conn.fetch`, with no separate bind params — this fragment isn't
+    covered by SQLAlchemy's own literal rendering because it targets a
+    Postgres-specific function (`jsonb_array_elements`) SQLAlchemy Core
+    doesn't model, so escaping is done by hand here."""
+    quoted = ", ".join("'" + v.replace("'", "''") + "'" for v in values)
+    return f"ARRAY[{quoted}]::text[]"
+
+
+def _allocation_filter_clause(column_expr: str, values: list[str]):
+    """`EXISTS` clause matching an entry with at least one allocation
+    element (`asset_class`/`geographic_focus`/`underlying`, each a JSONB
+    array of `{name, percentage}`) whose `name` is in `values` — "any
+    element's name is in the selected set", not exact array equality
+    (design.md ADR-5). Case/whitespace-insensitive, same reasoning as
+    `_ci_in_clause` below."""
+    normalized = [v.strip().lower() for v in values]
+    array_literal = _pg_text_array_literal(normalized)
+    return text(
+        f"EXISTS (SELECT 1 FROM jsonb_array_elements({column_expr}) AS elem "
+        f"WHERE LOWER(TRIM(elem->>'name')) = ANY({array_literal}))"
+    )
+
+
+def _ci_in_clause(column, values: list[str]):
+    """Case/whitespace-insensitive `IN` match for scalar filter fields
+    (`currency`, `administrator`, `manager`). Mirrors the `LOWER(TRIM(name))`
+    normalization `insert_if_not_duplicate` and
+    `create_administrator`/`create_manager` already use elsewhere in this
+    file. Needed because these are free-text fields with no format
+    enforcement on create — `CatalogProductCreate` doesn't validate
+    `currency` against `CURRENCY_OPTIONS`, only `CatalogProductUpdate`
+    does — so legacy rows can carry inconsistent casing (e.g. `"dólares"`
+    vs `"Dólares"`) that would otherwise silently fail to match a
+    canonically-cased filter option (confirmed against real data:
+    2026-09-22)."""
+    normalized = [v.strip().lower() for v in values]
+    return func.lower(func.trim(column)).in_(normalized)
+
+
 # Define the table object for SQLAlchemy Core expressions
 metadata = MetaData()
 product_catalog_table = Table(
@@ -58,8 +101,22 @@ class CatalogRepository:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
 
-    async def get_catalog(self, search: str | None, limit: int, offset: int) -> list[dict]:
-        """Fetches the product catalog with optional search and pagination.
+    async def get_catalog(
+        self,
+        search: str | None,
+        limit: int,
+        offset: int,
+        *,
+        currency: list[str] | None = None,
+        administrator: list[str] | None = None,
+        manager: list[str] | None = None,
+        asset_class: list[str] | None = None,
+        geographic_focus: list[str] | None = None,
+        underlying: list[str] | None = None,
+    ) -> list[dict]:
+        """Fetches the product catalog with optional search, field filters,
+        and pagination (`openspec/changes/catalog-export-and-filters` —
+        "Catalog Listing").
 
         Uses SQLAlchemy Core for expression construction. Matches against
         `slugs` — the server-computed, already-normalized (lower + unaccent)
@@ -72,9 +129,30 @@ class CatalogRepository:
         `catalog_slugs_text(slugs)` expression — `array_to_string` itself is
         STABLE, not IMMUTABLE, so it can't be indexed directly (42P17);
         `catalog_slugs_text` is a thin SQL wrapper declared IMMUTABLE.
+
+        Every filter kwarg accepts multiple values: values within one field
+        combine with OR (`IN (...)` for scalar fields, `= ANY(...)` against
+        each JSONB element's `name` for allocation fields), while different
+        filter fields — and `search` — combine with AND (design.md ADR-4,
+        ADR-5, ADR-6 in that change).
         """
         # Base selection
         query = select(product_catalog_table)
+
+        if currency:
+            query = query.where(_ci_in_clause(product_catalog_table.c.currency, currency))
+        if administrator:
+            query = query.where(_ci_in_clause(product_catalog_table.c.administrator, administrator))
+        if manager:
+            query = query.where(_ci_in_clause(product_catalog_table.c.manager, manager))
+        if asset_class:
+            query = query.where(_allocation_filter_clause("product_catalog.asset_class", asset_class))
+        if geographic_focus:
+            query = query.where(
+                _allocation_filter_clause("product_catalog.geographic_focus", geographic_focus)
+            )
+        if underlying:
+            query = query.where(_allocation_filter_clause("product_catalog.underlying", underlying))
 
         if search:
             # Normalize the search input
@@ -140,6 +218,19 @@ class CatalogRepository:
 
     async def list_all(self) -> list[CatalogProduct]:
         rows = await self.pool.fetch("SELECT * FROM product_catalog ORDER BY id")
+        return [self._row_to_catalog_product(r) for r in rows]
+
+    async def get_by_ids(self, ids: list[int]) -> list[CatalogProduct]:
+        """Fetch catalog entries by id, for selective Excel export
+        (`openspec/changes/catalog-export-and-filters` — "Export Selected
+        Catalog Entries to Excel"). No pagination — admins select a bounded
+        set of rows client-side before exporting."""
+        if not ids:
+            return []
+        rows = await self.pool.fetch(
+            "SELECT * FROM product_catalog WHERE id = ANY($1::int[]) ORDER BY id",
+            ids,
+        )
         return [self._row_to_catalog_product(r) for r in rows]
 
     async def insert_if_not_duplicate(
