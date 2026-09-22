@@ -146,7 +146,9 @@ class CatalogRepository:
         if manager:
             query = query.where(_ci_in_clause(product_catalog_table.c.manager, manager))
         if asset_class:
-            query = query.where(_allocation_filter_clause("product_catalog.asset_class", asset_class))
+            query = query.where(
+                _allocation_filter_clause("product_catalog.asset_class", asset_class)
+            )
         if geographic_focus:
             query = query.where(
                 _allocation_filter_clause("product_catalog.geographic_focus", geographic_focus)
