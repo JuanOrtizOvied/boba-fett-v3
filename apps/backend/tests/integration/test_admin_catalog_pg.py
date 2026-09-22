@@ -174,6 +174,107 @@ async def test_list_catalog_entries_returns_all_fields(admin_api_client):
     assert body[0]["commission"] == "1.5%"
 
 
+async def test_list_catalog_entries_filters_by_single_value(admin_api_client):
+    """`openspec/changes/catalog-export-and-filters` — "Catalog Listing":
+    a single filter value narrows the listing to matching entries."""
+    _app, client = admin_api_client
+    await client.post(
+        "/admin/catalog/approve", json=_approve_payload(name="Fondo Soles", currency="Soles")
+    )
+    await client.post(
+        "/admin/catalog/approve", json=_approve_payload(name="Fondo Dolares", currency="Dólares")
+    )
+
+    response = await client.get("/admin/catalog/entries", params={"currency": "Soles"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [e["name"] for e in body] == ["Fondo Soles"]
+
+
+async def test_list_catalog_entries_filters_combine_multiple_values_with_or(admin_api_client):
+    """Repeated query params for the same field combine with OR (design.md
+    ADR-4)."""
+    _app, client = admin_api_client
+    await client.post(
+        "/admin/catalog/approve", json=_approve_payload(name="Fondo Soles", currency="Soles")
+    )
+    await client.post(
+        "/admin/catalog/approve", json=_approve_payload(name="Fondo Dolares", currency="Dólares")
+    )
+    await client.post(
+        "/admin/catalog/approve", json=_approve_payload(name="Fondo Euros", currency="Euros")
+    )
+
+    response = await client.get(
+        "/admin/catalog/entries",
+        params=[("currency", "Soles"), ("currency", "Dólares")],
+    )
+
+    assert response.status_code == 200
+    names = {e["name"] for e in response.json()}
+    assert names == {"Fondo Soles", "Fondo Dolares"}
+
+
+async def test_list_catalog_entries_no_matches_returns_empty_list(admin_api_client):
+    _app, client = admin_api_client
+    await client.post("/admin/catalog/approve", json=_approve_payload())
+
+    response = await client.get("/admin/catalog/entries", params={"currency": "Yenes"})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/catalog/export
+# ---------------------------------------------------------------------------
+
+
+async def test_export_catalog_entries_returns_xlsx_with_selected_rows(admin_api_client):
+    from openpyxl import load_workbook
+    import io
+
+    _app, client = admin_api_client
+    first = await client.post(
+        "/admin/catalog/approve", json=_approve_payload(name="Fondo Uno")
+    )
+    await client.post("/admin/catalog/approve", json=_approve_payload(name="Fondo Dos"))
+    first_id = first.json()["id"]
+
+    response = await client.post("/admin/catalog/export", json={"ids": [first_id]})
+
+    assert response.status_code == 200
+    assert "spreadsheetml.sheet" in response.headers["content-type"]
+    assert "attachment" in response.headers["content-disposition"]
+
+    wb = load_workbook(io.BytesIO(response.content))
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    header, *data_rows = rows
+    assert "Nombre" in header
+    name_col = header.index("Nombre")
+    assert [r[name_col] for r in data_rows] == ["Fondo Uno"]
+
+
+async def test_export_catalog_entries_empty_ids_returns_400(admin_api_client):
+    _app, client = admin_api_client
+
+    response = await client.post("/admin/catalog/export", json={"ids": []})
+
+    assert response.status_code == 400
+
+
+async def test_export_catalog_entries_without_admin_role_returns_403(admin_api_client):
+    app, client = admin_api_client
+    non_admin_id = str(uuid.uuid4())
+    app.dependency_overrides[get_current_user] = lambda: fake_user(non_admin_id, role="user")
+
+    response = await client.post("/admin/catalog/export", json={"ids": [1]})
+
+    assert response.status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # DELETE /admin/catalog/entries/{id}
 # ---------------------------------------------------------------------------
