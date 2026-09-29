@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import asyncpg
-from sqlalchemy import Column, Integer, MetaData, Table, Text, case, func, select
+from sqlalchemy import Boolean, Column, Integer, MetaData, Table, Text, case, func, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
@@ -95,6 +95,9 @@ product_catalog_table = Table(
     Column("approved_at", Text()),
     Column("alternative_names", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("slugs", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
+    Column("is_deleted", Boolean, nullable=False, server_default=text("false")),
+    Column("codigo", Text),
+    Column("cash_flows", Text, nullable=False, server_default=""),
 )
 
 class CatalogRepository:
@@ -113,6 +116,7 @@ class CatalogRepository:
         asset_class: list[str] | None = None,
         geographic_focus: list[str] | None = None,
         underlying: list[str] | None = None,
+        include_deleted: bool = False,
     ) -> list[dict]:
         """Fetches the product catalog with optional search, field filters,
         and pagination (`openspec/changes/catalog-export-and-filters` —
@@ -138,6 +142,11 @@ class CatalogRepository:
         """
         # Base selection
         query = select(product_catalog_table)
+
+        # Soft delete: hidden by default, `include_deleted=True` returns
+        # active and deleted entries together (each row carries `is_deleted`).
+        if not include_deleted:
+            query = query.where(product_catalog_table.c.is_deleted.is_(False))
 
         if currency:
             query = query.where(_ci_in_clause(product_catalog_table.c.currency, currency))
@@ -219,7 +228,9 @@ class CatalogRepository:
 
 
     async def list_all(self) -> list[CatalogProduct]:
-        rows = await self.pool.fetch("SELECT * FROM product_catalog ORDER BY id")
+        rows = await self.pool.fetch(
+            "SELECT * FROM product_catalog WHERE is_deleted = false ORDER BY id"
+        )
         return [self._row_to_catalog_product(r) for r in rows]
 
     async def get_by_ids(self, ids: list[int]) -> list[CatalogProduct]:
@@ -230,7 +241,8 @@ class CatalogRepository:
         if not ids:
             return []
         rows = await self.pool.fetch(
-            "SELECT * FROM product_catalog WHERE id = ANY($1::int[]) ORDER BY id",
+            "SELECT * FROM product_catalog "
+            "WHERE id = ANY($1::int[]) AND is_deleted = false ORDER BY id",
             ids,
         )
         return [self._row_to_catalog_product(r) for r in rows]
@@ -392,10 +404,52 @@ class CatalogRepository:
         return self._row_to_catalog_product(row) if row else None
 
     async def delete(self, catalog_id: int) -> bool:
+        """Soft delete: marks the entry `is_deleted = true` and keeps the row
+        (`openspec/changes/catalog-sharepoint-sync`, SD-01..SD-04). Returns
+        `True` when the entry exists (deleting an already-deleted entry is a
+        no-op success) and `False` when the id is unknown."""
         row = await self.pool.fetchrow(
-            "DELETE FROM product_catalog WHERE id = $1 RETURNING id", catalog_id
+            "UPDATE product_catalog SET is_deleted = true WHERE id = $1 RETURNING id",
+            catalog_id,
         )
         return row is not None
+
+        # Original hard delete, intentionally kept commented out (not removed)
+        # in case a separate hard-delete route is needed later. Catalog rows
+        # must never be physically deleted by the soft-delete flow.
+        # row = await self.pool.fetchrow(
+        #     "DELETE FROM product_catalog WHERE id = $1 RETURNING id", catalog_id
+        # )
+        # return row is not None
+
+    async def restore(self, catalog_id: int) -> CatalogProduct | None:
+        """Reactivate a soft-deleted entry (SD-09, SD-10). Returns `None` when
+        the id does not exist or the entry is not deleted. This is the only
+        way to un-delete: the Excel sync never does it."""
+        row = await self.pool.fetchrow(
+            "UPDATE product_catalog SET is_deleted = false "
+            "WHERE id = $1 AND is_deleted = true RETURNING *",
+            catalog_id,
+        )
+        return self._row_to_catalog_product(row) if row else None
+
+    async def find_deleted_duplicate(self, data: CatalogProductCreate) -> int | None:
+        """Id of a soft-deleted entry that matches `data` on the duplicate
+        identity key (normalized name + asset_class), or `None` (SD-12).
+        Lets the routes tell the admin to restore it instead of recreating."""
+        asset_class_json = json.dumps([a.model_dump() for a in data.asset_class])
+        row = await self.pool.fetchrow(
+            """
+            SELECT id FROM product_catalog
+            WHERE is_deleted = true
+              AND LOWER(TRIM(name)) = LOWER(TRIM($1))
+              AND asset_class = $2::jsonb
+            LIMIT 1
+            """,
+            data.name,
+            asset_class_json,
+        )
+        return row["id"] if row else None
 
     async def list_administrators(self) -> list[Administrator]:
         rows = await self.pool.fetch(
@@ -460,7 +514,8 @@ class CatalogRepository:
                     ), 0)
                 ) AS sim
             FROM product_catalog pc
-            WHERE
+            WHERE pc.is_deleted = false
+              AND (
                 similarity(name, $1) > 0.1
                 OR name ILIKE '%' || $1 || '%'
                 OR asset_class::text ILIKE '%' || $1 || '%'
@@ -469,6 +524,7 @@ class CatalogRepository:
                     WHERE similarity(alt, $1) > 0.1
                        OR alt ILIKE '%' || $1 || '%'
                 )
+              )
             ORDER BY sim DESC
             LIMIT $2
             """,
@@ -509,4 +565,7 @@ class CatalogRepository:
             approved_at=(
                 row["approved_at"].isoformat() if row["approved_at"] is not None else None
             ),
+            codigo=row["codigo"],
+            cash_flows=row["cash_flows"] or "",
+            is_deleted=row["is_deleted"],
         )

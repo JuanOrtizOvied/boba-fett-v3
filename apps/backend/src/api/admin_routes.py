@@ -70,6 +70,19 @@ def _versioning_repo(request: Request) -> VersioningRepository:
     return request.app.state.versioning_repo
 
 
+async def _duplicate_detail(catalog_repo: CatalogRepository, data: CatalogProductCreate) -> str:
+    """409 message for a duplicate catalog entry. When the match is a
+    soft-deleted entry, tell the admin it can be restored instead of
+    recreated (`openspec/changes/catalog-sharepoint-sync`, SD-12)."""
+    deleted_id = await catalog_repo.find_deleted_duplicate(data)
+    if deleted_id is not None:
+        return (
+            "A matching catalog entry already exists but is deleted "
+            f"(id {deleted_id}). Restore it instead of creating a new one."
+        )
+    return "A matching catalog entry already exists"
+
+
 def _strip_password_hash(row: dict) -> dict:
     return {k: v for k, v in dict(row).items() if k != "password_hash"}
 
@@ -200,6 +213,7 @@ async def list_catalog_entries(
     asset_class: list[str] | None = Query(None),
     geographic_focus: list[str] | None = Query(None),
     underlying: list[str] | None = Query(None),
+    include_deleted: bool = False,
 ) -> list[dict]:
     """List all `product_catalog` entries, optionally narrowed by field
     filters (`sdd/product-catalog-approval/spec` — "Catalog Listing").
@@ -207,7 +221,10 @@ async def list_catalog_entries(
     (e.g. `?currency=Soles&currency=D%C3%B3lares`); values within one
     field combine with OR, different fields (and `search`) combine with
     AND (`openspec/changes/catalog-export-and-filters/design.md` ADR-4,
-    ADR-5, ADR-6)."""
+    ADR-5, ADR-6). Soft-deleted entries are hidden unless
+    `include_deleted=true`, in which case every item carries its
+    `is_deleted` flag (`openspec/changes/catalog-sharepoint-sync`, SD-05,
+    SD-08)."""
     search_term = search.strip() if search is not None else None
     if search_term == "":
         search_term = None
@@ -222,6 +239,7 @@ async def list_catalog_entries(
         asset_class=asset_class,
         geographic_focus=geographic_focus,
         underlying=underlying,
+        include_deleted=include_deleted,
     )
     return entries#[e.model_dump() for e in entries]
 
@@ -265,7 +283,9 @@ async def create_catalog_entry(
     """
     entry = await catalog_repo.insert_if_not_duplicate(data)
     if entry is None:
-        raise HTTPException(status_code=409, detail="A matching catalog entry already exists")
+        raise HTTPException(
+            status_code=409, detail=await _duplicate_detail(catalog_repo, data)
+        )
 
     return entry.model_dump()
 
@@ -294,7 +314,7 @@ async def approve_to_catalog(
     entry = await catalog_repo.insert_if_not_duplicate(data)
     if entry is None:
         raise HTTPException(
-            status_code=409, detail="A matching catalog entry already exists"
+            status_code=409, detail=await _duplicate_detail(catalog_repo, data)
         )
     return entry.model_dump()
 
@@ -318,13 +338,32 @@ async def delete_catalog_entry(
     catalog_id: int, catalog_repo: CatalogRepository = Depends(_catalog_repo)
 ) -> None:
     """Delete a catalog entry (`sdd/product-catalog-approval/spec` —
-    "Catalog Entry Deletion"). Catalog entries are not inline-editable —
-    deletion is the only supported mutation after approval."""
+    "Catalog Entry Deletion"). This is a soft delete: the entry is marked
+    `is_deleted = true`, hidden from default reads and kept in the database
+    (`openspec/changes/catalog-sharepoint-sync`, SD-01..SD-04). Deleting an
+    already-deleted entry succeeds; an unknown id is 404."""
     deleted = await catalog_repo.delete(catalog_id)
     if not deleted:
         raise HTTPException(
             status_code=404, detail=f"Catalog entry {catalog_id} not found"
         )
+
+
+@router.post("/catalog/entries/{catalog_id}/restore")
+async def restore_catalog_entry(
+    catalog_id: int, catalog_repo: CatalogRepository = Depends(_catalog_repo)
+) -> dict:
+    """Restore a soft-deleted catalog entry (`is_deleted = false`). Returns
+    404 when the id does not exist or the entry is not deleted. This is the
+    only way to reactivate a deleted entry: the Excel sync never does
+    (`openspec/changes/catalog-sharepoint-sync`, SD-09..SD-11)."""
+    entry = await catalog_repo.restore(catalog_id)
+    if entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Catalog entry {catalog_id} not found or not deleted",
+        )
+    return entry.model_dump()
 
 
 @router.get("/administrators")

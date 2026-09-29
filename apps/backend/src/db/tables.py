@@ -15,6 +15,7 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
+    String,
     Table,
     Text,
     text,
@@ -89,12 +90,18 @@ product_catalog = Table(
     Column("manager", Text, server_default=""),
     Column("liquidity", Text, server_default=""),
     Column("return_rate", Text, server_default=""),
+    Column("isin", Text, nullable=False, server_default=""),
+    Column("distribution", Text, nullable=False, server_default=""),
     Column("approved_from_product_id", Text),
     Column("approved_at", DateTime(timezone=True)),
     Column("alternative_names", ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("slugs", ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("administrator_score", Integer),
     Column("manager_score", Integer),
+    Column("is_deleted", Boolean, nullable=False, server_default=text("false")),
+    Column("codigo", String(20)),
+    Column("cash_flows", Text, nullable=False, server_default=""),
+    Index("uq_product_catalog_codigo", "codigo", unique=True),
 )
 
 # Reference entities behind the catalog edit modal's Administrador/Gestor

@@ -156,7 +156,10 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     liquidity TEXT DEFAULT '',
     return_rate TEXT DEFAULT '',
     isin TEXT DEFAULT '',
-    distribution TEXT DEFAULT ''
+    distribution TEXT DEFAULT '',
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    codigo VARCHAR(20),
+    cash_flows TEXT NOT NULL DEFAULT ''
 );
 
 -- Migration: product_catalog asset_class TEXT -> JSONB array
@@ -242,6 +245,12 @@ ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS administrator_score INTEGER
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS manager_score INTEGER;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS isin TEXT DEFAULT '';
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS distribution TEXT DEFAULT '';
+-- Soft delete + Excel sync fields. Mirrors
+-- migrations/versions/a7c3e91d5b24_add_soft_delete_codigo_cash_flows.py.
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS codigo VARCHAR(20);
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS cash_flows TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_product_catalog_codigo ON product_catalog (codigo);
 
 INSERT INTO administrator (name, score, score_is_fixed) VALUES
     ('ACRES Sociedad Titulizadora S.A', 5, true),

@@ -254,6 +254,9 @@ class CatalogProduct(BaseModel):
     )
     approved_from_product_id: str | None = None
     approved_at: str | None = None
+    codigo: str | None = None
+    cash_flows: str = ""
+    is_deleted: bool = False
 
 
 class CatalogProductCreate(BaseModel):

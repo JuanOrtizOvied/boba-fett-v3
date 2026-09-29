@@ -51,6 +51,9 @@ const CATALOG_ENTRY: CatalogProduct = {
   manager_score: null,
   approved_from_product_id: null,
   approved_at: null,
+  codigo: null,
+  cash_flows: "",
+  is_deleted: false,
 };
 
 describe("ReadOnlyProductCard approval affordance", () => {
