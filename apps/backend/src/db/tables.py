@@ -127,6 +127,23 @@ manager = Table(
     Column("created_at", DateTime(timezone=True), server_default=text("now()")),
 )
 
+# SharePoint catalog sync: one row per active Graph webhook subscription.
+# `last_processed_hash` is the SHA-256 of the last successfully applied
+# file content, for idempotent reprocessing (design.md ADR-8).
+webhook_subscriptions = Table(
+    "webhook_subscriptions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("subscription_id", String(255), unique=True, nullable=False),
+    Column("client_state", String(255), nullable=False),
+    Column("expiration", DateTime(timezone=True), nullable=False),
+    Column("drive_item_id", String(255), nullable=False),
+    Column("last_processed_hash", String(64)),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Index("idx_webhook_subs_expiration", "expiration"),
+)
+
 portfolio_snapshots = Table(
     "portfolio_snapshots",
     metadata,

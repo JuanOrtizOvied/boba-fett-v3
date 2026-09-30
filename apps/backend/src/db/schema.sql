@@ -602,3 +602,20 @@ END $$;
 ALTER TABLE portfolio_changes DROP CONSTRAINT IF EXISTS changes_source_check;
 ALTER TABLE portfolio_changes ADD CONSTRAINT changes_source_check
     CHECK (source IN ('agent', 'api', 'admin', 'admin_ficha_import'));
+
+-- SharePoint catalog sync: tracks the Microsoft Graph webhook subscription
+-- and the last successfully processed file hash (idempotency). Mirrors
+-- migrations/versions/881f4c8ef19f_add_webhook_subscriptions.py.
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+    id SERIAL PRIMARY KEY,
+    subscription_id VARCHAR(255) NOT NULL UNIQUE,
+    client_state VARCHAR(255) NOT NULL,
+    expiration TIMESTAMPTZ NOT NULL,
+    drive_item_id VARCHAR(255) NOT NULL,
+    last_processed_hash VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_subs_expiration
+    ON webhook_subscriptions (expiration);
