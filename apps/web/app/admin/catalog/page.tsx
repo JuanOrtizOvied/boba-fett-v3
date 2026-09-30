@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Fragment,
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -31,6 +33,8 @@ import {
   type CatalogFilterState,
 } from "@/components/admin/catalog/CatalogFilters";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
+import { CatalogObservationsBanner } from "@/components/admin/catalog/CatalogObservationsBanner";
+import { ExcelManagedNotice } from "@/components/admin/catalog/ExcelManagedNotice";
 import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
 import {
   EDITABLE_FIELDS,
@@ -53,6 +57,14 @@ import {
   GEOGRAPHIC_FOCUS_OPTIONS,
   UNDERLYING_OPTIONS,
 } from "@/lib/catalogOptions";
+import {
+  countEntriesWithObservations,
+  getObservations,
+  observationDetail,
+  summarizeObservations,
+  type Observation,
+  type ObservationLists,
+} from "@/lib/catalogObservations";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "codigo", label: "Código" },
@@ -97,6 +109,17 @@ function CatalogPageContent() {
   // DB fields the Excel owns (GET /admin/catalog/excel-managed-fields). Empty
   // until loaded or if the call fails, which leaves every field editable.
   const [managedFields, setManagedFields] = useState<string[]>([]);
+  // The whole active catalog, independent of search and filters: the
+  // Observaciones banner counts over this, never over `entries`.
+  const [allEntries, setAllEntries] = useState<CatalogProduct[] | null>(null);
+  const [allEntriesFailed, setAllEntriesFailed] = useState(false);
+  const allEntriesRequestRef = useRef(0);
+  // Official manager/administrator names for the membership check. `null`
+  // until loaded, which skips that check instead of flagging everything.
+  const [managerNames, setManagerNames] = useState<string[] | null>(null);
+  const [administratorNames, setAdministratorNames] = useState<string[] | null>(null);
+  const [observationsOnly, setObservationsOnly] = useState(false);
+  const [expandedObservationId, setExpandedObservationId] = useState<number | null>(null);
 
   // -- Search: input ↔ URL ↔ debounce --------------------------------
   const [searchInput, setSearchInput] = useUrlSearch("search");
@@ -204,23 +227,126 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     })();
   }, []);
 
+  const loadAllEntries = useCallback(async (): Promise<void> => {
+    const requestId = ++allEntriesRequestRef.current;
+    try {
+      const params = new URLSearchParams({
+        limit: String(CATALOG_PAGE_SIZE),
+        offset: "0",
+      });
+      const res = await fetchWithAuth(`/api/admin/catalog/entries?${params}`);
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data: unknown = await res.json();
+      // A newer request supersedes this one (e.g. two quick edits).
+      if (requestId !== allEntriesRequestRef.current) return;
+      if (!Array.isArray(data)) throw new Error("unexpected response");
+      setAllEntries(data as CatalogProduct[]);
+      setAllEntriesFailed(false);
+    } catch {
+      if (requestId === allEntriesRequestRef.current) setAllEntriesFailed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAllEntries();
+  }, [loadAllEntries]);
+
+  // Table and banner must both reflect a create, edit, delete or restore.
+  const refreshAll = useCallback(async (): Promise<void> => {
+    await Promise.all([refetchCatalog(), loadAllEntries()]);
+  }, [refetchCatalog, loadAllEntries]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [adminRes, managerRes] = await Promise.all([
+          fetchWithAuth("/api/admin/administrators"),
+          fetchWithAuth("/api/admin/managers"),
+        ]);
+        if (adminRes.ok) {
+          const data: unknown = await adminRes.json();
+          if (Array.isArray(data)) {
+            setAdministratorNames((data as AdministratorEntity[]).map((a) => a.name));
+          }
+        }
+        if (managerRes.ok) {
+          const data: unknown = await managerRes.json();
+          if (Array.isArray(data)) {
+            setManagerNames((data as ManagerEntity[]).map((m) => m.name));
+          }
+        }
+      } catch {
+        // Membership of manager/administrator is simply not checked.
+      }
+    })();
+  }, []);
+
+  const observationLists = useMemo<ObservationLists>(
+    () => ({
+      asset_class: ASSET_CLASS_OPTIONS,
+      geographic_focus: GEOGRAPHIC_FOCUS_OPTIONS,
+      underlying: UNDERLYING_OPTIONS,
+      currency: CURRENCY_OPTIONS,
+      manager: managerNames,
+      administrator: administratorNames,
+    }),
+    [managerNames, administratorNames],
+  );
+
+  const observationSummary = useMemo(
+    () =>
+      allEntries
+        ? {
+            groups: summarizeObservations(allEntries, observationLists),
+            entriesWithObservations: countEntriesWithObservations(
+              allEntries,
+              observationLists,
+            ),
+          }
+        : null,
+    [allEntries, observationLists],
+  );
+
+  // Observations are a property of the row, so they are computed on the
+  // rows shown. Deleted rows never carry any (they are not validated).
+  const observationsById = useMemo(() => {
+    const map = new Map<number, Observation[]>();
+    for (const entry of entries ?? []) {
+      map.set(
+        entry.id,
+        entry.is_deleted ? [] : getObservations(entry, observationLists),
+      );
+    }
+    return map;
+  }, [entries, observationLists]);
+
+  // The "Observaciones" filter narrows what the server already returned for
+  // the other filters and the search, so the three combine by AND.
+  const visibleEntries = useMemo(() => {
+    if (!entries) return null;
+    if (!observationsOnly) return entries;
+    return entries.filter((e) => (observationsById.get(e.id) ?? []).length > 0);
+  }, [entries, observationsOnly, observationsById]);
+
   // Selection is page-level state (a set of catalog IDs), not per-row —
   // whenever the visible entries change (search, filters, or a delete),
   // drop any selected id that's no longer visible so "select all" never
   // silently exports rows the admin can no longer see
   // (openspec/changes/catalog-export-and-filters/design.md ADR-7).
   useEffect(() => {
-    if (!entries) return;
+    if (!visibleEntries) return;
     // Deleted entries are excluded too: they're never selectable for export
     // (they're already excluded server-side from the export itself, SD-06).
+    // Uses the rows left after the Observaciones filter, so "select all" and
+    // export never include rows the admin can no longer see.
     const selectableIds = new Set(
-      entries.filter((e) => !e.is_deleted).map((e) => e.id),
+      visibleEntries.filter((e) => !e.is_deleted).map((e) => e.id),
     );
     setSelectedIds((prev) => {
       const next = new Set([...prev].filter((id) => selectableIds.has(id)));
       return next.size === prev.size ? prev : next;
     });
-  }, [entries]);
+  }, [visibleEntries]);
 
   const handleExport = async () => {
     if (selectedIds.size === 0) return;
@@ -269,7 +395,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
       // Refetch instead of filtering the row out locally: this is a soft
       // delete, so with "Ver eliminados" active the row should reappear
       // marked as eliminada, not disappear from the table.
-      await refetchCatalog();
+      await refreshAll();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -289,7 +415,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
           `No se pudo restaurar la entrada (status ${res.status})`,
         );
       }
-      await refetchCatalog();
+      await refreshAll();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -301,6 +427,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     setEntries((prev) =>
       (prev ?? []).map((e) => (e.id === updated.id ? updated : e)),
     );
+    void loadAllEntries();
   };
 
   // Determine whether we're in search mode for the empty-state message
@@ -321,31 +448,50 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         </div>
       </div>
 
+      <CatalogObservationsBanner
+        groups={observationSummary?.groups ?? null}
+        entriesWithObservations={observationSummary?.entriesWithObservations ?? 0}
+        failed={allEntriesFailed}
+      />
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <CatalogFilters value={filters} onChange={setFilters} />
-        <label className="flex items-center gap-1.5 pb-1.5 text-sm text-sabbi-neutral-700 select-none">
-          <input
-            type="checkbox"
-            checked={showDeleted}
-            onChange={(e) => setShowDeleted(e.target.checked)}
-            className="size-4 rounded border-sabbi-neutral-300"
-          />
-          Ver eliminados
-        </label>
+        <div className="flex items-center gap-4 pb-1.5">
+          <label className="flex items-center gap-1.5 text-sm text-sabbi-neutral-700 select-none">
+            <input
+              type="checkbox"
+              checked={observationsOnly}
+              onChange={(e) => setObservationsOnly(e.target.checked)}
+              className="size-4 rounded border-sabbi-neutral-300"
+            />
+            Observaciones
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-sabbi-neutral-700 select-none">
+            <input
+              type="checkbox"
+              checked={showDeleted}
+              onChange={(e) => setShowDeleted(e.target.checked)}
+              className="size-4 rounded border-sabbi-neutral-300"
+            />
+            Ver eliminados
+          </label>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {entries === null && !error ? (
         <p className="text-sm text-sabbi-neutral-600">Cargando…</p>
-      ) : entries && entries.length === 0 ? (
+      ) : visibleEntries && visibleEntries.length === 0 ? (
         <p className="text-sm text-sabbi-neutral-600">
-          {isSearchMode
-            ? "No se encontraron productos."
-            : "No hay entradas en el catálogo."}
+          {observationsOnly
+            ? "Ningún producto tiene observaciones con los filtros actuales."
+            : isSearchMode
+              ? "No se encontraron productos."
+              : "No hay entradas en el catálogo."}
         </p>
       ) : (
-        entries && (
+        visibleEntries && (
           <div className="max-h-[75vh] overflow-auto rounded-xl border border-sabbi-neutral-200">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-30 bg-sabbi-neutral-50 text-xs font-medium tracking-wide text-sabbi-neutral-600 uppercase">
@@ -355,12 +501,12 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                       type="checkbox"
                       aria-label="Seleccionar todo"
                       checked={(() => {
-                        const selectable = (entries ?? []).filter((e) => !e.is_deleted);
+                        const selectable = (visibleEntries ?? []).filter((e) => !e.is_deleted);
                         return selectable.length > 0 && selectable.every((e) => selectedIds.has(e.id));
                       })()}
                       onChange={(e) => {
-                        if (!entries) return;
-                        const selectable = entries.filter((entry) => !entry.is_deleted);
+                        if (!visibleEntries) return;
+                        const selectable = visibleEntries.filter((entry) => !entry.is_deleted);
                         setSelectedIds(
                           e.target.checked ? new Set(selectable.map((entry) => entry.id)) : new Set(),
                         );
@@ -384,7 +530,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry, index) => {
+                {visibleEntries.map((entry, index) => {
                   const isOdd = index % 2 === 1;
                   const isDeleted = entry.is_deleted;
                   const rowBg = isDeleted
@@ -395,9 +541,12 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                   const hoverBg = isDeleted ? "" : "group-hover:bg-[#f0fcd4]";
                   const isDeleting = deletingId === entry.id;
                   const isRestoring = restoringId === entry.id;
+                  const observations = observationsById.get(entry.id) ?? [];
+                  const observationsExpanded =
+                    expandedObservationId === entry.id && observations.length > 0;
                   return (
+                    <Fragment key={entry.id}>
                     <tr
-                      key={entry.id}
                       className={`group transition-colors ${isDeleting ? "animate-row-delete" : `${rowBg} ${hoverBg}`}`}
                     >
                       <td
@@ -430,6 +579,23 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                           <span className="ml-2 rounded-full bg-sabbi-neutral-200 px-2 py-0.5 text-[10px] font-medium tracking-wide text-sabbi-neutral-600 uppercase">
                             Eliminado
                           </span>
+                        )}
+                        {observations.length > 0 && (
+                          <button
+                            type="button"
+                            aria-expanded={observationsExpanded}
+                            aria-label={`Ver observaciones de ${entry.name}`}
+                            title={observations.map(observationDetail).join("\n")}
+                            onClick={() =>
+                              setExpandedObservationId((prev) =>
+                                prev === entry.id ? null : entry.id,
+                              )
+                            }
+                            className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium tracking-wide text-amber-800 uppercase hover:bg-amber-200"
+                          >
+                            {observations.length}{" "}
+                            {observations.length === 1 ? "observación" : "observaciones"}
+                          </button>
                         )}
                       </td>
                       {CATALOG_COLUMNS.map((column) => {
@@ -490,6 +656,26 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                         </div>
                       </td>
                     </tr>
+                    {observationsExpanded && (
+                      <tr className="bg-amber-50">
+                        <td
+                          colSpan={CATALOG_COLUMNS.length + 3}
+                          className="px-4 py-2 text-sm text-amber-900"
+                        >
+                          <p className="font-medium">
+                            {entry.codigo ?? "Sin código"} · {entry.name}
+                          </p>
+                          <ul className="mt-1 list-disc pl-5">
+                            {observations.map((observation) => (
+                              <li key={`${observation.field}:${observation.issue}:${observation.value}`}>
+                                {observationDetail(observation)}
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -539,7 +725,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
       {isCreateModalOpen && (
         <CreateCatalogModal
           onClose={() => setIsCreateModalOpen(false)}
-          onSaved={refetchCatalog}
+          onSaved={refreshAll}
         />
       )}
     </div>
@@ -995,6 +1181,8 @@ function EditCatalogModal({
           </button>
         </div>
 
+        <ExcelManagedNotice codigo={entry.codigo} />
+
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
           {EDITABLE_FIELDS.map(({ key, label }) => {
             const ro = readOnly(key);
@@ -1014,7 +1202,7 @@ function EditCatalogModal({
                 );
               case "asset_class":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <AllocationListField
                       options={ASSET_CLASS_OPTIONS}
                       value={assetClass}
@@ -1027,7 +1215,7 @@ function EditCatalogModal({
                 );
               case "geographic_focus":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <AllocationListField
                       options={GEOGRAPHIC_FOCUS_OPTIONS}
                       value={geographicFocus}
@@ -1040,7 +1228,7 @@ function EditCatalogModal({
                 );
               case "underlying":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <AllocationListField
                       options={UNDERLYING_OPTIONS}
                       value={underlying}
@@ -1053,7 +1241,7 @@ function EditCatalogModal({
                 );
               case "commission":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
@@ -1068,7 +1256,7 @@ function EditCatalogModal({
                 );
               case "currency":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <select
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
@@ -1093,7 +1281,7 @@ function EditCatalogModal({
                 );
               case "administrator":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <ScoredVocabularyField
                       key={entry.id}
                       entities={administratorEntities}
@@ -1110,7 +1298,7 @@ function EditCatalogModal({
                 );
               case "manager":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <ScoredVocabularyField
                       key={entry.id}
                       entities={managerEntities}
@@ -1130,7 +1318,7 @@ function EditCatalogModal({
                   <ModalField key={key} label={label} hint={hint}>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-sabbi-neutral-500">
-                        min<span className="text-red-600">*</span>
+                        min{!ro && <span className="text-red-600">*</span>}
                       </span>
                       <input
                         type="number"
@@ -1169,7 +1357,7 @@ function EditCatalogModal({
                 );
               case "name":
                 return (
-                  <ModalField key={key} label={label} hint={hint} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
