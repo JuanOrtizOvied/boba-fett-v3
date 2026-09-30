@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Fragment,
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -31,6 +33,8 @@ import {
   type CatalogFilterState,
 } from "@/components/admin/catalog/CatalogFilters";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
+import { CatalogObservationsBanner } from "@/components/admin/catalog/CatalogObservationsBanner";
+import { ExcelManagedNotice } from "@/components/admin/catalog/ExcelManagedNotice";
 import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
 import {
   EDITABLE_FIELDS,
@@ -40,16 +44,30 @@ import {
   allocationSum,
   isAllocationInvalid,
   modalInputClass,
+  modalInputReadOnlyClass,
   parseReturnRate,
 } from "@/components/admin/catalog/catalogFormShared";
+import {
+  EXCEL_MANAGED_HINT,
+  isFieldReadOnly,
+} from "@/lib/catalogManagedFields";
 import {
   ASSET_CLASS_OPTIONS,
   CURRENCY_OPTIONS,
   GEOGRAPHIC_FOCUS_OPTIONS,
   UNDERLYING_OPTIONS,
 } from "@/lib/catalogOptions";
+import {
+  countEntriesWithObservations,
+  getObservations,
+  observationDetail,
+  summarizeObservations,
+  type Observation,
+  type ObservationLists,
+} from "@/lib/catalogObservations";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
+  { key: "codigo", label: "Código" },
   { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
@@ -88,6 +106,20 @@ function CatalogPageContent() {
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<CatalogProduct | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
+  // DB fields the Excel owns (GET /admin/catalog/excel-managed-fields). Empty
+  // until loaded or if the call fails, which leaves every field editable.
+  const [managedFields, setManagedFields] = useState<string[]>([]);
+  // The whole active catalog, independent of search and filters: the
+  // Observaciones banner counts over this, never over `entries`.
+  const [allEntries, setAllEntries] = useState<CatalogProduct[] | null>(null);
+  const [allEntriesFailed, setAllEntriesFailed] = useState(false);
+  const allEntriesRequestRef = useRef(0);
+  // Official manager/administrator names for the membership check. `null`
+  // until loaded, which skips that check instead of flagging everything.
+  const [managerNames, setManagerNames] = useState<string[] | null>(null);
+  const [administratorNames, setAdministratorNames] = useState<string[] | null>(null);
+  const [observationsOnly, setObservationsOnly] = useState(false);
+  const [expandedObservationId, setExpandedObservationId] = useState<number | null>(null);
 
   // -- Search: input ↔ URL ↔ debounce --------------------------------
   const [searchInput, setSearchInput] = useUrlSearch("search");
@@ -180,23 +212,141 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     return () => controller.abort();
   }, [debouncedSearch, filters, showDeleted, loadCatalog]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetchWithAuth("/api/admin/catalog/excel-managed-fields");
+        if (res.ok) {
+          const fields: unknown = await res.json();
+          if (Array.isArray(fields)) setManagedFields(fields);
+        }
+      } catch {
+        // UI guard only (design ADR-13): the PATCH API still accepts these
+        // fields, so failing open here never blocks an admin.
+      }
+    })();
+  }, []);
+
+  const loadAllEntries = useCallback(async (): Promise<void> => {
+    const requestId = ++allEntriesRequestRef.current;
+    try {
+      const params = new URLSearchParams({
+        limit: String(CATALOG_PAGE_SIZE),
+        offset: "0",
+      });
+      const res = await fetchWithAuth(`/api/admin/catalog/entries?${params}`);
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data: unknown = await res.json();
+      // A newer request supersedes this one (e.g. two quick edits).
+      if (requestId !== allEntriesRequestRef.current) return;
+      if (!Array.isArray(data)) throw new Error("unexpected response");
+      setAllEntries(data as CatalogProduct[]);
+      setAllEntriesFailed(false);
+    } catch {
+      if (requestId === allEntriesRequestRef.current) setAllEntriesFailed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAllEntries();
+  }, [loadAllEntries]);
+
+  // Table and banner must both reflect a create, edit, delete or restore.
+  const refreshAll = useCallback(async (): Promise<void> => {
+    await Promise.all([refetchCatalog(), loadAllEntries()]);
+  }, [refetchCatalog, loadAllEntries]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [adminRes, managerRes] = await Promise.all([
+          fetchWithAuth("/api/admin/administrators"),
+          fetchWithAuth("/api/admin/managers"),
+        ]);
+        if (adminRes.ok) {
+          const data: unknown = await adminRes.json();
+          if (Array.isArray(data)) {
+            setAdministratorNames((data as AdministratorEntity[]).map((a) => a.name));
+          }
+        }
+        if (managerRes.ok) {
+          const data: unknown = await managerRes.json();
+          if (Array.isArray(data)) {
+            setManagerNames((data as ManagerEntity[]).map((m) => m.name));
+          }
+        }
+      } catch {
+        // Membership of manager/administrator is simply not checked.
+      }
+    })();
+  }, []);
+
+  const observationLists = useMemo<ObservationLists>(
+    () => ({
+      asset_class: ASSET_CLASS_OPTIONS,
+      geographic_focus: GEOGRAPHIC_FOCUS_OPTIONS,
+      underlying: UNDERLYING_OPTIONS,
+      currency: CURRENCY_OPTIONS,
+      manager: managerNames,
+      administrator: administratorNames,
+    }),
+    [managerNames, administratorNames],
+  );
+
+  const observationSummary = useMemo(
+    () =>
+      allEntries
+        ? {
+            groups: summarizeObservations(allEntries, observationLists),
+            entriesWithObservations: countEntriesWithObservations(
+              allEntries,
+              observationLists,
+            ),
+          }
+        : null,
+    [allEntries, observationLists],
+  );
+
+  // Observations are a property of the row, so they are computed on the
+  // rows shown. Deleted rows never carry any (they are not validated).
+  const observationsById = useMemo(() => {
+    const map = new Map<number, Observation[]>();
+    for (const entry of entries ?? []) {
+      map.set(
+        entry.id,
+        entry.is_deleted ? [] : getObservations(entry, observationLists),
+      );
+    }
+    return map;
+  }, [entries, observationLists]);
+
+  // The "Observaciones" filter narrows what the server already returned for
+  // the other filters and the search, so the three combine by AND.
+  const visibleEntries = useMemo(() => {
+    if (!entries) return null;
+    if (!observationsOnly) return entries;
+    return entries.filter((e) => (observationsById.get(e.id) ?? []).length > 0);
+  }, [entries, observationsOnly, observationsById]);
+
   // Selection is page-level state (a set of catalog IDs), not per-row —
   // whenever the visible entries change (search, filters, or a delete),
   // drop any selected id that's no longer visible so "select all" never
   // silently exports rows the admin can no longer see
   // (openspec/changes/catalog-export-and-filters/design.md ADR-7).
   useEffect(() => {
-    if (!entries) return;
+    if (!visibleEntries) return;
     // Deleted entries are excluded too: they're never selectable for export
     // (they're already excluded server-side from the export itself, SD-06).
+    // Uses the rows left after the Observaciones filter, so "select all" and
+    // export never include rows the admin can no longer see.
     const selectableIds = new Set(
-      entries.filter((e) => !e.is_deleted).map((e) => e.id),
+      visibleEntries.filter((e) => !e.is_deleted).map((e) => e.id),
     );
     setSelectedIds((prev) => {
       const next = new Set([...prev].filter((id) => selectableIds.has(id)));
       return next.size === prev.size ? prev : next;
     });
-  }, [entries]);
+  }, [visibleEntries]);
 
   const handleExport = async () => {
     if (selectedIds.size === 0) return;
@@ -245,7 +395,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
       // Refetch instead of filtering the row out locally: this is a soft
       // delete, so with "Ver eliminados" active the row should reappear
       // marked as eliminada, not disappear from the table.
-      await refetchCatalog();
+      await refreshAll();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -265,7 +415,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
           `No se pudo restaurar la entrada (status ${res.status})`,
         );
       }
-      await refetchCatalog();
+      await refreshAll();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -277,6 +427,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     setEntries((prev) =>
       (prev ?? []).map((e) => (e.id === updated.id ? updated : e)),
     );
+    void loadAllEntries();
   };
 
   // Determine whether we're in search mode for the empty-state message
@@ -297,31 +448,50 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         </div>
       </div>
 
+      <CatalogObservationsBanner
+        groups={observationSummary?.groups ?? null}
+        entriesWithObservations={observationSummary?.entriesWithObservations ?? 0}
+        failed={allEntriesFailed}
+      />
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <CatalogFilters value={filters} onChange={setFilters} />
-        <label className="flex items-center gap-1.5 pb-1.5 text-sm text-sabbi-neutral-700 select-none">
-          <input
-            type="checkbox"
-            checked={showDeleted}
-            onChange={(e) => setShowDeleted(e.target.checked)}
-            className="size-4 rounded border-sabbi-neutral-300"
-          />
-          Ver eliminados
-        </label>
+        <div className="flex items-center gap-4 pb-1.5">
+          <label className="flex items-center gap-1.5 text-sm text-sabbi-neutral-700 select-none">
+            <input
+              type="checkbox"
+              checked={observationsOnly}
+              onChange={(e) => setObservationsOnly(e.target.checked)}
+              className="size-4 rounded border-sabbi-neutral-300"
+            />
+            Observaciones
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-sabbi-neutral-700 select-none">
+            <input
+              type="checkbox"
+              checked={showDeleted}
+              onChange={(e) => setShowDeleted(e.target.checked)}
+              className="size-4 rounded border-sabbi-neutral-300"
+            />
+            Ver eliminados
+          </label>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {entries === null && !error ? (
         <p className="text-sm text-sabbi-neutral-600">Cargando…</p>
-      ) : entries && entries.length === 0 ? (
+      ) : visibleEntries && visibleEntries.length === 0 ? (
         <p className="text-sm text-sabbi-neutral-600">
-          {isSearchMode
-            ? "No se encontraron productos."
-            : "No hay entradas en el catálogo."}
+          {observationsOnly
+            ? "Ningún producto tiene observaciones con los filtros actuales."
+            : isSearchMode
+              ? "No se encontraron productos."
+              : "No hay entradas en el catálogo."}
         </p>
       ) : (
-        entries && (
+        visibleEntries && (
           <div className="max-h-[75vh] overflow-auto rounded-xl border border-sabbi-neutral-200">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-30 bg-sabbi-neutral-50 text-xs font-medium tracking-wide text-sabbi-neutral-600 uppercase">
@@ -331,12 +501,12 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                       type="checkbox"
                       aria-label="Seleccionar todo"
                       checked={(() => {
-                        const selectable = (entries ?? []).filter((e) => !e.is_deleted);
+                        const selectable = (visibleEntries ?? []).filter((e) => !e.is_deleted);
                         return selectable.length > 0 && selectable.every((e) => selectedIds.has(e.id));
                       })()}
                       onChange={(e) => {
-                        if (!entries) return;
-                        const selectable = entries.filter((entry) => !entry.is_deleted);
+                        if (!visibleEntries) return;
+                        const selectable = visibleEntries.filter((entry) => !entry.is_deleted);
                         setSelectedIds(
                           e.target.checked ? new Set(selectable.map((entry) => entry.id)) : new Set(),
                         );
@@ -360,7 +530,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry, index) => {
+                {visibleEntries.map((entry, index) => {
                   const isOdd = index % 2 === 1;
                   const isDeleted = entry.is_deleted;
                   const rowBg = isDeleted
@@ -371,9 +541,12 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                   const hoverBg = isDeleted ? "" : "group-hover:bg-[#f0fcd4]";
                   const isDeleting = deletingId === entry.id;
                   const isRestoring = restoringId === entry.id;
+                  const observations = observationsById.get(entry.id) ?? [];
+                  const observationsExpanded =
+                    expandedObservationId === entry.id && observations.length > 0;
                   return (
+                    <Fragment key={entry.id}>
                     <tr
-                      key={entry.id}
                       className={`group transition-colors ${isDeleting ? "animate-row-delete" : `${rowBg} ${hoverBg}`}`}
                     >
                       <td
@@ -406,6 +579,23 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                           <span className="ml-2 rounded-full bg-sabbi-neutral-200 px-2 py-0.5 text-[10px] font-medium tracking-wide text-sabbi-neutral-600 uppercase">
                             Eliminado
                           </span>
+                        )}
+                        {observations.length > 0 && (
+                          <button
+                            type="button"
+                            aria-expanded={observationsExpanded}
+                            aria-label={`Ver observaciones de ${entry.name}`}
+                            title={observations.map(observationDetail).join("\n")}
+                            onClick={() =>
+                              setExpandedObservationId((prev) =>
+                                prev === entry.id ? null : entry.id,
+                              )
+                            }
+                            className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium tracking-wide text-amber-800 uppercase hover:bg-amber-200"
+                          >
+                            {observations.length}{" "}
+                            {observations.length === 1 ? "observación" : "observaciones"}
+                          </button>
                         )}
                       </td>
                       {CATALOG_COLUMNS.map((column) => {
@@ -466,6 +656,26 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                         </div>
                       </td>
                     </tr>
+                    {observationsExpanded && (
+                      <tr className="bg-amber-50">
+                        <td
+                          colSpan={CATALOG_COLUMNS.length + 3}
+                          className="px-4 py-2 text-sm text-amber-900"
+                        >
+                          <p className="font-medium">
+                            {entry.codigo ?? "Sin código"} · {entry.name}
+                          </p>
+                          <ul className="mt-1 list-disc pl-5">
+                            {observations.map((observation) => (
+                              <li key={`${observation.field}:${observation.issue}:${observation.value}`}>
+                                {observationDetail(observation)}
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -508,13 +718,14 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
 
       <EditCatalogModal
         entry={editingEntry}
+        managedFields={managedFields}
         onClose={() => setEditingEntry(null)}
         onSaved={handleUpdated}
       />
       {isCreateModalOpen && (
         <CreateCatalogModal
           onClose={() => setIsCreateModalOpen(false)}
-          onSaved={refetchCatalog}
+          onSaved={refreshAll}
         />
       )}
     </div>
@@ -596,10 +807,12 @@ function prefillScore(
 
 function EditCatalogModal({
   entry,
+  managedFields,
   onClose,
   onSaved,
 }: {
   entry: CatalogProduct | null;
+  managedFields: readonly string[];
   onClose: () => void;
   onSaved: (updated: CatalogProduct) => void;
 }) {
@@ -695,24 +908,34 @@ function EditCatalogModal({
 
   if (!entry) return null;
 
-  const nameInvalid = (form.name ?? "").trim() === "";
+  // Fields the Excel owns are shown read-only, so their validation must not
+  // block saving the editable ones (EM-05): every required/sum check below is
+  // skipped for a read-only field.
+  const readOnly = (key: string) => isFieldReadOnly(entry, managedFields, key);
+
+  const nameInvalid = !readOnly("name") && (form.name ?? "").trim() === "";
   const geoTotal = allocationSum(geographicFocus);
-  const geoEmpty = geographicFocus.length === 0;
-  const geoInvalid = isAllocationInvalid(geographicFocus);
+  const geoEmpty = !readOnly("geographic_focus") && geographicFocus.length === 0;
+  const geoInvalid = !readOnly("geographic_focus") && isAllocationInvalid(geographicFocus);
   const assetClassTotal = allocationSum(assetClass);
-  const assetClassEmpty = assetClass.length === 0;
-  const assetClassInvalid = isAllocationInvalid(assetClass);
+  const assetClassEmpty = !readOnly("asset_class") && assetClass.length === 0;
+  const assetClassInvalid = !readOnly("asset_class") && isAllocationInvalid(assetClass);
   const underlyingTotal = allocationSum(underlying);
-  const underlyingEmpty = underlying.length === 0;
-  const underlyingInvalid = isAllocationInvalid(underlying);
-  const commissionInvalid = (form.commission ?? "").trim() === "";
-  const currencyInvalid = (form.currency ?? "").trim() === "";
-  const administratorInvalid = (form.administrator ?? "").trim() === "";
-  const managerInvalid = (form.manager ?? "").trim() === "";
-  const administratorScoreMissing = !administratorInvalid && administratorScore === null;
-  const managerScoreMissing = !managerInvalid && managerScore === null;
-  const returnRateMinRequired = returnRateMin.trim() === "";
+  const underlyingEmpty = !readOnly("underlying") && underlying.length === 0;
+  const underlyingInvalid = !readOnly("underlying") && isAllocationInvalid(underlying);
+  const commissionInvalid = !readOnly("commission") && (form.commission ?? "").trim() === "";
+  const currencyInvalid = !readOnly("currency") && (form.currency ?? "").trim() === "";
+  const administratorBlank = (form.administrator ?? "").trim() === "";
+  const managerBlank = (form.manager ?? "").trim() === "";
+  const administratorInvalid = !readOnly("administrator") && administratorBlank;
+  const managerInvalid = !readOnly("manager") && managerBlank;
+  // Scores have no Excel column, so they stay required whenever a name is
+  // set, even when the name itself is read-only.
+  const administratorScoreMissing = !administratorBlank && administratorScore === null;
+  const managerScoreMissing = !managerBlank && managerScore === null;
+  const returnRateMinRequired = !readOnly("return_rate") && returnRateMin.trim() === "";
   const returnRateOrderInvalid =
+    !readOnly("return_rate") &&
     returnRateMin !== "" &&
     returnRateMax !== "" &&
     parseFloat(returnRateMin) > parseFloat(returnRateMax);
@@ -781,7 +1004,8 @@ function EditCatalogModal({
           field.key === "geographic_focus" ||
           field.key === "asset_class" ||
           field.key === "underlying" ||
-          field.key === "return_rate"
+          field.key === "return_rate" ||
+          readOnly(field.key)
         )
           continue;
         const current = form[field.key]?.trim() ?? "";
@@ -792,29 +1016,42 @@ function EditCatalogModal({
       }
 
       const alternativeNamesOriginal = (entry.alternative_names ?? []) as string[];
-      if (JSON.stringify(alternativeNames) !== JSON.stringify(alternativeNamesOriginal)) {
+      if (
+        !readOnly("alternative_names") &&
+        JSON.stringify(alternativeNames) !== JSON.stringify(alternativeNamesOriginal)
+      ) {
         patch.alternative_names = alternativeNames;
       }
 
       const geoOriginal = (entry.geographic_focus ?? []) as AssetAllocation[];
-      if (JSON.stringify(geographicFocus) !== JSON.stringify(geoOriginal)) {
+      if (
+        !readOnly("geographic_focus") &&
+        JSON.stringify(geographicFocus) !== JSON.stringify(geoOriginal)
+      ) {
         patch.geographic_focus = geographicFocus;
       }
 
       const assetClassOriginal = (entry.asset_class ?? []) as AssetAllocation[];
-      if (JSON.stringify(assetClass) !== JSON.stringify(assetClassOriginal)) {
+      if (
+        !readOnly("asset_class") &&
+        JSON.stringify(assetClass) !== JSON.stringify(assetClassOriginal)
+      ) {
         patch.asset_class = assetClass;
       }
 
       const underlyingOriginal = (entry.underlying ?? []) as AssetAllocation[];
-      if (JSON.stringify(underlying) !== JSON.stringify(underlyingOriginal)) {
+      if (
+        !readOnly("underlying") &&
+        JSON.stringify(underlying) !== JSON.stringify(underlyingOriginal)
+      ) {
         patch.underlying = underlying;
       }
 
       const returnRateOriginal = parseReturnRate(String(entry.return_rate ?? ""));
       if (
-        returnRateMin !== returnRateOriginal.min ||
-        returnRateMax !== returnRateOriginal.max
+        !readOnly("return_rate") &&
+        (returnRateMin !== returnRateOriginal.min ||
+          returnRateMax !== returnRateOriginal.max)
       ) {
         patch.return_rate =
           returnRateMin === ""
@@ -944,64 +1181,74 @@ function EditCatalogModal({
           </button>
         </div>
 
+        <ExcelManagedNotice codigo={entry.codigo} />
+
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
           {EDITABLE_FIELDS.map(({ key, label }) => {
+            const ro = readOnly(key);
+            const hint = ro ? EXCEL_MANAGED_HINT : undefined;
             switch (key) {
               case "alternative_names":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <NameListField
                       key={entry.id}
                       value={alternativeNames}
                       onChange={setAlternativeNames}
                       addPlaceholder="+ Agregar nombre alternativo"
+                      disabled={ro}
                     />
                   </ModalField>
                 );
               case "asset_class":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <AllocationListField
                       options={ASSET_CLASS_OPTIONS}
                       value={assetClass}
                       onChange={setAssetClass}
                       addLabel="Agregar clase de activo"
+                      disabled={ro}
                       required
                     />
                   </ModalField>
                 );
               case "geographic_focus":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <AllocationListField
                       options={GEOGRAPHIC_FOCUS_OPTIONS}
                       value={geographicFocus}
                       onChange={setGeographicFocus}
                       addLabel="Agregar foco geográfico"
+                      disabled={ro}
                       required
                     />
                   </ModalField>
                 );
               case "underlying":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <AllocationListField
                       options={UNDERLYING_OPTIONS}
                       value={underlying}
                       onChange={setUnderlying}
                       addLabel="Agregar subyacente"
+                      disabled={ro}
                       required
                     />
                   </ModalField>
                 );
               case "commission":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
+                      disabled={ro}
                       className={
                         modalInputClass +
+                        (ro ? modalInputReadOnlyClass : "") +
                         (commissionInvalid ? " border-red-400 focus:border-red-500" : "")
                       }
                     />
@@ -1009,12 +1256,14 @@ function EditCatalogModal({
                 );
               case "currency":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <select
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
+                      disabled={ro}
                       className={
                         modalInputClass +
+                        (ro ? modalInputReadOnlyClass : "") +
                         (currencyInvalid ? " border-red-400 focus:border-red-500" : "")
                       }
                     >
@@ -1032,7 +1281,7 @@ function EditCatalogModal({
                 );
               case "administrator":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <ScoredVocabularyField
                       key={entry.id}
                       entities={administratorEntities}
@@ -1041,6 +1290,7 @@ function EditCatalogModal({
                       onNameChange={(v) => updateField(key, v)}
                       onScoreChange={setAdministratorScore}
                       addPlaceholder="+ Agregar administrador"
+                      disabled={ro}
                       nameInvalid={administratorInvalid}
                       scoreInvalid={administratorScoreMissing}
                     />
@@ -1048,7 +1298,7 @@ function EditCatalogModal({
                 );
               case "manager":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <ScoredVocabularyField
                       key={entry.id}
                       entities={managerEntities}
@@ -1057,6 +1307,7 @@ function EditCatalogModal({
                       onNameChange={(v) => updateField(key, v)}
                       onScoreChange={setManagerScore}
                       addPlaceholder="+ Agregar gestor"
+                      disabled={ro}
                       nameInvalid={managerInvalid}
                       scoreInvalid={managerScoreMissing}
                     />
@@ -1064,18 +1315,20 @@ function EditCatalogModal({
                 );
               case "return_rate":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-sabbi-neutral-500">
-                        min<span className="text-red-600">*</span>
+                        min{!ro && <span className="text-red-600">*</span>}
                       </span>
                       <input
                         type="number"
                         step="0.01"
                         value={returnRateMin}
                         onChange={(e) => setReturnRateMin(e.target.value)}
+                        disabled={ro}
                         className={
                           modalInputClass +
+                          (ro ? modalInputReadOnlyClass : "") +
                           " w-0 min-w-0 flex-1" +
                           (returnRateMinRequired || returnRateOrderInvalid
                             ? " border-red-400 focus:border-red-500"
@@ -1090,8 +1343,10 @@ function EditCatalogModal({
                         step="0.01"
                         value={returnRateMax}
                         onChange={(e) => setReturnRateMax(e.target.value)}
+                        disabled={ro}
                         className={
                           modalInputClass +
+                          (ro ? modalInputReadOnlyClass : "") +
                           " w-0 min-w-0 flex-1" +
                           (returnRateOrderInvalid ? " border-red-400 focus:border-red-500" : "")
                         }
@@ -1102,12 +1357,14 @@ function EditCatalogModal({
                 );
               case "name":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required={!ro}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
+                      disabled={ro}
                       className={
                         modalInputClass +
+                        (ro ? modalInputReadOnlyClass : "") +
                         (nameInvalid ? " border-red-400 focus:border-red-500" : "")
                       }
                     />
@@ -1115,38 +1372,51 @@ function EditCatalogModal({
                 );
               case "isin":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
                       placeholder="Agregar ISIN"
-                      className={modalInputClass}
+                      disabled={ro}
+                      className={modalInputClass + (ro ? modalInputReadOnlyClass : "")}
                     />
                   </ModalField>
                 );
               case "distribution":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
                       placeholder="Agregar distribución"
-                      className={modalInputClass}
+                      disabled={ro}
+                      className={modalInputClass + (ro ? modalInputReadOnlyClass : "")}
                     />
                   </ModalField>
                 );
               default:
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
-                      className={modalInputClass}
+                      disabled={ro}
+                      className={modalInputClass + (ro ? modalInputReadOnlyClass : "")}
                     />
                   </ModalField>
                 );
             }
           })}
+          {isFieldReadOnly(entry, managedFields, "cash_flows") && (
+            <ModalField label="Flujos" hint={EXCEL_MANAGED_HINT}>
+              <input
+                value={entry.cash_flows ?? ""}
+                disabled
+                readOnly
+                className={modalInputClass + modalInputReadOnlyClass}
+              />
+            </ModalField>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">

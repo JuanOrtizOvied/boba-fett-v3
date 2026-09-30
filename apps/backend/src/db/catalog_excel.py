@@ -30,6 +30,7 @@ HEADER_FONT = Font(color="FFFFFF", bold=True)
 # (design.md ADR-3).
 _COLUMNS: list[tuple[str, str]] = [
     ("id", "ID"),
+    ("codigo", "Codigo"),
     ("name", "Nombre"),
     ("alternative_names", "Nombres alternativos"),
     ("asset_class", "Clase de activo"),
@@ -41,6 +42,7 @@ _COLUMNS: list[tuple[str, str]] = [
     ("manager", "Gestor"),
     ("liquidity", "Liquidez"),
     ("return_rate", "Rentabilidad"),
+    ("cash_flows", "Flujos"),
     ("isin", "ISIN"),
     ("distribution", "Distribución"),
 ]
