@@ -40,8 +40,13 @@ import {
   allocationSum,
   isAllocationInvalid,
   modalInputClass,
+  modalInputReadOnlyClass,
   parseReturnRate,
 } from "@/components/admin/catalog/catalogFormShared";
+import {
+  EXCEL_MANAGED_HINT,
+  isFieldReadOnly,
+} from "@/lib/catalogManagedFields";
 import {
   ASSET_CLASS_OPTIONS,
   CURRENCY_OPTIONS,
@@ -50,6 +55,7 @@ import {
 } from "@/lib/catalogOptions";
 
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
+  { key: "codigo", label: "Código" },
   { key: "alternative_names", label: "Nombres alternativos" },
   { key: "asset_class", label: "Clase de activo" },
   { key: "geographic_focus", label: "Foco geográfico" },
@@ -88,6 +94,9 @@ function CatalogPageContent() {
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<CatalogProduct | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
+  // DB fields the Excel owns (GET /admin/catalog/excel-managed-fields). Empty
+  // until loaded or if the call fails, which leaves every field editable.
+  const [managedFields, setManagedFields] = useState<string[]>([]);
 
   // -- Search: input ↔ URL ↔ debounce --------------------------------
   const [searchInput, setSearchInput] = useUrlSearch("search");
@@ -179,6 +188,21 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     // Clean up on unmount
     return () => controller.abort();
   }, [debouncedSearch, filters, showDeleted, loadCatalog]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetchWithAuth("/api/admin/catalog/excel-managed-fields");
+        if (res.ok) {
+          const fields: unknown = await res.json();
+          if (Array.isArray(fields)) setManagedFields(fields);
+        }
+      } catch {
+        // UI guard only (design ADR-13): the PATCH API still accepts these
+        // fields, so failing open here never blocks an admin.
+      }
+    })();
+  }, []);
 
   // Selection is page-level state (a set of catalog IDs), not per-row —
   // whenever the visible entries change (search, filters, or a delete),
@@ -508,6 +532,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
 
       <EditCatalogModal
         entry={editingEntry}
+        managedFields={managedFields}
         onClose={() => setEditingEntry(null)}
         onSaved={handleUpdated}
       />
@@ -596,10 +621,12 @@ function prefillScore(
 
 function EditCatalogModal({
   entry,
+  managedFields,
   onClose,
   onSaved,
 }: {
   entry: CatalogProduct | null;
+  managedFields: readonly string[];
   onClose: () => void;
   onSaved: (updated: CatalogProduct) => void;
 }) {
@@ -695,24 +722,34 @@ function EditCatalogModal({
 
   if (!entry) return null;
 
-  const nameInvalid = (form.name ?? "").trim() === "";
+  // Fields the Excel owns are shown read-only, so their validation must not
+  // block saving the editable ones (EM-05): every required/sum check below is
+  // skipped for a read-only field.
+  const readOnly = (key: string) => isFieldReadOnly(entry, managedFields, key);
+
+  const nameInvalid = !readOnly("name") && (form.name ?? "").trim() === "";
   const geoTotal = allocationSum(geographicFocus);
-  const geoEmpty = geographicFocus.length === 0;
-  const geoInvalid = isAllocationInvalid(geographicFocus);
+  const geoEmpty = !readOnly("geographic_focus") && geographicFocus.length === 0;
+  const geoInvalid = !readOnly("geographic_focus") && isAllocationInvalid(geographicFocus);
   const assetClassTotal = allocationSum(assetClass);
-  const assetClassEmpty = assetClass.length === 0;
-  const assetClassInvalid = isAllocationInvalid(assetClass);
+  const assetClassEmpty = !readOnly("asset_class") && assetClass.length === 0;
+  const assetClassInvalid = !readOnly("asset_class") && isAllocationInvalid(assetClass);
   const underlyingTotal = allocationSum(underlying);
-  const underlyingEmpty = underlying.length === 0;
-  const underlyingInvalid = isAllocationInvalid(underlying);
-  const commissionInvalid = (form.commission ?? "").trim() === "";
-  const currencyInvalid = (form.currency ?? "").trim() === "";
-  const administratorInvalid = (form.administrator ?? "").trim() === "";
-  const managerInvalid = (form.manager ?? "").trim() === "";
-  const administratorScoreMissing = !administratorInvalid && administratorScore === null;
-  const managerScoreMissing = !managerInvalid && managerScore === null;
-  const returnRateMinRequired = returnRateMin.trim() === "";
+  const underlyingEmpty = !readOnly("underlying") && underlying.length === 0;
+  const underlyingInvalid = !readOnly("underlying") && isAllocationInvalid(underlying);
+  const commissionInvalid = !readOnly("commission") && (form.commission ?? "").trim() === "";
+  const currencyInvalid = !readOnly("currency") && (form.currency ?? "").trim() === "";
+  const administratorBlank = (form.administrator ?? "").trim() === "";
+  const managerBlank = (form.manager ?? "").trim() === "";
+  const administratorInvalid = !readOnly("administrator") && administratorBlank;
+  const managerInvalid = !readOnly("manager") && managerBlank;
+  // Scores have no Excel column, so they stay required whenever a name is
+  // set, even when the name itself is read-only.
+  const administratorScoreMissing = !administratorBlank && administratorScore === null;
+  const managerScoreMissing = !managerBlank && managerScore === null;
+  const returnRateMinRequired = !readOnly("return_rate") && returnRateMin.trim() === "";
   const returnRateOrderInvalid =
+    !readOnly("return_rate") &&
     returnRateMin !== "" &&
     returnRateMax !== "" &&
     parseFloat(returnRateMin) > parseFloat(returnRateMax);
@@ -781,7 +818,8 @@ function EditCatalogModal({
           field.key === "geographic_focus" ||
           field.key === "asset_class" ||
           field.key === "underlying" ||
-          field.key === "return_rate"
+          field.key === "return_rate" ||
+          readOnly(field.key)
         )
           continue;
         const current = form[field.key]?.trim() ?? "";
@@ -792,29 +830,42 @@ function EditCatalogModal({
       }
 
       const alternativeNamesOriginal = (entry.alternative_names ?? []) as string[];
-      if (JSON.stringify(alternativeNames) !== JSON.stringify(alternativeNamesOriginal)) {
+      if (
+        !readOnly("alternative_names") &&
+        JSON.stringify(alternativeNames) !== JSON.stringify(alternativeNamesOriginal)
+      ) {
         patch.alternative_names = alternativeNames;
       }
 
       const geoOriginal = (entry.geographic_focus ?? []) as AssetAllocation[];
-      if (JSON.stringify(geographicFocus) !== JSON.stringify(geoOriginal)) {
+      if (
+        !readOnly("geographic_focus") &&
+        JSON.stringify(geographicFocus) !== JSON.stringify(geoOriginal)
+      ) {
         patch.geographic_focus = geographicFocus;
       }
 
       const assetClassOriginal = (entry.asset_class ?? []) as AssetAllocation[];
-      if (JSON.stringify(assetClass) !== JSON.stringify(assetClassOriginal)) {
+      if (
+        !readOnly("asset_class") &&
+        JSON.stringify(assetClass) !== JSON.stringify(assetClassOriginal)
+      ) {
         patch.asset_class = assetClass;
       }
 
       const underlyingOriginal = (entry.underlying ?? []) as AssetAllocation[];
-      if (JSON.stringify(underlying) !== JSON.stringify(underlyingOriginal)) {
+      if (
+        !readOnly("underlying") &&
+        JSON.stringify(underlying) !== JSON.stringify(underlyingOriginal)
+      ) {
         patch.underlying = underlying;
       }
 
       const returnRateOriginal = parseReturnRate(String(entry.return_rate ?? ""));
       if (
-        returnRateMin !== returnRateOriginal.min ||
-        returnRateMax !== returnRateOriginal.max
+        !readOnly("return_rate") &&
+        (returnRateMin !== returnRateOriginal.min ||
+          returnRateMax !== returnRateOriginal.max)
       ) {
         patch.return_rate =
           returnRateMin === ""
@@ -946,62 +997,70 @@ function EditCatalogModal({
 
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
           {EDITABLE_FIELDS.map(({ key, label }) => {
+            const ro = readOnly(key);
+            const hint = ro ? EXCEL_MANAGED_HINT : undefined;
             switch (key) {
               case "alternative_names":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <NameListField
                       key={entry.id}
                       value={alternativeNames}
                       onChange={setAlternativeNames}
                       addPlaceholder="+ Agregar nombre alternativo"
+                      disabled={ro}
                     />
                   </ModalField>
                 );
               case "asset_class":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <AllocationListField
                       options={ASSET_CLASS_OPTIONS}
                       value={assetClass}
                       onChange={setAssetClass}
                       addLabel="Agregar clase de activo"
+                      disabled={ro}
                       required
                     />
                   </ModalField>
                 );
               case "geographic_focus":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <AllocationListField
                       options={GEOGRAPHIC_FOCUS_OPTIONS}
                       value={geographicFocus}
                       onChange={setGeographicFocus}
                       addLabel="Agregar foco geográfico"
+                      disabled={ro}
                       required
                     />
                   </ModalField>
                 );
               case "underlying":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <AllocationListField
                       options={UNDERLYING_OPTIONS}
                       value={underlying}
                       onChange={setUnderlying}
                       addLabel="Agregar subyacente"
+                      disabled={ro}
                       required
                     />
                   </ModalField>
                 );
               case "commission":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
+                      disabled={ro}
                       className={
                         modalInputClass +
+                        (ro ? modalInputReadOnlyClass : "") +
                         (commissionInvalid ? " border-red-400 focus:border-red-500" : "")
                       }
                     />
@@ -1009,12 +1068,14 @@ function EditCatalogModal({
                 );
               case "currency":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <select
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
+                      disabled={ro}
                       className={
                         modalInputClass +
+                        (ro ? modalInputReadOnlyClass : "") +
                         (currencyInvalid ? " border-red-400 focus:border-red-500" : "")
                       }
                     >
@@ -1032,7 +1093,7 @@ function EditCatalogModal({
                 );
               case "administrator":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <ScoredVocabularyField
                       key={entry.id}
                       entities={administratorEntities}
@@ -1041,6 +1102,7 @@ function EditCatalogModal({
                       onNameChange={(v) => updateField(key, v)}
                       onScoreChange={setAdministratorScore}
                       addPlaceholder="+ Agregar administrador"
+                      disabled={ro}
                       nameInvalid={administratorInvalid}
                       scoreInvalid={administratorScoreMissing}
                     />
@@ -1048,7 +1110,7 @@ function EditCatalogModal({
                 );
               case "manager":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <ScoredVocabularyField
                       key={entry.id}
                       entities={managerEntities}
@@ -1057,6 +1119,7 @@ function EditCatalogModal({
                       onNameChange={(v) => updateField(key, v)}
                       onScoreChange={setManagerScore}
                       addPlaceholder="+ Agregar gestor"
+                      disabled={ro}
                       nameInvalid={managerInvalid}
                       scoreInvalid={managerScoreMissing}
                     />
@@ -1064,7 +1127,7 @@ function EditCatalogModal({
                 );
               case "return_rate":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-sabbi-neutral-500">
                         min<span className="text-red-600">*</span>
@@ -1074,8 +1137,10 @@ function EditCatalogModal({
                         step="0.01"
                         value={returnRateMin}
                         onChange={(e) => setReturnRateMin(e.target.value)}
+                        disabled={ro}
                         className={
                           modalInputClass +
+                          (ro ? modalInputReadOnlyClass : "") +
                           " w-0 min-w-0 flex-1" +
                           (returnRateMinRequired || returnRateOrderInvalid
                             ? " border-red-400 focus:border-red-500"
@@ -1090,8 +1155,10 @@ function EditCatalogModal({
                         step="0.01"
                         value={returnRateMax}
                         onChange={(e) => setReturnRateMax(e.target.value)}
+                        disabled={ro}
                         className={
                           modalInputClass +
+                          (ro ? modalInputReadOnlyClass : "") +
                           " w-0 min-w-0 flex-1" +
                           (returnRateOrderInvalid ? " border-red-400 focus:border-red-500" : "")
                         }
@@ -1102,12 +1169,14 @@ function EditCatalogModal({
                 );
               case "name":
                 return (
-                  <ModalField key={key} label={label} required>
+                  <ModalField key={key} label={label} hint={hint} required>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
+                      disabled={ro}
                       className={
                         modalInputClass +
+                        (ro ? modalInputReadOnlyClass : "") +
                         (nameInvalid ? " border-red-400 focus:border-red-500" : "")
                       }
                     />
@@ -1115,38 +1184,51 @@ function EditCatalogModal({
                 );
               case "isin":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
                       placeholder="Agregar ISIN"
-                      className={modalInputClass}
+                      disabled={ro}
+                      className={modalInputClass + (ro ? modalInputReadOnlyClass : "")}
                     />
                   </ModalField>
                 );
               case "distribution":
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
                       placeholder="Agregar distribución"
-                      className={modalInputClass}
+                      disabled={ro}
+                      className={modalInputClass + (ro ? modalInputReadOnlyClass : "")}
                     />
                   </ModalField>
                 );
               default:
                 return (
-                  <ModalField key={key} label={label}>
+                  <ModalField key={key} label={label} hint={hint}>
                     <input
                       value={form[key] ?? ""}
                       onChange={(e) => updateField(key, e.target.value)}
-                      className={modalInputClass}
+                      disabled={ro}
+                      className={modalInputClass + (ro ? modalInputReadOnlyClass : "")}
                     />
                   </ModalField>
                 );
             }
           })}
+          {isFieldReadOnly(entry, managedFields, "cash_flows") && (
+            <ModalField label="Flujos" hint={EXCEL_MANAGED_HINT}>
+              <input
+                value={entry.cash_flows ?? ""}
+                disabled
+                readOnly
+                className={modalInputClass + modalInputReadOnlyClass}
+              />
+            </ModalField>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-sabbi-neutral-200 px-5 py-4">

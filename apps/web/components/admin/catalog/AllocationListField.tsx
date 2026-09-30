@@ -17,17 +17,23 @@ export function AllocationListField({
   onChange,
   addLabel,
   required,
+  disabled,
 }: {
   options: readonly string[];
   value: AssetAllocation[];
   onChange: (next: AssetAllocation[]) => void;
   addLabel: string;
   required?: boolean;
+  /** Read-only: the value is shown but no row can be edited, added or
+   * removed, and the required/total warnings are not raised (the value is
+   * managed elsewhere, e.g. from the Excel). */
+  disabled?: boolean;
 }) {
   const isEmpty = value.length === 0;
   const total = value.reduce((sum, row) => sum + (row.percentage || 0), 0);
   const isBalanced = isEmpty || Math.abs(total - 100) < 0.5;
-  const isRequiredAndEmpty = required && isEmpty;
+  const isRequiredAndEmpty = required && isEmpty && !disabled;
+  const lockedClass = disabled ? " bg-sabbi-neutral-100 text-sabbi-neutral-500 cursor-not-allowed" : "";
   const allUsed = options.every((o) => value.some((row) => row.name === o));
 
   const optionsForRow = (index: number): string[] => {
@@ -62,8 +68,9 @@ export function AllocationListField({
         <div key={index} className="flex items-center gap-2">
           <select
             value={row.name}
+            disabled={disabled}
             onChange={(e) => updateRow(index, { name: e.target.value })}
-            className="min-w-0 flex-1 rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary"
+            className={`min-w-0 flex-1 rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary${lockedClass}`}
           >
             {optionsForRow(index).map((o) => (
               <option key={o} value={o}>
@@ -77,6 +84,7 @@ export function AllocationListField({
             max={100}
             step="0.1"
             value={row.percentage}
+            disabled={disabled}
             onChange={(e) => {
               // `max`/`min` on <input type="number"> only affect the spinner
               // buttons, not typed input — clamp here so a row can't exceed
@@ -84,14 +92,15 @@ export function AllocationListField({
               const parsed = Number(e.target.value) || 0;
               updateRow(index, { percentage: Math.min(100, Math.max(0, parsed)) });
             }}
-            className="w-20 rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary"
+            className={`w-20 rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary${lockedClass}`}
           />
           <span className="text-sm text-sabbi-neutral-500">%</span>
           <button
             type="button"
             aria-label="Quitar"
+            disabled={disabled}
             onClick={() => removeRow(index)}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100 hover:text-red-600"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <XIcon size={14} />
           </button>
@@ -101,7 +110,7 @@ export function AllocationListField({
       <button
         type="button"
         onClick={addRow}
-        disabled={allUsed}
+        disabled={allUsed || disabled}
         className="flex w-fit items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-sabbi-primary hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <PlusIcon size={12} />
@@ -110,12 +119,12 @@ export function AllocationListField({
 
       <p
         className={`text-xs ${
-          isBalanced && !isRequiredAndEmpty ? "text-sabbi-neutral-500" : "text-red-600"
+          (isBalanced || disabled) && !isRequiredAndEmpty ? "text-sabbi-neutral-500" : "text-red-600"
         }`}
       >
         {isRequiredAndEmpty
           ? "Obligatorio — agrega al menos una fila"
-          : `Total: ${total.toFixed(1)}%${!isBalanced ? " — debe sumar 100%" : ""}`}
+          : `Total: ${total.toFixed(1)}%${!isBalanced && !disabled ? " — debe sumar 100%" : ""}`}
       </p>
     </div>
   );
