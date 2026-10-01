@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, Column, Integer, MetaData, Table, Text, case, fu
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
+from catalog_sync.normalize import currency_variant_keys, normalize_currency
 from db.models import (
     Administrator,
     AssetAllocation,
@@ -59,7 +60,8 @@ def _allocation_filter_clause(column_expr: str, values: list[str]):
 
 def _ci_in_clause(column, values: list[str]):
     """Case/whitespace-insensitive `IN` match for scalar filter fields
-    (`currency`, `administrator`, `manager`). Mirrors the `LOWER(TRIM(name))`
+    (`administrator`, `manager`; `currency` has its own
+    `_currency_in_clause`). Mirrors the `LOWER(TRIM(name))`
     normalization `insert_if_not_duplicate` and
     `create_administrator`/`create_manager` already use elsewhere in this
     file. Needed because these are free-text fields with no format
@@ -71,6 +73,31 @@ def _ci_in_clause(column, values: list[str]):
     2026-09-22)."""
     normalized = [v.strip().lower() for v in values]
     return func.lower(func.trim(column)).in_(normalized)
+
+
+def _canonical_currency(value: str | None) -> str | None:
+    """Official spelling for a stored currency ("dólares", "USD" -> "Dólares";
+    "PEN", "Nuevos soles" -> "Soles"), applied only when a row is read: the
+    database keeps whatever was stored. An unrecognized value is returned
+    unchanged so Observaciones can still flag it."""
+    if not value:
+        return value
+    return normalize_currency(value)
+
+
+def _currency_in_clause(column, values: list[str]):
+    """Currency filter that matches every spelling of the selected official
+    values (`Dólares` also matches "dolares" and "USD"; `Soles` also matches
+    "PEN" and "Nuevos soles"), so the filter agrees with what
+    `_canonical_currency` shows. Compared as lower + unaccent + collapsed
+    whitespace, the same key the Python side builds. Uses the POSIX
+    `[[:space:]]` class (no backslash) because this statement is compiled
+    with `literal_binds`."""
+    variants = sorted(set().union(*(currency_variant_keys(v) for v in values)))
+    normalized_column = func.regexp_replace(
+        func.normalize_catalog_text(func.trim(column)), "[[:space:]]+", " ", "g"
+    )
+    return normalized_column.in_(variants)
 
 
 # Define the table object for SQLAlchemy Core expressions
@@ -149,7 +176,7 @@ class CatalogRepository:
             query = query.where(product_catalog_table.c.is_deleted.is_(False))
 
         if currency:
-            query = query.where(_ci_in_clause(product_catalog_table.c.currency, currency))
+            query = query.where(_currency_in_clause(product_catalog_table.c.currency, currency))
         if administrator:
             query = query.where(_ci_in_clause(product_catalog_table.c.administrator, administrator))
         if manager:
@@ -227,6 +254,7 @@ class CatalogRepository:
             elif raw is None:
                 d[field] = []
         d["alternative_names"] = list(d.get("alternative_names") or [])
+        d["currency"] = _canonical_currency(d.get("currency"))
         approved_at = d.get("approved_at")
         if approved_at is not None and not isinstance(approved_at, str):
             d["approved_at"] = approved_at.isoformat()
@@ -492,7 +520,9 @@ class CatalogRepository:
         never touched, but the diff engine must still see it to know that)."""
         executor = conn if conn is not None else self.pool
         rows = await executor.fetch("SELECT * FROM product_catalog ORDER BY id")
-        return [self._row_to_catalog_product(r) for r in rows]
+        # Raw currency on purpose: the diff must compare what is stored, so a
+        # legacy "dólares" is rewritten to "Dólares" when the Excel has the row.
+        return [self._row_to_catalog_product(r, canonical_currency=False) for r in rows]
 
     async def sync_insert(
         self,
@@ -670,8 +700,13 @@ class CatalogRepository:
             raw = json.loads(raw)
         return [AssetAllocation(**a) for a in (raw or [])]
 
-    def _row_to_catalog_product(self, row: asyncpg.Record) -> CatalogProduct:
+    def _row_to_catalog_product(
+        self, row: asyncpg.Record, *, canonical_currency: bool = True
+    ) -> CatalogProduct:
         raw = row["underlying"]
+        currency = row["currency"] or ""
+        if canonical_currency:
+            currency = _canonical_currency(currency) or ""
         if isinstance(raw, str):
             raw = json.loads(raw)
         return CatalogProduct(
@@ -681,7 +716,7 @@ class CatalogRepository:
             asset_class=self._parse_json_allocations(row["asset_class"]),
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             commission=row["commission"] or "",
-            currency=row["currency"] or "",
+            currency=currency,
             administrator=row["administrator"] or "",
             manager=row["manager"] or "",
             liquidity=row["liquidity"] or "",

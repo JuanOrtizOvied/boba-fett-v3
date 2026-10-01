@@ -67,6 +67,21 @@ def match_official_value(raw: str, official_values: list[str]) -> tuple[str, boo
     return _match_with_aliases(raw, official_values, ALIAS_TABLE)
 
 
+def currency_variant_keys(value: str) -> set[str]:
+    """Every `normalize_key` spelling that resolves to the same official
+    currency as `value` ("Dólares" -> dolares, usd; "Soles" -> soles, pen,
+    nuevos soles). `value` itself is always included, so an unrecognized
+    filter value still matches rows stored exactly like it. Used to widen
+    the catalog currency filter to the spellings legacy rows may carry."""
+    canonical = normalize_currency(value)
+    canonical_key = normalize_key(canonical)
+    keys = {canonical_key, normalize_key(value)}
+    for alias, target in CURRENCY_ALIAS_TABLE.items():
+        if normalize_key(target) == canonical_key:
+            keys.add(normalize_key(alias))
+    return keys
+
+
 def normalize_currency(raw: str) -> str:
     """Normalize a currency value to one of `db.models.CURRENCY_OPTIONS`
     (SYNC-26): tolerant case/accent matching first ("soles", "Dolares",
