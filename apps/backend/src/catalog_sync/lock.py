@@ -25,6 +25,10 @@ import asyncpg
 # with an unrelated lock elsewhere in the app.
 SYNC_RUN_LOCK_KEY = 8_401_002_001
 
+# The periodic job takes this one with `try_advisory_lock`: only one of the
+# workers acts per cycle and the others skip it instead of waiting.
+SUBSCRIPTION_JOB_LOCK_KEY = 8_401_002_002
+
 DEFAULT_LOCK_TIMEOUT_SECONDS = 30.0
 
 
@@ -67,3 +71,19 @@ async def advisory_lock(
             yield
         finally:
             await conn.fetchval("SELECT pg_advisory_unlock($1)", key)
+
+
+@asynccontextmanager
+async def try_advisory_lock(
+    pool: asyncpg.Pool, key: int = SUBSCRIPTION_JOB_LOCK_KEY
+) -> AsyncIterator[bool]:
+    """Try to take `pg_advisory_lock(key)` without waiting. Yields `True`
+    while the lock is held and `False` if another session already has it, in
+    which case the caller should skip its work. Released on exit when taken."""
+    async with pool.acquire() as conn:
+        acquired = bool(await conn.fetchval("SELECT pg_try_advisory_lock($1)", key))
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                await conn.fetchval("SELECT pg_advisory_unlock($1)", key)
