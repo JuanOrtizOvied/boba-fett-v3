@@ -35,6 +35,7 @@ from agent.graph import builder as graph_builder
 from api.admin_routes import router as admin_router
 from api.auth_routes import router as auth_router
 from api.chat_routes import router as chat_router
+from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
 from db.catalog_repository import CatalogRepository
@@ -101,6 +102,8 @@ app = FastAPI(title="SABBI Portfolio API", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(chat_router)
+# Microsoft Graph calls these without a session; they authenticate by clientState.
+app.include_router(webhook_router)
 
 
 async def _get_owned_product(product_id: str, user: dict):
