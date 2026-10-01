@@ -1,3 +1,7 @@
+"use client";
+
+import { useId, useState } from "react";
+import { ChevronDownIcon } from "@/components/icons/Icons";
 import {
   observationGroupLabel,
   type ObservationGroup,
@@ -5,10 +9,11 @@ import {
 
 /**
  * Always-visible summary above the catalog table: how many active entries
- * have observations, grouped by issue ("2 productos sin gestor"). It is
- * computed over the whole active catalog, so it never changes with the
- * search term or the filters. `groups` is `null` while that catalog is
- * still loading.
+ * have observations. The breakdown by issue ("2 productos sin gestor") is
+ * collapsed by default and opens when the admin clicks the count, so a long
+ * list never crowds the table. It is computed over the whole active catalog,
+ * so it never changes with the search term or the filters. `groups` is
+ * `null` while that catalog is still loading.
  */
 export function CatalogObservationsBanner({
   groups,
@@ -54,22 +59,60 @@ export function CatalogObservationsBanner({
   }
 
   return (
-    <div
-      role="status"
+    <ObservationsSummary
+      groups={groups}
+      entriesWithObservations={entriesWithObservations}
+    />
+  );
+}
+
+/** The collapsible part, split out so its state is only created when there
+ * is something to expand. */
+function ObservationsSummary({
+  groups,
+  entriesWithObservations,
+}: {
+  groups: ObservationGroup[];
+  entriesWithObservations: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const detailId = useId();
+
+  return (
+    <section
       aria-label="Resumen de observaciones"
-      className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      className="rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-900"
     >
-      <p className="font-medium">
-        {entriesWithObservations}{" "}
-        {entriesWithObservations === 1
-          ? "producto con observaciones"
-          : "productos con observaciones"}
-      </p>
-      <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
-        {groups.map((group) => (
-          <li key={`${group.field}:${group.issue}`}>{observationGroupLabel(group)}</li>
-        ))}
-      </ul>
-    </div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={detailId}
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left font-medium hover:bg-amber-100"
+      >
+        <span>
+          {entriesWithObservations}{" "}
+          {entriesWithObservations === 1
+            ? "producto con observaciones"
+            : "productos con observaciones"}
+        </span>
+        <ChevronDownIcon
+          size={16}
+          className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <ul
+          id={detailId}
+          className="flex flex-wrap gap-x-4 gap-y-0.5 px-4 pb-3"
+        >
+          {groups.map((group) => (
+            <li key={`${group.field}:${group.issue}`}>
+              {observationGroupLabel(group)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
