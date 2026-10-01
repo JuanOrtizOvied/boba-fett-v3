@@ -4,9 +4,10 @@ spec scenarios SYNC-28, SYNC-29, SYNC-30).
 
 Not pure — this is the top-level entry point that ties every other
 `catalog_sync` module together against a real database. `run_sync_from_bytes`
-is called both by the local dry-run CLI (Phase 4.5, always `force=True`) and,
-once Phase 7 exists, by the Graph webhook handler after downloading the
-current file (`force=False`, so unchanged content is a no-op — SYNC-28).
+is called by the local dry-run CLI (Phase 4.5, always `force=True`).
+`run_sync_from_sharepoint` (Phase 7.3) downloads the workbook from SharePoint
+and runs the same pass; the webhook handler and the periodic job use it with
+`force=False`, so unchanged content is a no-op (SYNC-28).
 """
 
 from __future__ import annotations
@@ -15,11 +16,18 @@ import hashlib
 from dataclasses import dataclass
 
 from catalog_sync.apply import apply_changeset
+from catalog_sync.config import SHEET_NAME, Settings
 from catalog_sync.diff import ChangeSet, OfficialLists, diff_catalog
+from catalog_sync.graph import GraphClient, GraphConfigError
 from catalog_sync.lock import advisory_lock
 from catalog_sync.parser import ParseReport, parse_workbook
 from db.catalog_repository import CatalogRepository
 from db.models import ASSET_CLASS_OPTIONS, GEOGRAPHIC_FOCUS_OPTIONS, UNDERLYING_OPTIONS
+
+
+class SyncDisabledError(RuntimeError):
+    """The SharePoint sync was asked to run while `SHAREPOINT_SYNC_ENABLED`
+    is false, so no Graph call is made (SYNC-37)."""
 
 
 @dataclass(frozen=True)
@@ -66,8 +74,39 @@ async def _store_processed_hash(repo: CatalogRepository, content_hash: str) -> N
     )
 
 
+async def _run_locked(
+    repo: CatalogRepository, data: bytes, *, force: bool, sheet_name: str
+) -> RunReport:
+    """One sync pass over `data`. The caller MUST hold the advisory lock."""
+    content_hash = _content_hash(data)
+
+    if not force:
+        last_hash = await _get_last_processed_hash(repo)
+        if last_hash is not None and last_hash == content_hash:
+            return RunReport(content_hash=content_hash, skipped=True)
+
+    parse_result = parse_workbook(data, sheet_name=sheet_name)
+    existing_rows = await repo.list_for_sync()
+    official_lists = await _load_official_lists(repo)
+    changeset = diff_catalog(existing_rows, parse_result.rows, official_lists)
+
+    await apply_changeset(repo, changeset)
+    await _store_processed_hash(repo, content_hash)
+
+    return RunReport(
+        content_hash=content_hash,
+        skipped=False,
+        parse_report=parse_result.report,
+        changeset=changeset,
+    )
+
+
 async def run_sync_from_bytes(
-    repo: CatalogRepository, data: bytes, *, force: bool = False
+    repo: CatalogRepository,
+    data: bytes,
+    *,
+    force: bool = False,
+    sheet_name: str = SHEET_NAME,
 ) -> RunReport:
     """Run one sync pass over `data` (an `.xlsx` file's bytes).
 
@@ -85,24 +124,55 @@ async def run_sync_from_bytes(
     is nothing meaningful to apply or report beyond the error itself.
     """
     async with advisory_lock(repo.pool):
-        content_hash = _content_hash(data)
+        return await _run_locked(repo, data, force=force, sheet_name=sheet_name)
 
-        if not force:
-            last_hash = await _get_last_processed_hash(repo)
-            if last_hash is not None and last_hash == content_hash:
-                return RunReport(content_hash=content_hash, skipped=True)
 
-        parse_result = parse_workbook(data)
-        existing_rows = await repo.list_for_sync()
-        official_lists = await _load_official_lists(repo)
-        changeset = diff_catalog(existing_rows, parse_result.rows, official_lists)
+async def run_sync_from_sharepoint(
+    repo: CatalogRepository,
+    *,
+    settings: Settings | None = None,
+    client: GraphClient | None = None,
+    force: bool = False,
+) -> RunReport:
+    """Download the workbook from SharePoint and run one sync pass over it.
 
-        await apply_changeset(repo, changeset)
-        await _store_processed_hash(repo, content_hash)
+    The file is fetched **inside** the advisory lock (design.md ADR-8, ADR-9):
+    two notifications that arrive together then run one after the other, and
+    the second one downloads the latest version, so an older download can
+    never overwrite a newer one ("latest notification wins"). The download
+    goes straight to the configured path; nothing is searched or walked.
 
-        return RunReport(
-            content_hash=content_hash,
-            skipped=False,
-            parse_report=parse_result.report,
-            changeset=changeset,
+    Nothing is written when the download fails: the error (`GraphError`)
+    propagates, the hash is untouched, and the next notification retries.
+    Raises `SyncDisabledError` when `SHAREPOINT_SYNC_ENABLED` is false and
+    `GraphConfigError` when the site id or file path are not configured,
+    both before any Graph call.
+    """
+    settings = settings or Settings.from_env()
+    if not settings.sync_enabled:
+        raise SyncDisabledError("SHAREPOINT_SYNC_ENABLED is false")
+    missing = [
+        name
+        for name, value in (
+            ("SHAREPOINT_SITE_ID", settings.sharepoint_site_id),
+            ("SHAREPOINT_FILE_PATH", settings.sharepoint_file_path),
         )
+        if not value
+    ]
+    if missing:
+        raise GraphConfigError(f"Missing SharePoint settings: {', '.join(missing)}")
+    assert settings.sharepoint_site_id and settings.sharepoint_file_path
+
+    owns_client = client is None
+    graph = client or GraphClient(settings)
+    try:
+        async with advisory_lock(repo.pool):
+            data = await graph.download_file(
+                settings.sharepoint_site_id, settings.sharepoint_file_path
+            )
+            return await _run_locked(
+                repo, data, force=force, sheet_name=settings.sharepoint_sheet_name
+            )
+    finally:
+        if owns_client:
+            await graph.aclose()

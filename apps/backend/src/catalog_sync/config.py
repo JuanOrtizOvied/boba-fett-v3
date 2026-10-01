@@ -150,6 +150,19 @@ CURRENCY_ALIAS_TABLE: dict[str, str] = {
 }
 
 
+DEFAULT_SYNC_INTERVAL_MINUTES = 360
+
+
+def _positive_int_from_env(name: str, default: int) -> int:
+    """A positive integer from the environment; anything else falls back to
+    `default` so a typo never stops the job."""
+    try:
+        value = int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 @dataclass(frozen=True)
 class Settings:
     """Environment-driven settings for the SharePoint sync (design.md
@@ -166,6 +179,9 @@ class Settings:
     sharepoint_file_path: str | None = None
     sharepoint_sheet_name: str = SHEET_NAME
     graph_notification_url: str | None = None
+    # How often the periodic job runs (subscription upkeep plus a safety sync).
+    # Keep it well under the renewal window (3 days).
+    sync_interval_minutes: int = DEFAULT_SYNC_INTERVAL_MINUTES
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -179,4 +195,7 @@ class Settings:
             sharepoint_file_path=os.environ.get("SHAREPOINT_FILE_PATH"),
             sharepoint_sheet_name=os.environ.get("SHAREPOINT_SHEET_NAME", SHEET_NAME),
             graph_notification_url=os.environ.get("GRAPH_NOTIFICATION_URL"),
+            sync_interval_minutes=_positive_int_from_env(
+                "SHAREPOINT_SYNC_INTERVAL_MINUTES", DEFAULT_SYNC_INTERVAL_MINUTES
+            ),
         )
