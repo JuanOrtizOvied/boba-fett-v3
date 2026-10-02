@@ -66,6 +66,9 @@ import {
   type ObservationLists,
 } from "@/lib/catalogObservations";
 
+// "listing" is the readable export; "sync" is the layout the SharePoint sync reads.
+type ExportFormat = "listing" | "sync";
+
 const CATALOG_COLUMNS: { key: keyof CatalogProduct; label: string }[] = [
   { key: "codigo", label: "Código" },
   { key: "alternative_names", label: "Nombres alternativos" },
@@ -129,7 +132,10 @@ function CatalogPageContent() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [isExporting, setIsExporting] = useState(false);
+  // Which export is running, so each button can say "Exportando…" on its own
+  // while both stay disabled.
+  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
+  const isExporting = exportingFormat !== null;
 
   const isDebouncing =
     searchInput.trim() !== debouncedSearch.trim() &&
@@ -348,33 +354,57 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     });
   }, [visibleEntries]);
 
-  const handleExport = async () => {
+  const handleExport = async (format: ExportFormat = "listing") => {
     if (selectedIds.size === 0) return;
-    setIsExporting(true);
+    setExportingFormat(format);
     try {
+      // The readable export keeps sending exactly what it always did.
+      const ids = Array.from(selectedIds);
       const res = await fetchWithAuth("/api/admin/catalog/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        body: JSON.stringify(format === "sync" ? { ids, format } : { ids }),
       });
       if (!res.ok) {
-        toast("No se pudo exportar el catálogo");
+        let message = "No se pudo exportar el catálogo";
+        if (format === "sync") {
+          // e.g. none of the selected products has a codigo
+          try {
+            const body = await res.json();
+            if (typeof body?.detail === "string") message = body.detail;
+          } catch {
+            // keep the generic message
+          }
+        }
+        toast(message);
         return;
       }
       const blob = await res.blob();
       const disposition = res.headers.get("Content-Disposition");
       const match = disposition?.match(/filename="(.+)"/);
-      const filename = match?.[1] ?? "catalogo-sabbi.xlsx";
+      const filename =
+        match?.[1] ??
+        (format === "sync" ? "catalogo-sabbi-sharepoint.xlsx" : "catalogo-sabbi.xlsx");
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+
+      // The sync matches rows by codigo, so products without one are left out.
+      const skipped = Number(res.headers.get("X-Skipped-Without-Codigo") ?? 0);
+      if (format === "sync" && skipped > 0) {
+        toast(
+          skipped === 1
+            ? "1 producto sin código no se incluyó en el archivo"
+            : `${skipped} productos sin código no se incluyeron en el archivo`,
+        );
+      }
     } catch {
       toast("No se pudo exportar el catálogo");
     } finally {
-      setIsExporting(false);
+      setExportingFormat(null);
     }
   };
 
@@ -690,12 +720,22 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => void handleExport()}
+            onClick={() => void handleExport("listing")}
             disabled={selectedIds.size === 0 || isExporting}
             className="flex items-center gap-1.5 rounded-lg border border-sabbi-neutral-200 px-4 py-2 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <DownloadIcon size={16} />
-            {isExporting ? "Exportando…" : "Exportar seleccionados"}
+            {exportingFormat === "listing" ? "Exportando…" : "Exportar seleccionados"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExport("sync")}
+            disabled={selectedIds.size === 0 || isExporting}
+            title="Genera el archivo con el formato del Excel de SharePoint. Los productos sin código no se incluyen."
+            className="flex items-center gap-1.5 rounded-lg border border-sabbi-neutral-200 px-4 py-2 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <DownloadIcon size={16} />
+            {exportingFormat === "sync" ? "Exportando…" : "Exportar para SharePoint"}
           </button>
           <button
             type="button"
