@@ -29,8 +29,9 @@ from catalog_sync.graph import GraphConfigError, GraphError
 from catalog_sync.lock import LockTimeoutError
 from catalog_sync.parser import MissingSheetError
 from catalog_sync.service import RunReport, SyncDisabledError, run_sync_from_sharepoint
-from db.catalog_excel import build_catalog_workbook
+from db.catalog_excel import build_catalog_workbook, build_sync_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
+from db.catalog_excel import export_filename_for_sync as catalog_sync_export_filename
 from db.catalog_repository import CatalogRepository
 from db.ficha_patrimonial import (
     FichaConfirmRequest,
@@ -331,6 +332,34 @@ async def export_catalog_entries(
         )
 
     entries = await catalog_repo.get_by_ids(data.ids)
+
+    if data.format == "sync":
+        # The layout the SharePoint sync reads (Phase 8.2). Entries without a
+        # `codigo` have no place in it: they are left out and counted in a
+        # header so the UI can tell the admin.
+        workbook = build_sync_workbook(entries)
+        if workbook.included == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Ninguno de los productos seleccionados tiene código, "
+                    "así que no hay nada que exportar en este formato"
+                ),
+            )
+        return StreamingResponse(
+            workbook.buffer,
+            media_type=(
+                "application/vnd.openxmlformats-officedocument"
+                ".spreadsheetml.sheet"
+            ),
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{catalog_sync_export_filename()}"'
+                ),
+                "X-Skipped-Without-Codigo": str(len(workbook.skipped_without_codigo)),
+            },
+        )
+
     buffer = build_catalog_workbook(entries)
     filename = catalog_export_filename()
     return StreamingResponse(
