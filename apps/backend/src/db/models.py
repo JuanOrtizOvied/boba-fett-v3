@@ -225,6 +225,10 @@ class CatalogExportRequest(BaseModel):
     (400), not enforced here — the spec calls for 400, not Pydantic's 422."""
 
     ids: list[int]
+    # "listing" is the readable export; "sync" is the layout the SharePoint
+    # sync reads (Phase 8.2). Defaults to the former so existing callers are
+    # unchanged.
+    format: Literal["listing", "sync"] = "listing"
 
 
 class CatalogProduct(BaseModel):
