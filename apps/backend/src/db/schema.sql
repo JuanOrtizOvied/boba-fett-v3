@@ -619,3 +619,119 @@ CREATE TABLE IF NOT EXISTS webhook_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_webhook_subs_expiration
     ON webhook_subscriptions (expiration);
+
+-- >>> catalog v2 (openspec/changes/catalog-v2-sharepoint-sync) >>>
+-- Self-contained block: delete it together with the v2 feature. DDL only: the
+-- one-time copy of administrator/manager scores from v1 lives in the Alembic
+-- revision (migrations/versions/3f9a7c1d2b84_add_catalog_v2_tables.py), not
+-- here, so it never runs twice.
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE OR REPLACE FUNCTION normalize_catalog_text_v2(input_text text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+STRICT
+AS $$
+    SELECT lower(unaccent(input_text));
+$$;
+
+CREATE OR REPLACE FUNCTION catalog_slugs_text_v2(input_slugs text[])
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    SELECT array_to_string(input_slugs, ' ');
+$$;
+
+CREATE TABLE IF NOT EXISTS administrator_v2 (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    score INTEGER,
+    score_is_fixed BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS manager_v2 (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    score INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS product_catalog_v2 (
+    id SERIAL PRIMARY KEY,
+    codigo VARCHAR(20) NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    isin TEXT NOT NULL DEFAULT '',
+    manager_id INTEGER REFERENCES manager_v2 (id) ON DELETE RESTRICT,
+    asset_class JSONB NOT NULL DEFAULT '[]'::jsonb,
+    geographic_focus JSONB NOT NULL DEFAULT '[]'::jsonb,
+    underlying JSONB NOT NULL DEFAULT '[]'::jsonb,
+    currency TEXT NOT NULL DEFAULT '',
+    investment_horizon TEXT NOT NULL DEFAULT '',
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    slugs TEXT[] GENERATED ALWAYS AS (
+        CASE WHEN btrim(name) = '' THEN '{}'::text[]
+             ELSE ARRAY[normalize_catalog_text_v2(btrim(name))] END
+    ) STORED,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_catalog_v2_manager
+    ON product_catalog_v2 (manager_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_catalog_v2_slugs_trgm
+    ON product_catalog_v2 USING gin (catalog_slugs_text_v2(slugs) gin_trgm_ops);
+
+CREATE TABLE IF NOT EXISTS product_series_v2 (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES product_catalog_v2 (id) ON DELETE RESTRICT,
+    series TEXT NOT NULL DEFAULT '-',
+    ter NUMERIC,
+    flows_min NUMERIC,
+    flows_max NUMERIC,
+    return_min NUMERIC,
+    return_max NUMERIC,
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_product_series_v2_product_series UNIQUE (product_id, series)
+);
+
+CREATE TABLE IF NOT EXISTS product_administrator_v2 (
+    id SERIAL PRIMARY KEY,
+    series_id INTEGER NOT NULL REFERENCES product_series_v2 (id) ON DELETE RESTRICT,
+    administrator_id INTEGER NOT NULL REFERENCES administrator_v2 (id) ON DELETE RESTRICT,
+    custody NUMERIC,
+    buy_commission NUMERIC,
+    sell_commission NUMERIC,
+    minimum_usd NUMERIC,
+    min_commission_usd NUMERIC,
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_product_administrator_v2_series_admin UNIQUE (series_id, administrator_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_administrator_v2_administrator
+    ON product_administrator_v2 (administrator_id);
+
+CREATE TABLE IF NOT EXISTS webhook_subscriptions_v2 (
+    id SERIAL PRIMARY KEY,
+    subscription_id VARCHAR(255) NOT NULL UNIQUE,
+    client_state VARCHAR(255) NOT NULL,
+    expiration TIMESTAMPTZ NOT NULL,
+    drive_item_id VARCHAR(255) NOT NULL,
+    last_processed_hash VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_subs_v2_expiration
+    ON webhook_subscriptions_v2 (expiration);
+-- <<< catalog v2 <<<
