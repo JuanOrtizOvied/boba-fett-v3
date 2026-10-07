@@ -39,6 +39,7 @@ from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
 from catalog_sync.scheduler import start_maintenance_task, stop_maintenance_task
+from db.catalog_normalized import NormalizedCatalogRepository
 from db.catalog_repository import CatalogRepository
 from db.connection import close_pool, get_pool
 from db.encryption import get_serde
@@ -94,6 +95,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.versioning_repo = VersioningRepository(pool)
     app.state.user_repo = UserRepository(pool)
     app.state.catalog_repo = CatalogRepository(pool)
+    app.state.normalized_catalog_repo = NormalizedCatalogRepository(pool)
 
     # SharePoint catalog sync upkeep; None (and no Graph call) unless
     # SHAREPOINT_SYNC_ENABLED is true.

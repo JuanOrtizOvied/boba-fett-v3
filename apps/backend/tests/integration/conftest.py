@@ -21,6 +21,7 @@ import pytest_asyncio
 
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
+from db.catalog_normalized import NormalizedCatalogRepository
 from db.catalog_repository import CatalogRepository
 from db.repository import ProductRepository
 from tests.conftest import FakePool
@@ -77,6 +78,7 @@ async def admin_api_client(test_pool: FakePool) -> AsyncIterator[tuple[Any, http
     app.state.repo = ProductRepository(test_pool)
     app.state.user_repo = UserRepository(test_pool)
     app.state.catalog_repo = CatalogRepository(test_pool)
+    app.state.normalized_catalog_repo = NormalizedCatalogRepository(test_pool)
     admin_id = str(uuid.uuid4())
     await test_pool.execute(
         "INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)",

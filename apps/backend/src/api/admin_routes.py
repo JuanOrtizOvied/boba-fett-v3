@@ -32,6 +32,18 @@ from catalog_sync.service import RunReport, SyncDisabledError, run_sync_from_sha
 from db.catalog_excel import build_catalog_workbook, build_sync_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
 from db.catalog_excel import export_filename_for_sync as catalog_sync_export_filename
+from db.catalog_normalized import CatalogProductCreate as NormalizedProductCreate
+from db.catalog_normalized import (
+    CatalogProductRow,
+    CatalogProductSeries,
+    CatalogProductSeriesAdmin,
+    CatalogProductSeriesAdminCreate,
+    CatalogProductSeriesAdminUpdate,
+    CatalogProductSeriesCreate,
+    CatalogProductSeriesUpdate,
+    NormalizedCatalogRepository,
+)
+from db.catalog_normalized import CatalogProductUpdate as NormalizedProductUpdate
 from db.catalog_repository import CatalogRepository
 from db.ficha_patrimonial import (
     FichaConfirmRequest,
@@ -70,6 +82,10 @@ def _product_repo(request: Request) -> ProductRepository:
 
 def _catalog_repo(request: Request) -> CatalogRepository:
     return request.app.state.catalog_repo
+
+
+def _normalized_catalog_repo(request: Request) -> NormalizedCatalogRepository:
+    return request.app.state.normalized_catalog_repo
 
 
 def _versioning_repo(request: Request) -> VersioningRepository:
@@ -628,3 +644,124 @@ async def confirm_ficha_patrimonial(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return {"created_count": len(product_ids), "product_ids": product_ids}
+
+
+# ---------------------------------------------------------------------------
+# Normalized catalog (catalog_product / _series / _series_admin)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/normalized-catalog/products")
+async def list_normalized_products(
+    search: str | None = None,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> list[CatalogProductRow]:
+    term = search.strip() if search else None
+    return await repo.list_products(term or None)
+
+
+@router.get("/normalized-catalog/products/{code}")
+async def get_normalized_product(
+    code: str, repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo)
+) -> CatalogProductRow:
+    product = await repo.get_product_detail(code)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Producto {code} no encontrado")
+    return product
+
+
+@router.post("/normalized-catalog/products", status_code=201)
+async def create_normalized_product(
+    data: NormalizedProductCreate,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> CatalogProductRow:
+    try:
+        return await repo.create_product(data)
+    except asyncpg.UniqueViolationError:
+        raise HTTPException(status_code=409, detail="Ya existe un producto con ese código")
+
+
+@router.patch("/normalized-catalog/products/{code}")
+async def update_normalized_product(
+    code: str,
+    data: NormalizedProductUpdate,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> CatalogProductRow:
+    product = await repo.update_product(code, data)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Producto {code} no encontrado")
+    return product
+
+
+@router.delete("/normalized-catalog/products/{code}", status_code=204)
+async def delete_normalized_product(
+    code: str, repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo)
+) -> None:
+    if not await repo.delete_product(code):
+        raise HTTPException(status_code=404, detail=f"Producto {code} no encontrado")
+
+
+@router.post("/normalized-catalog/series", status_code=201)
+async def create_normalized_series(
+    data: CatalogProductSeriesCreate,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> CatalogProductSeries:
+    try:
+        return await repo.create_series(data)
+    except asyncpg.UniqueViolationError:
+        raise HTTPException(status_code=409, detail="Ya existe esa serie para el producto")
+    except asyncpg.ForeignKeyViolationError:
+        raise HTTPException(status_code=404, detail="Producto inexistente")
+
+
+@router.patch("/normalized-catalog/series/{series_id}")
+async def update_normalized_series(
+    series_id: int,
+    data: CatalogProductSeriesUpdate,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> CatalogProductSeries:
+    series = await repo.update_series(series_id, data)
+    if series is None:
+        raise HTTPException(status_code=404, detail=f"Serie {series_id} no encontrada")
+    return series
+
+
+@router.delete("/normalized-catalog/series/{series_id}", status_code=204)
+async def delete_normalized_series(
+    series_id: int, repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo)
+) -> None:
+    if not await repo.delete_series(series_id):
+        raise HTTPException(status_code=404, detail=f"Serie {series_id} no encontrada")
+
+
+@router.post("/normalized-catalog/admins", status_code=201)
+async def create_normalized_admin(
+    data: CatalogProductSeriesAdminCreate,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> CatalogProductSeriesAdmin:
+    try:
+        return await repo.create_admin(data)
+    except asyncpg.UniqueViolationError:
+        raise HTTPException(status_code=409, detail="Ya existe esa administradora para la serie")
+    except asyncpg.ForeignKeyViolationError:
+        raise HTTPException(status_code=404, detail="Serie o producto inexistente")
+
+
+@router.patch("/normalized-catalog/admins/{admin_id}")
+async def update_normalized_admin(
+    admin_id: int,
+    data: CatalogProductSeriesAdminUpdate,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> CatalogProductSeriesAdmin:
+    admin = await repo.update_admin(admin_id, data)
+    if admin is None:
+        raise HTTPException(status_code=404, detail=f"Administradora {admin_id} no encontrada")
+    return admin
+
+
+@router.delete("/normalized-catalog/admins/{admin_id}", status_code=204)
+async def delete_normalized_admin(
+    admin_id: int, repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo)
+) -> None:
+    if not await repo.delete_admin(admin_id):
+        raise HTTPException(status_code=404, detail=f"Administradora {admin_id} no encontrada")
