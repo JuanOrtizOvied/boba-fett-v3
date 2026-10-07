@@ -100,8 +100,22 @@ UNIQUE(product_code, administrator, series).
 - T-001 done: schema.sql appended + migration a7c1e2d3f4b5 (down 8dd9733f267d); RED (ImportError) -> GREEN, 5 constraint tests pass vs sabbi_test.
 - T-002 done: src/db/catalog_normalized.py; 3 repo integration tests green.
 - T-003 done: src/db/seed_catalog_normalized.py; 14 unit tests green (no DB). Real seed NOT run.
-- Verify: new tests 22 passed; full suite 382 passed / 13 failed (pre-existing, Fernet-encrypted columns in sabbi_test, unrelated); ruff clean on src/ and new files.
+- Verify (orchestrator, independent): 14 unit + 8 integration = 22 new tests PASS.
+  Alembic validated offline: single head a7c1e2d3f4b5, chain from 8dd9733f267d OK,
+  renders 3 tables with composite FK + UNIQUE. `ruff check` clean on new .py files.
+  13 full-suite failures confirmed pre-existing + env-only: `float(row["amount"])`
+  over a Fernet-encrypted value (`gAAAAAB...`) in sabbi_test; additive empty tables
+  cannot cause it. Root env issue: `TEST_DATABASE_URL` in .env fails password auth,
+  so sabbi_test (dev-shaped, encrypted amounts) was used as the override.
+- Committed on branch `feat/catalog-v3-normalized`: `3b65558`
+  (feat(catalog): add normalized product catalog data layer) — 7 files, 761 insertions.
+  Pre-existing unrelated working-tree changes were left unstaged.
+- [x] **T-004 — real seed**: DONE. User approved. `python -m db.seed_catalog_normalized`
+  against dev DB `boba-fett-backend` applied migration a7c1e2d3f4b5 and loaded
+  333 / 355 / 358 rows. Verified: 0 orphan admin rows (FK ok), nested shape correct
+  (BD-00006 -> Serie A/B -> Sura), legacy `product_catalog` unchanged (359 rows).
+  Note: `management_fee_ter` NUMERIC has no scale, so it stores the full float
+  expansion (e.g. 0.00472000...). Cosmetic; round at read/display or add NUMERIC
+  scale later if desired.
 
-## Next step
-
-Delegate T-001..T-003 to one bounded writer (TDD), then T-004 verify.
+## Status: COMPLETE (data layer). Push/PR remain the user's call.
