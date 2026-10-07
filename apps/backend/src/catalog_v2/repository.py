@@ -280,6 +280,29 @@ class CatalogV2Repository:
         )
         return [AdministratorV2(**dict(r)) for r in rows]
 
+    async def set_administrator_score(
+        self, administrator_id: int, score: int | None
+    ) -> AdministratorV2 | None:
+        """Set or clear the score of an administrator. `None` when it does not
+        exist. `score_is_fixed` is left as it is: it says whether the score is
+        defined by the entity or typed per product, not whether it can be edited."""
+        row = await self.pool.fetchrow(
+            "UPDATE administrator_v2 SET score = $2 WHERE id = $1 "
+            "RETURNING id, name, score, score_is_fixed",
+            administrator_id,
+            score,
+        )
+        return AdministratorV2(**dict(row)) if row else None
+
+    async def set_manager_score(self, manager_id: int, score: int | None) -> ManagerV2 | None:
+        """Set or clear the score of a manager. `None` when it does not exist."""
+        row = await self.pool.fetchrow(
+            "UPDATE manager_v2 SET score = $2 WHERE id = $1 RETURNING id, name, score",
+            manager_id,
+            score,
+        )
+        return ManagerV2(**dict(row)) if row else None
+
     async def list_managers(self) -> list[ManagerV2]:
         rows = await self.pool.fetch("SELECT id, name, score FROM manager_v2 ORDER BY name")
         return [ManagerV2(**dict(r)) for r in rows]

@@ -34,11 +34,13 @@ from langgraph.store.postgres.aio import AsyncPostgresStore
 from agent.graph import builder as graph_builder
 from api.admin_routes import router as admin_router
 from api.auth_routes import router as auth_router
+from api.catalog_v2_routes import router as catalog_v2_router
 from api.chat_routes import router as chat_router
 from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
 from catalog_sync.scheduler import start_maintenance_task, stop_maintenance_task
+from catalog_v2.repository import CatalogV2Repository
 from db.catalog_repository import CatalogRepository
 from db.connection import close_pool, get_pool
 from db.encryption import get_serde
@@ -91,6 +93,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.versioning_repo = VersioningRepository(pool)
     app.state.user_repo = UserRepository(pool)
     app.state.catalog_repo = CatalogRepository(pool)
+    app.state.catalog_v2_repo = CatalogV2Repository(pool)
 
     # SharePoint catalog sync upkeep; None (and no Graph call) unless
     # SHAREPOINT_SYNC_ENABLED is true.
@@ -108,6 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="SABBI Portfolio API", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(catalog_v2_router)
 app.include_router(chat_router)
 # Microsoft Graph calls these without a session; they authenticate by clientState.
 app.include_router(webhook_router)
