@@ -29,4 +29,15 @@ describe("AdminLayout navigation", () => {
     const link = screen.getByRole("link", { name: /Ficha Patrimonial/i });
     expect(link).toHaveAttribute("href", "/admin/ficha-patrimonial");
   });
+
+  test("includes a Catálogo normalizado link to /admin/catalogo-normalizado", () => {
+    render(
+      <AdminLayout>
+        <div>content</div>
+      </AdminLayout>,
+    );
+
+    const link = screen.getByRole("link", { name: "Catálogo normalizado" });
+    expect(link).toHaveAttribute("href", "/admin/catalogo-normalizado");
+  });
 });

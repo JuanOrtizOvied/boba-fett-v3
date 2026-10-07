@@ -54,7 +54,7 @@ Validation: 404 for missing parent/row; 409 on duplicate (code / (product_code,s
   `admin_routes.py`. Wire `app.state.normalized_catalog_repo` in `routes.py` lifespan AND
   in `tests/integration/conftest.py` `admin_api_client`. Integration route tests +
   repo tests. No commit (orchestrator commits).
-- [ ] **T-B — Frontend admin module (writer, TDD).** Types for product/series/admin +
+- [x] **T-B — Frontend admin module (writer, TDD).** Types for product/series/admin +
   create/update inputs; new master-detail page `/admin/catalogo-normalizado`; modals for
   product/series/admin create+edit; confirm-delete; nav link in admin/layout.tsx; vitest
   tests (incl. updating `admin-layout-nav.test.tsx`). Uses fetchWithAuth + the T-A API.
@@ -80,3 +80,8 @@ Delegate T-A (backend) to one bounded writer with TDD; then T-B (frontend).
 - RED: 13 of 20 new route tests failed before implementation. GREEN: `test_normalized_catalog_crud_pg.py` 20 passed; with `test_catalog_normalized_pg.py` + `test_admin_catalog_pg.py` 38 passed; `ruff check src/` clean.
 - Empty required strings rejected by pydantic validators -> HTTP 422.
 - Route: delegated direct writer. Not committed yet.
+
+## T-B evidence
+
+- New: lib/normalized-catalog-types.ts, app/admin/catalogo-normalizado/page.tsx, components/admin/catalog-normalized/{shared,ProductFormModal,SeriesFormModal,AdminFormModal}.tsx, __tests__/catalogo-normalizado-page.test.tsx. Changed: admin/layout.tsx (nav), admin-layout-nav.test.tsx.
+- vitest: 2 target files 6 passed. Full suite: 8 failures in 4 files (admin-portfolio-approval, bulk-accept-bar, ficha-patrimonial-page, propose-product-card), identical on baseline (pre-existing, unrelated). `next lint`: no findings in new/changed files.
