@@ -43,7 +43,20 @@ class Series(BaseModel):
     administrators: list[AdministratorLink] = Field(default_factory=list)
 
 
+class EntityRef(BaseModel):
+    """A manager or an administrator as a product refers to it."""
+
+    id: int
+    name: str
+    score: int | None = None
+
+
 class CatalogV2Product(BaseModel):
+    """A product. Besides its own fields it carries a summary of its active
+    series and administrators, so a list is enough to compute its observations:
+    `series_count`, `incomplete_series` (series with a blank TER or a blank
+    return) and the distinct `administrators` with their score."""
+
     id: int
     codigo: str
     name: str
@@ -57,6 +70,9 @@ class CatalogV2Product(BaseModel):
     currency: str = ""
     investment_horizon: str = ""
     is_deleted: bool = False
+    series_count: int = 0
+    incomplete_series: int = 0
+    administrators: list[EntityRef] = Field(default_factory=list)
 
 
 class CatalogV2ProductDetail(CatalogV2Product):

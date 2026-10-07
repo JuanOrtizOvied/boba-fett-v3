@@ -19,15 +19,31 @@ from catalog_v2.models import (
     Allocation,
     CatalogV2Product,
     CatalogV2ProductDetail,
+    EntityRef,
     ManagerV2,
     Series,
 )
 
+# Besides its own columns, each product carries a summary of its active series and
+# administrators, so the page can compute its observations from the list alone.
 _PRODUCT_SELECT = """
     SELECT p.id, p.codigo, p.name, p.isin, p.manager_id,
            COALESCE(m.name, '') AS manager, m.score AS manager_score,
            p.asset_class, p.geographic_focus, p.underlying,
-           p.currency, p.investment_horizon, p.is_deleted
+           p.currency, p.investment_horizon, p.is_deleted,
+           (SELECT count(*) FROM product_series_v2 s
+             WHERE s.product_id = p.id AND NOT s.is_deleted) AS series_count,
+           (SELECT count(*) FROM product_series_v2 s
+             WHERE s.product_id = p.id AND NOT s.is_deleted
+               AND (s.ter IS NULL OR s.return_min IS NULL OR s.return_max IS NULL))
+             AS incomplete_series,
+           (SELECT COALESCE(json_agg(x ORDER BY x.name), '[]'::json) FROM (
+               SELECT DISTINCT a.id, a.name, a.score
+               FROM product_series_v2 s
+               JOIN product_administrator_v2 l ON l.series_id = s.id
+               JOIN administrator_v2 a ON a.id = l.administrator_id
+               WHERE s.product_id = p.id AND NOT s.is_deleted AND NOT l.is_deleted
+           ) x) AS administrators
     FROM product_catalog_v2 p
     LEFT JOIN manager_v2 m ON m.id = p.manager_id
 """
@@ -64,6 +80,11 @@ class CatalogV2Repository:
             currency=row["currency"] or "",
             investment_horizon=row["investment_horizon"] or "",
             is_deleted=row["is_deleted"],
+            series_count=row["series_count"],
+            incomplete_series=row["incomplete_series"],
+            administrators=[
+                EntityRef(**item) for item in json.loads(row["administrators"] or "[]")
+            ],
         )
 
     async def list_products(

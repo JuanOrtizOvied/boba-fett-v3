@@ -18,9 +18,14 @@ from pydantic import BaseModel, Field
 from auth.dependencies import require_admin
 from catalog_v2.config import (
     ADMINISTRATORS_SHEET,
+    ASSET_CLASS_OPTIONS,
     CONTROL,
+    CURRENCY_OPTIONS,
+    GEOGRAPHIC_FOCUS_OPTIONS,
+    HORIZON_OPTIONS,
     PRODUCTS_SHEET,
     SERIES_SHEET,
+    UNDERLYING_OPTIONS,
     Settings,
 )
 from catalog_v2.lock import LockTimeoutError
@@ -126,6 +131,19 @@ async def restore_entry(
     if restored is None:
         raise HTTPException(status_code=404, detail="Producto eliminado no encontrado")
     return restored
+
+
+@router.get("/options")
+async def get_options() -> dict[str, list[str]]:
+    """The official values of the finite-set fields, as the workbook spells them,
+    so the web checks membership without keeping its own copy of the lists."""
+    return {
+        "asset_class": list(ASSET_CLASS_OPTIONS),
+        "geographic_focus": list(GEOGRAPHIC_FOCUS_OPTIONS),
+        "underlying": list(UNDERLYING_OPTIONS),
+        "currency": list(CURRENCY_OPTIONS),
+        "investment_horizon": list(HORIZON_OPTIONS),
+    }
 
 
 @router.get("/excel-managed-fields")
