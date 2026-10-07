@@ -73,11 +73,23 @@ async def list_entries(
     limit: Annotated[int, Query(ge=1, le=1000)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     include_deleted: bool = False,
+    manager_id: Annotated[list[int] | None, Query()] = None,
+    administrator_id: Annotated[list[int] | None, Query()] = None,
 ) -> list[CatalogV2Product]:
     """The v2 products, ranked when `search` is given (accent and case
     insensitive, on the name and the code). Deleted ones are left out unless
-    `include_deleted=true`, and each item carries its `is_deleted` flag."""
-    return await repo.list_products(search, limit, offset, include_deleted=include_deleted)
+    `include_deleted=true`, and each item carries its `is_deleted` flag.
+    `manager_id` and `administrator_id` narrow the list and can be repeated
+    (`?manager_id=1&manager_id=2`): values of one filter combine with OR, and
+    the filters and the search combine with AND."""
+    return await repo.list_products(
+        search,
+        limit,
+        offset,
+        include_deleted=include_deleted,
+        manager_ids=manager_id,
+        administrator_ids=administrator_id,
+    )
 
 
 @router.get("/entries/{entry_id}", response_model=CatalogV2ProductDetail)

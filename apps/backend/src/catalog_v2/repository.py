@@ -73,6 +73,8 @@ class CatalogV2Repository:
         offset: int = 0,
         *,
         include_deleted: bool = False,
+        manager_ids: list[int] | None = None,
+        administrator_ids: list[int] | None = None,
     ) -> list[CatalogV2Product]:
         """Products matching `search`, or ordered by `codigo` without one.
 
@@ -81,12 +83,28 @@ class CatalogV2Repository:
         admin can paste a code from the Excel. `%` and `_` are taken
         literally. Results are ranked: exact name, then names that start with
         the text, then the rest.
+
+        `manager_ids` keeps the products of any of those managers, and
+        `administrator_ids` the products with an active link to any of those
+        administrators. Several values of one filter combine with OR, and the
+        filters and the search combine with AND.
         """
         conditions: list[str] = []
         params: list[object] = []
         order = "p.codigo"
         if not include_deleted:
             conditions.append("p.is_deleted = false")
+        if manager_ids:
+            params.append(manager_ids)
+            conditions.append(f"p.manager_id = ANY(${len(params)}::int[])")
+        if administrator_ids:
+            params.append(administrator_ids)
+            conditions.append(
+                "EXISTS (SELECT 1 FROM product_series_v2 s "
+                "JOIN product_administrator_v2 l ON l.series_id = s.id "
+                f"WHERE s.product_id = p.id AND l.administrator_id = ANY(${len(params)}::int[]) "
+                "AND NOT s.is_deleted AND NOT l.is_deleted)"
+            )
         text = search.strip() if search else ""
         if text:
             params.append(text)
