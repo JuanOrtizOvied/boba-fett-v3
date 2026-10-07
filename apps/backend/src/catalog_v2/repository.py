@@ -12,6 +12,7 @@ import json
 
 import asyncpg
 
+from catalog_v2.diff import StoredLink, StoredProduct, StoredSeries, StoredState
 from catalog_v2.models import (
     AdministratorLink,
     AdministratorV2,
@@ -182,6 +183,96 @@ class CatalogV2Repository:
             return None
         row = await self.pool.fetchrow(f"{_PRODUCT_SELECT} WHERE p.id = $1", product_id)
         return self._row_to_product(row) if row else None
+
+    async def load_state(
+        self, conn: asyncpg.Connection | asyncpg.Pool | None = None
+    ) -> StoredState:
+        """A snapshot of every v2 row, deleted ones included, in the shape the
+        diff compares against: composites as lists of name and percentage, the
+        manager as its name and numbers as stored. Pass the connection of a
+        transaction to read inside it."""
+        db = conn or self.pool
+        products = await db.fetch(
+            "SELECT p.id, p.codigo, p.name, p.isin, COALESCE(m.name, '') AS manager, "
+            "p.asset_class, p.geographic_focus, p.underlying, p.currency, "
+            "p.investment_horizon, p.is_deleted "
+            "FROM product_catalog_v2 p LEFT JOIN manager_v2 m ON m.id = p.manager_id"
+        )
+        series = await db.fetch(
+            "SELECT s.id, p.codigo, s.series, s.ter, s.flows_min, s.flows_max, "
+            "s.return_min, s.return_max, s.is_deleted "
+            "FROM product_series_v2 s JOIN product_catalog_v2 p ON p.id = s.product_id"
+        )
+        links = await db.fetch(
+            "SELECT l.id, p.codigo, s.series, a.name AS administrator, l.custody, "
+            "l.buy_commission, l.sell_commission, l.minimum_usd, l.min_commission_usd, "
+            "l.is_deleted "
+            "FROM product_administrator_v2 l "
+            "JOIN product_series_v2 s ON s.id = l.series_id "
+            "JOIN product_catalog_v2 p ON p.id = s.product_id "
+            "JOIN administrator_v2 a ON a.id = l.administrator_id"
+        )
+        managers = await db.fetch("SELECT name FROM manager_v2 ORDER BY name")
+        administrators = await db.fetch("SELECT name FROM administrator_v2 ORDER BY name")
+
+        def composite(raw: object) -> list[dict[str, object]]:
+            return [a.model_dump() for a in _allocations(raw)]
+
+        return StoredState(
+            products=tuple(
+                StoredProduct(
+                    r["id"],
+                    r["codigo"],
+                    {
+                        "name": r["name"],
+                        "isin": r["isin"],
+                        "manager": r["manager"],
+                        "asset_class": composite(r["asset_class"]),
+                        "geographic_focus": composite(r["geographic_focus"]),
+                        "underlying": composite(r["underlying"]),
+                        "currency": r["currency"],
+                        "investment_horizon": r["investment_horizon"],
+                    },
+                    r["is_deleted"],
+                )
+                for r in products
+            ),
+            series=tuple(
+                StoredSeries(
+                    r["id"],
+                    r["codigo"],
+                    r["series"],
+                    {
+                        k: r[k]
+                        for k in ("ter", "flows_min", "flows_max", "return_min", "return_max")
+                    },
+                    r["is_deleted"],
+                )
+                for r in series
+            ),
+            links=tuple(
+                StoredLink(
+                    r["id"],
+                    r["codigo"],
+                    r["series"],
+                    r["administrator"],
+                    {
+                        k: r[k]
+                        for k in (
+                            "custody",
+                            "buy_commission",
+                            "sell_commission",
+                            "minimum_usd",
+                            "min_commission_usd",
+                        )
+                    },
+                    r["is_deleted"],
+                )
+                for r in links
+            ),
+            managers=tuple(r["name"] for r in managers),
+            administrators=tuple(r["name"] for r in administrators),
+        )
 
     async def list_administrators(self) -> list[AdministratorV2]:
         rows = await self.pool.fetch(
