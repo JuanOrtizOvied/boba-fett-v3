@@ -630,3 +630,54 @@ CREATE TABLE IF NOT EXISTS webhook_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_webhook_subs_expiration
     ON webhook_subscriptions (expiration);
+
+-- ---------------------------------------------------------------------------
+-- Normalized product catalog (v3): producto -> producto x serie ->
+-- producto x serie x administrador. Distinct from the legacy flat
+-- `product_catalog` table above, which is untouched and still in use.
+-- NOTE: NUMERIC fee/commission/flow/return columns store FRACTIONS exactly as
+-- in the source Excel (0.0384 = 3.84%), not percentages.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS catalog_product (
+    id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    ticker_isin TEXT DEFAULT '',
+    manager TEXT DEFAULT '',
+    asset_class JSONB DEFAULT '[]',
+    geographic_focus JSONB DEFAULT '[]',
+    underlying JSONB DEFAULT '[]',
+    currency TEXT DEFAULT '',
+    investment_horizon TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS catalog_product_series (
+    id SERIAL PRIMARY KEY,
+    product_code TEXT NOT NULL REFERENCES catalog_product(code) ON DELETE CASCADE,
+    series TEXT NOT NULL,
+    management_fee_ter NUMERIC,
+    flows_min NUMERIC,
+    flows_max NUMERIC,
+    return_min NUMERIC,
+    return_max NUMERIC,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (product_code, series)
+);
+
+CREATE TABLE IF NOT EXISTS catalog_product_series_admin (
+    id SERIAL PRIMARY KEY,
+    product_code TEXT NOT NULL,
+    series TEXT NOT NULL,
+    administrator TEXT NOT NULL,
+    custody_fee NUMERIC,
+    buy_commission NUMERIC,
+    sell_commission NUMERIC,
+    billing_currency TEXT DEFAULT '',
+    minimum_usd NUMERIC,
+    min_commission_usd NUMERIC,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    FOREIGN KEY (product_code, series)
+        REFERENCES catalog_product_series(product_code, series) ON DELETE CASCADE,
+    UNIQUE (product_code, administrator, series)
+);
