@@ -18,9 +18,14 @@ from pydantic import BaseModel, Field
 from auth.dependencies import require_admin
 from catalog_v2.config import (
     ADMINISTRATORS_SHEET,
+    ASSET_CLASS_OPTIONS,
     CONTROL,
+    CURRENCY_OPTIONS,
+    GEOGRAPHIC_FOCUS_OPTIONS,
+    HORIZON_OPTIONS,
     PRODUCTS_SHEET,
     SERIES_SHEET,
+    UNDERLYING_OPTIONS,
     Settings,
 )
 from catalog_v2.lock import LockTimeoutError
@@ -73,11 +78,23 @@ async def list_entries(
     limit: Annotated[int, Query(ge=1, le=1000)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     include_deleted: bool = False,
+    manager_id: Annotated[list[int] | None, Query()] = None,
+    administrator_id: Annotated[list[int] | None, Query()] = None,
 ) -> list[CatalogV2Product]:
     """The v2 products, ranked when `search` is given (accent and case
     insensitive, on the name and the code). Deleted ones are left out unless
-    `include_deleted=true`, and each item carries its `is_deleted` flag."""
-    return await repo.list_products(search, limit, offset, include_deleted=include_deleted)
+    `include_deleted=true`, and each item carries its `is_deleted` flag.
+    `manager_id` and `administrator_id` narrow the list and can be repeated
+    (`?manager_id=1&manager_id=2`): values of one filter combine with OR, and
+    the filters and the search combine with AND."""
+    return await repo.list_products(
+        search,
+        limit,
+        offset,
+        include_deleted=include_deleted,
+        manager_ids=manager_id,
+        administrator_ids=administrator_id,
+    )
 
 
 @router.get("/entries/{entry_id}", response_model=CatalogV2ProductDetail)
@@ -114,6 +131,19 @@ async def restore_entry(
     if restored is None:
         raise HTTPException(status_code=404, detail="Producto eliminado no encontrado")
     return restored
+
+
+@router.get("/options")
+async def get_options() -> dict[str, list[str]]:
+    """The official values of the finite-set fields, as the workbook spells them,
+    so the web checks membership without keeping its own copy of the lists."""
+    return {
+        "asset_class": list(ASSET_CLASS_OPTIONS),
+        "geographic_focus": list(GEOGRAPHIC_FOCUS_OPTIONS),
+        "underlying": list(UNDERLYING_OPTIONS),
+        "currency": list(CURRENCY_OPTIONS),
+        "investment_horizon": list(HORIZON_OPTIONS),
+    }
 
 
 @router.get("/excel-managed-fields")
