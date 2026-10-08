@@ -16,16 +16,10 @@ export function formatV2Rate(value: number | null | undefined): string {
   return `${percentFormat.format(value * 100)}%`;
 }
 
-/** An amount in US dollars ("US$200.000"). */
+/** An amount in US dollars ("US$200,000"). */
 export function formatV2Usd(value: number | null | undefined): string {
   if (value === null || value === undefined) return EMPTY;
   return `US$${amountFormat.format(value)}`;
-}
-
-/** A plain amount with no unit (the flows of a series have none). */
-export function formatV2Number(value: number | null | undefined): string {
-  if (value === null || value === undefined) return EMPTY;
-  return amountFormat.format(value);
 }
 
 /** A product's composite ("Renta fija 60%, Efectivo 40%"), whose percentages are

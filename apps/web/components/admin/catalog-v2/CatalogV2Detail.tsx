@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import {
   formatV2Allocations,
-  formatV2Number,
   formatV2Range,
   formatV2Rate,
   formatV2Usd,
@@ -189,7 +188,7 @@ function SeriesBlock({
           </span>
         )}
         <span>TER: {formatV2Rate(series.ter)}</span>
-        <span>Flujos: {formatV2Range(series.flows_min, series.flows_max, formatV2Number)}</span>
+        <span>Flujos: {formatV2Range(series.flows_min, series.flows_max)}</span>
         <span>Rentabilidad: {formatV2Range(series.return_min, series.return_max)}</span>
       </div>
       {series.administrators.length === 0 ? (
