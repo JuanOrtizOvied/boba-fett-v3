@@ -35,12 +35,15 @@ from agent.graph import builder as graph_builder
 from api.admin_routes import router as admin_router
 from api.auth_routes import router as auth_router
 from api.catalog_v2_routes import router as catalog_v2_router
+from api.catalog_v2_webhook_routes import router as catalog_v2_webhook_router
 from api.chat_routes import router as chat_router
 from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
 from catalog_sync.scheduler import start_maintenance_task, stop_maintenance_task
 from catalog_v2.repository import CatalogV2Repository
+from catalog_v2.scheduler import start_maintenance_task as start_v2_maintenance_task
+from catalog_v2.scheduler import stop_maintenance_task as stop_v2_maintenance_task
 from db.catalog_repository import CatalogRepository
 from db.connection import close_pool, get_pool
 from db.encryption import get_serde
@@ -98,12 +101,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # SharePoint catalog sync upkeep; None (and no Graph call) unless
     # SHAREPOINT_SYNC_ENABLED is true.
     maintenance_task = start_maintenance_task(app.state.catalog_repo)
+    # The same for the v2 catalog; None (and no Graph call) unless
+    # SHAREPOINT_V2_SYNC_ENABLED is true.
+    maintenance_v2_task = start_v2_maintenance_task(pool)
     try:
         async with AsyncExitStack() as stack:
             await _init_chat_graph(app, stack)
             yield
     finally:
         await stop_maintenance_task(maintenance_task)
+        await stop_v2_maintenance_task(maintenance_v2_task)
 
     await close_pool()
 
@@ -115,6 +122,7 @@ app.include_router(catalog_v2_router)
 app.include_router(chat_router)
 # Microsoft Graph calls these without a session; they authenticate by clientState.
 app.include_router(webhook_router)
+app.include_router(catalog_v2_webhook_router)
 
 
 async def _get_owned_product(product_id: str, user: dict):
