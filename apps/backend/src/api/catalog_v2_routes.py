@@ -9,7 +9,6 @@ administrator, which have no workbook column.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -28,6 +27,7 @@ from catalog_v2.config import (
     UNDERLYING_OPTIONS,
     Settings,
 )
+from catalog_v2.graph import GraphConfigError, GraphError
 from catalog_v2.lock import LockTimeoutError
 from catalog_v2.models import (
     AdministratorV2,
@@ -37,7 +37,12 @@ from catalog_v2.models import (
 )
 from catalog_v2.parser import MissingColumnError, MissingSheetError
 from catalog_v2.repository import CatalogV2Repository
-from catalog_v2.service import RunReport, run_sync_from_bytes
+from catalog_v2.service import (
+    RunReport,
+    WorkbookSource,
+    run_sync_from_source,
+    sharepoint_source,
+)
 
 router = APIRouter(
     prefix="/admin/catalog-v2",
@@ -45,27 +50,15 @@ router = APIRouter(
     dependencies=[Depends(require_admin)],
 )
 
-# Where the sync reads the workbook from: a function that returns its bytes.
-WorkbookSource = Callable[[], Awaitable[bytes]]
-
-
-class SourceUnavailableError(RuntimeError):
-    """The workbook cannot be fetched from SharePoint in this deployment."""
-
 
 def _repo(request: Request) -> CatalogV2Repository:
     return request.app.state.catalog_v2_repo
 
 
 def get_workbook_source() -> WorkbookSource:
-    """Dependency that provides the workbook source. The download from SharePoint
-    arrives with the Graph part of the sync; until then it reports that it is
-    not available, and tests replace it with a fake source."""
-
-    async def unavailable() -> bytes:
-        raise SourceUnavailableError
-
-    return unavailable
+    """Dependency that provides the workbook source: the download of the
+    configured file from SharePoint. Tests replace it with a fake source."""
+    return sharepoint_source(Settings.from_env())
 
 
 # --- Products ---------------------------------------------------------------
@@ -268,15 +261,23 @@ async def run_sync_now(
     if missing:
         raise HTTPException(status_code=503, detail=f"Falta configurar: {', '.join(missing)}")
     try:
-        data = await source()
-    except SourceUnavailableError:
-        raise HTTPException(
-            status_code=503, detail="La descarga desde SharePoint todavía no está disponible"
-        ) from None
-    try:
-        report = await run_sync_from_bytes(repo.pool, data, force=force)
+        report = await run_sync_from_source(repo.pool, source, force=force)
     except LockTimeoutError:
         raise HTTPException(status_code=409, detail="Ya hay una sincronización en curso") from None
+    except GraphConfigError as exc:
+        # Names the missing variables, never their values.
+        raise HTTPException(
+            status_code=503, detail=f"Falta configurar: {str(exc).split(': ', 1)[-1]}"
+        ) from None
+    except GraphError as exc:
+        # The status and the Graph code only: the message can carry tenant details.
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "No se pudo descargar el archivo desde SharePoint "
+                f"(estado {exc.status}, código {exc.code})"
+            ),
+        ) from None
     except (MissingSheetError, MissingColumnError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     return _summary(report)
