@@ -116,16 +116,20 @@ async def graph_notifications(
     every `clientState`, replies `202` at once and syncs in the background (one
     run per request, however many items it carries)."""
     if validationToken is not None:
+        logger.info("Graph notification endpoint: validation handshake answered")
         return PlainTextResponse(validationToken)
 
     items = await _read_items(request)
     if items is None:
+        logger.warning("Graph notification rejected: the body is not a list of notifications")
         return Response(status_code=400)
 
     repo: CatalogV2Repository = request.app.state.catalog_v2_repo
     if not await _is_authentic(repo, items):
+        logger.warning("Graph notification rejected: unknown subscription or wrong clientState")
         return Response(status_code=401)
 
+    logger.info("Graph notification received: %d item(s), authentic, sync started", len(items))
     background_tasks.add_task(_sync_in_background, repo)
     return Response(status_code=202)
 
@@ -170,15 +174,20 @@ async def graph_lifecycle(
     `clientState` check as the notification endpoint; once authenticated it always
     answers `200` and works in the background."""
     if validationToken is not None:
+        logger.info("Graph lifecycle endpoint: validation handshake answered")
         return PlainTextResponse(validationToken)
 
     items = await _read_items(request)
     if items is None:
+        logger.warning("Graph lifecycle event rejected: the body is not a list of events")
         return Response(status_code=400)
 
     repo: CatalogV2Repository = request.app.state.catalog_v2_repo
     if not await _is_authentic(repo, items):
+        logger.warning("Graph lifecycle event rejected: unknown subscription or wrong clientState")
         return Response(status_code=401)
 
+    events = [str(item.get("lifecycleEvent")) for item in items]
+    logger.info("Graph lifecycle event received: %s", ", ".join(events))
     background_tasks.add_task(_handle_lifecycle_events, repo, items)
     return Response(status_code=200)
