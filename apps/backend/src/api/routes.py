@@ -41,6 +41,7 @@ from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
 from catalog_sync.scheduler import start_maintenance_task, stop_maintenance_task
+from catalog_v2.logs import setup_v2_logging
 from catalog_v2.repository import CatalogV2Repository
 from catalog_v2.scheduler import start_maintenance_task as start_v2_maintenance_task
 from catalog_v2.scheduler import stop_maintenance_task as stop_v2_maintenance_task
@@ -97,6 +98,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.user_repo = UserRepository(pool)
     app.state.catalog_repo = CatalogRepository(pool)
     app.state.catalog_v2_repo = CatalogV2Repository(pool)
+
+    # The migrations above switched the v2 loggers off: switch them on again so their warnings
+    # and errors are recorded, and with IS_DEVELOPMENT=true print the INFO logs as well.
+    setup_v2_logging()
 
     # SharePoint catalog sync upkeep; None (and no Graph call) unless
     # SHAREPOINT_SYNC_ENABLED is true.
