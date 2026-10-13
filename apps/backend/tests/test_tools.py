@@ -13,10 +13,10 @@ import asyncio
 from unittest.mock import AsyncMock
 
 
-def test_portfolio_tools_exports_eight_tools():
+def test_portfolio_tools_exports_nine_tools():
     from agent.tools import portfolio_tools
 
-    assert len(portfolio_tools) == 8
+    assert len(portfolio_tools) == 9
     names = {t.name for t in portfolio_tools}
     assert names == {
         "search_product",
@@ -27,6 +27,7 @@ def test_portfolio_tools_exports_eight_tools():
         "get_portfolio_summary",
         "analyze_portfolio_drift",
         "create_snapshot",
+        "get_exchange_rate",
     }
 
 

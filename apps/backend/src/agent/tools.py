@@ -22,6 +22,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
+from agent.exchange_rate import get_sunat_rate, today_lima
 from agent.search import cascade_search
 from agent.state import ASSET_CLASSES
 from db.connection import get_pool, get_repository
@@ -520,6 +521,35 @@ async def analyze_portfolio_drift(
     }
 
 
+@tool
+async def get_exchange_rate(date: str | None = None) -> dict:
+    """Get SUNAT's official USD->PEN exchange rate (compra/venta) for a date.
+
+    Use this whenever the user converts amounts between dollars (USD) and
+    Peruvian soles (PEN), or asks about the exchange rate. Returns SUNAT's
+    official published rate. Never guess a rate — call this tool.
+
+    Args:
+        date: Optional YYYY-MM-DD. Defaults to today (America/Lima).
+    """
+    resolved = date or today_lima()
+    rate = await get_sunat_rate(resolved)
+    if rate is None:
+        return {
+            "status": "unavailable",
+            "date": resolved,
+            "message": "No se pudo obtener el tipo de cambio oficial de SUNAT.",
+        }
+    return {
+        "status": "found",
+        "date": rate.date,
+        "compra": rate.compra,
+        "venta": rate.venta,
+        "source": rate.source,
+        "moneda": "USD",
+    }
+
+
 portfolio_tools = [
     search_product,
     propose_product,
@@ -529,4 +559,5 @@ portfolio_tools = [
     get_portfolio_summary,
     analyze_portfolio_drift,
     create_snapshot,
+    get_exchange_rate,
 ]
