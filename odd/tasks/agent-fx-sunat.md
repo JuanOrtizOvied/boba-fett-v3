@@ -65,7 +65,20 @@ No new DB table, no migration, no new secret required to run (token is optional)
   CUMPLIMIENTO). Tests in `tests/test_exchange_rate.py`. Also touched `tests/test_tools.py`
   (the hard-coded "exports eight tools" count/name list → nine, since a 9th tool was added).
 - [x] **T-B — Verify + commit.** Orchestrator spot-checked (re-ran tests + ruff) and read
-  the module + tests + diffs. Commit below.
+  the module + tests + diffs. Commit `8739f52`.
+- [x] **T-C — Currency-identity guardrails (prompt only, direct inline).** Reported bug
+  (ODD §2.4): the agent fabricated a product's currency variant (e.g. "Coril Retail en
+  dólares") by copying a soles product's fields, and treated a currency word in a product
+  NAME as a conversion request. Fix in `prompts.py` only:
+  (1) in the search rules — the product's moneda is part of its identity; search the name
+  as-is, never "convert" it; `currency` always comes from `search_product`; NEVER fabricate
+  a currency variant by copying fields (a USD and a PEN product are DISTINCT and must be
+  verified separately). (2) in the TIPO DE CAMBIO section — `get_exchange_rate` converts
+  MONEY AMOUNTS only, never a product's currency / never creates a product.
+  TDD note: a system-prompt wording guardrail has no meaningful RED/GREEN (LLM behavior);
+  verified by rebuilding the prompt (guardrail strings present), `ruff` clean, and the
+  existing suite still green. No test added (a content-string assertion would be brittle
+  gaming, not behavioral coverage).
 
 ## Acceptance criteria
 
