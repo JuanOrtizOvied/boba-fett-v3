@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     isin TEXT DEFAULT '',
     distribution TEXT DEFAULT '',
     is_deleted BOOLEAN NOT NULL DEFAULT false,
-    codigo VARCHAR(20),
+    codigo VARCHAR(50),
     cash_flows TEXT NOT NULL DEFAULT ''
 );
 
@@ -248,7 +248,18 @@ ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS distribution TEXT DEFAULT '
 -- Soft delete + Excel sync fields. Mirrors
 -- migrations/versions/a7c3e91d5b24_add_soft_delete_codigo_cash_flows.py.
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS codigo VARCHAR(20);
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS codigo VARCHAR(50);
+-- Mirrors migrations/versions/9c4e7a2b5d16_widen_product_catalog_codigo.py: a database
+-- created with the old VARCHAR(20) column is widened in place (keeps data and the index).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='product_catalog' AND column_name='codigo'
+      AND character_maximum_length < 50
+  ) THEN
+    ALTER TABLE product_catalog ALTER COLUMN codigo TYPE VARCHAR(50);
+  END IF;
+END $$;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS cash_flows TEXT NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS uq_product_catalog_codigo ON product_catalog (codigo);
 

@@ -99,7 +99,7 @@ product_catalog = Table(
     Column("administrator_score", Integer),
     Column("manager_score", Integer),
     Column("is_deleted", Boolean, nullable=False, server_default=text("false")),
-    Column("codigo", String(20)),
+    Column("codigo", String(50)),
     Column("cash_flows", Text, nullable=False, server_default=""),
     Index("uq_product_catalog_codigo", "codigo", unique=True),
 )
