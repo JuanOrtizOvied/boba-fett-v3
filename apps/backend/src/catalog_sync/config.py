@@ -34,7 +34,7 @@ class FieldMapping(TypedDict):
 # never by column position, so columns may shift as the sheet grows
 # (CLAUDE.md, "Prohibiciones"). Matches arquitectura.md section 3 exactly.
 FIELD_MAPPING: dict[str, FieldMapping] = {
-    "Codigo": {"db_field": "codigo", "type": "key", "db_type": "varchar(20)", "required": True},
+    "Codigo": {"db_field": "codigo", "type": "key", "db_type": "varchar(50)", "required": True},
     "Nombre de Producto": {
         "db_field": "name",
         "type": "text",
