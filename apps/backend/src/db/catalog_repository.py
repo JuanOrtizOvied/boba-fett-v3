@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import asyncpg
-from sqlalchemy import Column, Integer, MetaData, Table, Text, case, func, select
+from sqlalchemy import Boolean, Column, Integer, MetaData, Table, Text, case, func, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
@@ -95,6 +95,9 @@ product_catalog_table = Table(
     Column("approved_at", Text()),
     Column("alternative_names", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("slugs", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
+    Column("is_deleted", Boolean, nullable=False, server_default=text("false")),
+    Column("codigo", Text),
+    Column("cash_flows", Text, nullable=False, server_default=""),
 )
 
 class CatalogRepository:
@@ -113,6 +116,7 @@ class CatalogRepository:
         asset_class: list[str] | None = None,
         geographic_focus: list[str] | None = None,
         underlying: list[str] | None = None,
+        include_deleted: bool = False,
     ) -> list[dict]:
         """Fetches the product catalog with optional search, field filters,
         and pagination (`openspec/changes/catalog-export-and-filters` —
@@ -138,6 +142,11 @@ class CatalogRepository:
         """
         # Base selection
         query = select(product_catalog_table)
+
+        # Soft delete: hidden by default, `include_deleted=True` returns
+        # active and deleted entries together (each row carries `is_deleted`).
+        if not include_deleted:
+            query = query.where(product_catalog_table.c.is_deleted.is_(False))
 
         if currency:
             query = query.where(_ci_in_clause(product_catalog_table.c.currency, currency))
@@ -219,7 +228,9 @@ class CatalogRepository:
 
 
     async def list_all(self) -> list[CatalogProduct]:
-        rows = await self.pool.fetch("SELECT * FROM product_catalog ORDER BY id")
+        rows = await self.pool.fetch(
+            "SELECT * FROM product_catalog WHERE is_deleted = false ORDER BY id"
+        )
         return [self._row_to_catalog_product(r) for r in rows]
 
     async def get_by_ids(self, ids: list[int]) -> list[CatalogProduct]:
@@ -230,7 +241,8 @@ class CatalogRepository:
         if not ids:
             return []
         rows = await self.pool.fetch(
-            "SELECT * FROM product_catalog WHERE id = ANY($1::int[]) ORDER BY id",
+            "SELECT * FROM product_catalog "
+            "WHERE id = ANY($1::int[]) AND is_deleted = false ORDER BY id",
             ids,
         )
         return [self._row_to_catalog_product(r) for r in rows]
@@ -392,10 +404,177 @@ class CatalogRepository:
         return self._row_to_catalog_product(row) if row else None
 
     async def delete(self, catalog_id: int) -> bool:
+        """Soft delete: marks the entry `is_deleted = true` and keeps the row
+        (`openspec/changes/catalog-sharepoint-sync`, SD-01..SD-04). Returns
+        `True` when the entry exists (deleting an already-deleted entry is a
+        no-op success) and `False` when the id is unknown."""
         row = await self.pool.fetchrow(
-            "DELETE FROM product_catalog WHERE id = $1 RETURNING id", catalog_id
+            "UPDATE product_catalog SET is_deleted = true WHERE id = $1 RETURNING id",
+            catalog_id,
         )
         return row is not None
+
+        # Original hard delete, intentionally kept commented out (not removed)
+        # in case a separate hard-delete route is needed later. Catalog rows
+        # must never be physically deleted by the soft-delete flow.
+        # row = await self.pool.fetchrow(
+        #     "DELETE FROM product_catalog WHERE id = $1 RETURNING id", catalog_id
+        # )
+        # return row is not None
+
+    async def restore(self, catalog_id: int) -> CatalogProduct | None:
+        """Reactivate a soft-deleted entry (SD-09, SD-10). Returns `None` when
+        the id does not exist or the entry is not deleted. This is the only
+        way to un-delete: the Excel sync never does it."""
+        row = await self.pool.fetchrow(
+            "UPDATE product_catalog SET is_deleted = false "
+            "WHERE id = $1 AND is_deleted = true RETURNING *",
+            catalog_id,
+        )
+        return self._row_to_catalog_product(row) if row else None
+
+    async def find_deleted_duplicate(self, data: CatalogProductCreate) -> int | None:
+        """Id of a soft-deleted entry that matches `data` on the duplicate
+        identity key (normalized name + asset_class), or `None` (SD-12).
+        Lets the routes tell the admin to restore it instead of recreating."""
+        asset_class_json = json.dumps([a.model_dump() for a in data.asset_class])
+        row = await self.pool.fetchrow(
+            """
+            SELECT id FROM product_catalog
+            WHERE is_deleted = true
+              AND LOWER(TRIM(name)) = LOWER(TRIM($1))
+              AND asset_class = $2::jsonb
+            LIMIT 1
+            """,
+            data.name,
+            asset_class_json,
+        )
+        return row["id"] if row else None
+
+    # -- SharePoint Excel sync (catalog_sync) --------------------------
+    #
+    # Dedicated write paths for `catalog_sync.diff.diff_catalog`'s
+    # `ChangeSet` (`openspec/changes/catalog-sharepoint-sync`, design.md
+    # ADR-4). All four accept an optional `conn` so `apply.py` (Phase 4.3)
+    # can run a whole `ChangeSet` inside one transaction; without one, each
+    # call manages its own. None of these go through
+    # `CatalogProductCreate`/`CatalogProductUpdate` validation — the sync
+    # must be able to save values the web forms would reject (unrecognized
+    # names, allocations not summing to 100).
+
+    @staticmethod
+    def _prepare_sync_fields(fields: dict[str, object]) -> dict[str, object]:
+        """JSON-serialize composite (`list[AssetAllocation]`) values in a
+        `catalog_sync` change's `fields` dict; every other value (already
+        plain text from `catalog_sync.normalize`) passes through as-is."""
+        prepared = dict(fields)
+        for key in ("asset_class", "geographic_focus", "underlying"):
+            if key in prepared:
+                prepared[key] = json.dumps(
+                    [
+                        a.model_dump() if isinstance(a, AssetAllocation) else a
+                        for a in prepared[key]
+                    ]
+                )
+        return prepared
+
+    async def list_for_sync(
+        self, *, conn: asyncpg.Connection | None = None
+    ) -> list[CatalogProduct]:
+        """Every catalog row, including soft-deleted ones — the diff
+        engine's `existing_rows` (SYNC-10: a row absent from the Excel is
+        never touched, but the diff engine must still see it to know that)."""
+        executor = conn if conn is not None else self.pool
+        rows = await executor.fetch("SELECT * FROM product_catalog ORDER BY id")
+        return [self._row_to_catalog_product(r) for r in rows]
+
+    async def sync_insert(
+        self,
+        codigo: str,
+        fields: dict[str, object],
+        *,
+        conn: asyncpg.Connection | None = None,
+    ) -> CatalogProduct:
+        """Insert a new entry from the Excel sync (SYNC-01). `fields` holds
+        only the mapped columns the parsed row had a non-blank value for
+        (`catalog_sync.diff.InsertChange.fields`); everything else keeps its
+        column default. `codigo` is always set — the sync never inserts a
+        row without one."""
+        executor = conn if conn is not None else self.pool
+        prepared = self._prepare_sync_fields(fields)
+
+        values: list[object] = [codigo]
+        placeholders: dict[str, str] = {"codigo": "$1"}
+        for key, value in prepared.items():
+            values.append(value)
+            placeholders[key] = f"${len(values)}"
+
+        columns = ["codigo", *prepared.keys()]
+        value_placeholders = [placeholders[c] for c in columns]
+        name_expr = placeholders.get("name", "''")
+        slugs_expr = _slugs_expr(name_expr, "'{}'::text[]")
+
+        query = (
+            f"INSERT INTO product_catalog ({', '.join(columns)}, slugs) "
+            f"VALUES ({', '.join(value_placeholders)}, {slugs_expr}) "
+            "RETURNING *"
+        )
+        row = await executor.fetchrow(query, *values)
+        return self._row_to_catalog_product(row)
+
+    async def sync_update(
+        self,
+        catalog_id: int,
+        fields: dict[str, object],
+        *,
+        conn: asyncpg.Connection | None = None,
+    ) -> CatalogProduct | None:
+        """Apply a diff/adopt change's fields to an existing entry (SYNC-02,
+        SYNC-11). `slugs` is recomputed when `name` is present, same as
+        `update()`; the sync never sends `alternative_names`. Never touches
+        `is_deleted` — that is `sync_soft_delete`'s job alone. Returns
+        `None` only if `catalog_id` doesn't exist."""
+        executor = conn if conn is not None else self.pool
+        if not fields:
+            row = await executor.fetchrow(
+                "SELECT * FROM product_catalog WHERE id = $1", catalog_id
+            )
+            return self._row_to_catalog_product(row) if row else None
+
+        prepared = self._prepare_sync_fields(fields)
+
+        values: list[object] = [catalog_id]
+        placeholders: dict[str, str] = {}
+        set_parts: list[str] = []
+        for key, value in prepared.items():
+            values.append(value)
+            placeholders[key] = f"${len(values)}"
+            set_parts.append(f"{key} = {placeholders[key]}")
+
+        if "name" in prepared:
+            alt_expr = "COALESCE(alternative_names, '{}'::text[])"
+            set_parts.append(f"slugs = {_slugs_expr(placeholders['name'], alt_expr)}")
+
+        set_clause = ", ".join(set_parts)
+        row = await executor.fetchrow(
+            f"UPDATE product_catalog SET {set_clause} WHERE id = $1 RETURNING *",
+            *values,
+        )
+        return self._row_to_catalog_product(row) if row else None
+
+    async def sync_soft_delete(
+        self, catalog_id: int, *, conn: asyncpg.Connection | None = None
+    ) -> CatalogProduct | None:
+        """Soft-delete an entry as part of the Excel sync (SYNC-07). Only
+        ever sets `is_deleted = true` — the sync never restores
+        (design.md ADR-3/ADR-4); `restore()` (admin UI only) is the sole
+        way back."""
+        executor = conn if conn is not None else self.pool
+        row = await executor.fetchrow(
+            "UPDATE product_catalog SET is_deleted = true WHERE id = $1 RETURNING *",
+            catalog_id,
+        )
+        return self._row_to_catalog_product(row) if row else None
 
     async def list_administrators(self) -> list[Administrator]:
         rows = await self.pool.fetch(
@@ -460,7 +639,8 @@ class CatalogRepository:
                     ), 0)
                 ) AS sim
             FROM product_catalog pc
-            WHERE
+            WHERE pc.is_deleted = false
+              AND (
                 similarity(name, $1) > 0.1
                 OR name ILIKE '%' || $1 || '%'
                 OR asset_class::text ILIKE '%' || $1 || '%'
@@ -469,6 +649,7 @@ class CatalogRepository:
                     WHERE similarity(alt, $1) > 0.1
                        OR alt ILIKE '%' || $1 || '%'
                 )
+              )
             ORDER BY sim DESC
             LIMIT $2
             """,
@@ -509,4 +690,7 @@ class CatalogRepository:
             approved_at=(
                 row["approved_at"].isoformat() if row["approved_at"] is not None else None
             ),
+            codigo=row["codigo"],
+            cash_flows=row["cash_flows"] or "",
+            is_deleted=row["is_deleted"],
         )

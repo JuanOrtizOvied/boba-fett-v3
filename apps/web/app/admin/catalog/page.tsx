@@ -7,7 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { DownloadIcon, EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
+import {
+  DownloadIcon,
+  EditIcon,
+  RestoreIcon,
+  TrashIcon,
+  XIcon,
+} from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type {
   AdministratorEntity,
@@ -79,7 +85,9 @@ function CatalogPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<CatalogProduct | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   // -- Search: input ↔ URL ↔ debounce --------------------------------
   const [searchInput, setSearchInput] = useUrlSearch("search");
@@ -96,11 +104,17 @@ function CatalogPageContent() {
     searchInput.trim() !== "";
 
   const loadCatalog = useCallback(
-    async (term: string, activeFilters: CatalogFilterState, signal: AbortSignal) => {
+    async (
+      term: string,
+      activeFilters: CatalogFilterState,
+      includeDeleted: boolean,
+      signal: AbortSignal,
+    ) => {
       const params = new URLSearchParams();
       if (term) params.set("search", term);
       params.set("limit", String(CATALOG_PAGE_SIZE));
       params.set("offset", "0");
+      if (includeDeleted) params.set("include_deleted", "true");
       for (const [key, values] of Object.entries(activeFilters)) {
         for (const value of values) params.append(key, value);
       }
@@ -127,7 +141,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
   abortRef.current = controller;
 
   try {
-    await loadCatalog(debouncedSearch.trim(), filters, controller.signal);
+    await loadCatalog(debouncedSearch.trim(), filters, showDeleted, controller.signal);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       return;
@@ -137,7 +151,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
       throw err;
     }
   }
-}, [loadCatalog, debouncedSearch, filters]);
+}, [loadCatalog, debouncedSearch, filters, showDeleted]);
 
   useEffect(() => {
     const term = debouncedSearch.trim();
@@ -150,7 +164,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     setError(null);
     setIsFetching(true);
 
-    loadCatalog(term, filters, controller.signal)
+    loadCatalog(term, filters, showDeleted, controller.signal)
       .catch((err: unknown) => {
         // Ignore cancellation errors (when the user types again)
         if (err instanceof Error && err.name === "AbortError") return;
@@ -164,7 +178,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
 
     // Clean up on unmount
     return () => controller.abort();
-  }, [debouncedSearch, filters, loadCatalog]);
+  }, [debouncedSearch, filters, showDeleted, loadCatalog]);
 
   // Selection is page-level state (a set of catalog IDs), not per-row —
   // whenever the visible entries change (search, filters, or a delete),
@@ -173,9 +187,13 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
   // (openspec/changes/catalog-export-and-filters/design.md ADR-7).
   useEffect(() => {
     if (!entries) return;
-    const visibleIds = new Set(entries.map((e) => e.id));
+    // Deleted entries are excluded too: they're never selectable for export
+    // (they're already excluded server-side from the export itself, SD-06).
+    const selectableIds = new Set(
+      entries.filter((e) => !e.is_deleted).map((e) => e.id),
+    );
     setSelectedIds((prev) => {
-      const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+      const next = new Set([...prev].filter((id) => selectableIds.has(id)));
       return next.size === prev.size ? prev : next;
     });
   }, [entries]);
@@ -211,7 +229,6 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
   };
 
   const handleDelete = async (id: number) => {
-    const previous = entries ?? [];
     setDeletingId(id);
     setConfirmDeleteId(null);
 
@@ -225,11 +242,34 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         );
       }
       await new Promise((r) => setTimeout(r, 400));
-      setEntries(previous.filter((entry) => entry.id !== id));
+      // Refetch instead of filtering the row out locally: this is a soft
+      // delete, so with "Ver eliminados" active the row should reappear
+      // marked as eliminada, not disappear from the table.
+      await refetchCatalog();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    setRestoringId(id);
+    try {
+      const res = await fetchWithAuth(
+        `/api/admin/catalog/entries/${id}/restore`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        throw new Error(
+          `No se pudo restaurar la entrada (status ${res.status})`,
+        );
+      }
+      await refetchCatalog();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -257,7 +297,18 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         </div>
       </div>
 
-      <CatalogFilters value={filters} onChange={setFilters} />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <CatalogFilters value={filters} onChange={setFilters} />
+        <label className="flex items-center gap-1.5 pb-1.5 text-sm text-sabbi-neutral-700 select-none">
+          <input
+            type="checkbox"
+            checked={showDeleted}
+            onChange={(e) => setShowDeleted(e.target.checked)}
+            className="size-4 rounded border-sabbi-neutral-300"
+          />
+          Ver eliminados
+        </label>
+      </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -279,17 +330,15 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                     <input
                       type="checkbox"
                       aria-label="Seleccionar todo"
-                      checked={
-                        entries !== null &&
-                        entries.length > 0 &&
-                        entries.every((e) => selectedIds.has(e.id))
-                      }
+                      checked={(() => {
+                        const selectable = (entries ?? []).filter((e) => !e.is_deleted);
+                        return selectable.length > 0 && selectable.every((e) => selectedIds.has(e.id));
+                      })()}
                       onChange={(e) => {
                         if (!entries) return;
+                        const selectable = entries.filter((entry) => !entry.is_deleted);
                         setSelectedIds(
-                          e.target.checked
-                            ? new Set(entries.map((entry) => entry.id))
-                            : new Set(),
+                          e.target.checked ? new Set(selectable.map((entry) => entry.id)) : new Set(),
                         );
                       }}
                     />
@@ -313,9 +362,15 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
               <tbody>
                 {entries.map((entry, index) => {
                   const isOdd = index % 2 === 1;
-                  const rowBg = isOdd ? "bg-sabbi-neutral-50" : "bg-white";
-                  const hoverBg = "group-hover:bg-[#f0fcd4]";
+                  const isDeleted = entry.is_deleted;
+                  const rowBg = isDeleted
+                    ? "bg-sabbi-neutral-100"
+                    : isOdd
+                      ? "bg-sabbi-neutral-50"
+                      : "bg-white";
+                  const hoverBg = isDeleted ? "" : "group-hover:bg-[#f0fcd4]";
                   const isDeleting = deletingId === entry.id;
+                  const isRestoring = restoringId === entry.id;
                   return (
                     <tr
                       key={entry.id}
@@ -327,8 +382,10 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                         <input
                           type="checkbox"
                           aria-label={`Seleccionar ${entry.name || "producto"}`}
-                          checked={selectedIds.has(entry.id)}
+                          checked={!isDeleted && selectedIds.has(entry.id)}
+                          disabled={isDeleted}
                           onChange={() => {
+                            if (isDeleted) return;
                             setSelectedIds((prev) => {
                               const next = new Set(prev);
                               if (next.has(entry.id)) next.delete(entry.id);
@@ -336,12 +393,20 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                               return next;
                             });
                           }}
+                          className="disabled:cursor-not-allowed disabled:opacity-40"
                         />
                       </td>
                       <td
                         className={`sticky left-10 z-10 px-4 py-2 font-medium whitespace-nowrap text-sabbi-neutral-900 after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
                       >
-                        {entry.name || "—"}
+                        <span className={isDeleted ? "text-sabbi-neutral-500" : ""}>
+                          {entry.name || "—"}
+                        </span>
+                        {isDeleted && (
+                          <span className="ml-2 rounded-full bg-sabbi-neutral-200 px-2 py-0.5 text-[10px] font-medium tracking-wide text-sabbi-neutral-600 uppercase">
+                            Eliminado
+                          </span>
+                        )}
                       </td>
                       {CATALOG_COLUMNS.map((column) => {
                         const val = entry[column.key];
@@ -367,23 +432,37 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                         className={`sticky right-0 z-10 px-4 py-2 whitespace-nowrap before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-sabbi-neutral-200 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
                       >
                         <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            title="Editar"
-                            onClick={() => setEditingEntry(entry)}
-                            className="rounded-md p-1.5 text-sabbi-neutral-500 transition-colors hover:bg-sabbi-neutral-100 hover:text-sabbi-neutral-900"
-                          >
-                            <EditIcon size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            title="Eliminar"
-                            disabled={deletingId === entry.id}
-                            onClick={() => setConfirmDeleteId(entry.id)}
-                            className="rounded-md p-1.5 text-sabbi-neutral-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                          >
-                            <TrashIcon size={16} />
-                          </button>
+                          {isDeleted ? (
+                            <button
+                              type="button"
+                              title="Restaurar"
+                              disabled={isRestoring}
+                              onClick={() => void handleRestore(entry.id)}
+                              className="rounded-md p-1.5 text-sabbi-neutral-500 transition-colors hover:bg-green-50 hover:text-green-700 disabled:opacity-50"
+                            >
+                              <RestoreIcon size={16} />
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                title="Editar"
+                                onClick={() => setEditingEntry(entry)}
+                                className="rounded-md p-1.5 text-sabbi-neutral-500 transition-colors hover:bg-sabbi-neutral-100 hover:text-sabbi-neutral-900"
+                              >
+                                <EditIcon size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                title="Eliminar"
+                                disabled={deletingId === entry.id}
+                                onClick={() => setConfirmDeleteId(entry.id)}
+                                className="rounded-md p-1.5 text-sabbi-neutral-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                              >
+                                <TrashIcon size={16} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
