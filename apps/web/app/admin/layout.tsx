@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { href: "/admin/users/create", label: "Crear usuario" },
   { href: "/admin/portfolios", label: "Portafolios" },
   { href: "/admin/catalog", label: "Catálogo" },
+  { href: "/admin/catalog-v2", label: "Catálogo v2" },
   { href: "/admin/ficha-patrimonial", label: "Ficha Patrimonial" },
   { href: "/admin/threads", label: "Chats" },
 ];
