@@ -25,6 +25,10 @@ from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
 from catalog_sync.config import excel_managed_fields
+from catalog_sync.graph import GraphConfigError, GraphError
+from catalog_sync.lock import LockTimeoutError
+from catalog_sync.parser import MissingSheetError
+from catalog_sync.service import RunReport, SyncDisabledError, run_sync_from_sharepoint
 from db.catalog_excel import build_catalog_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
 from db.catalog_repository import CatalogRepository
@@ -252,6 +256,64 @@ async def get_excel_managed_fields() -> list[str]:
     (`openspec/changes/catalog-sharepoint-sync`, EM-06, EM-07). Admin only
     via the router dependency."""
     return excel_managed_fields()
+
+
+def _sync_summary(report: RunReport) -> dict:
+    """Counts of what a sync run did, for the admin who triggered it."""
+    changes = report.changeset
+    parse = report.parse_report
+    return {
+        "skipped": report.skipped,
+        "inserts": len(changes.inserts) if changes else 0,
+        "updates": len(changes.updates) if changes else 0,
+        "adoptions": len(changes.adoptions) if changes else 0,
+        "soft_deletes": len(changes.soft_deletes) if changes else 0,
+        "ignored": len(changes.ignored) if changes else 0,
+        "skipped_blank_codigo": len(parse.skipped_blank_codigo) if parse else 0,
+        "skipped_duplicate_codigo": len(parse.skipped_duplicate_codigo) if parse else 0,
+    }
+
+
+@router.post("/catalog/sync/run")
+async def run_catalog_sync_now(
+    catalog_repo: CatalogRepository = Depends(_catalog_repo), force: bool = False
+) -> dict:
+    """Sync the catalog from the SharePoint workbook right now, as a fallback
+    when the webhook did not (`openspec/changes/catalog-sharepoint-sync`,
+    Phase 7.6). It runs the same pass a notification does and waits for it,
+    so the response says what changed. An unchanged workbook is a no-op
+    (`skipped`) unless `force=true`. Admin only via the router dependency."""
+    try:
+        report = await run_sync_from_sharepoint(catalog_repo, force=force)
+    except SyncDisabledError:
+        raise HTTPException(
+            status_code=409, detail="La sincronización con SharePoint está desactivada"
+        ) from None
+    except GraphConfigError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"La sincronización con SharePoint no está configurada: {exc}",
+        ) from None
+    except GraphError as exc:
+        # Status and Graph error code only; never the response message.
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "No se pudo leer el archivo de SharePoint "
+                f"(estado {exc.status}, código {exc.code})"
+            ),
+        ) from None
+    except LockTimeoutError:
+        raise HTTPException(
+            status_code=409,
+            detail="Ya hay una sincronización en curso. Intenta de nuevo en un momento",
+        ) from None
+    except MissingSheetError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"El archivo de SharePoint no tiene la hoja esperada: {exc}",
+        ) from None
+    return _sync_summary(report)
 
 
 @router.post("/catalog/export")
