@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import asyncpg
-from sqlalchemy import Boolean, Column, Integer, MetaData, Table, Text, case, func, select
+from sqlalchemy import Boolean, Column, Integer, MetaData, Table, Text, case, func, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
@@ -175,7 +175,13 @@ class CatalogRepository:
                 product_catalog_table.c.slugs
             ).like(func.concat("%", normalized_input, "%"))
 
-            query = query.where(slugs_match)
+            # `codigo` (e.g. BD-00004) is matched case-insensitively and as
+            # typed, so an admin can paste the code from the Excel (OBS-14).
+            codigo_match = product_catalog_table.c.codigo.icontains(
+                search, autoescape=True
+            )
+
+            query = query.where(or_(slugs_match, codigo_match))
 
             # Ranking logic
             # 1. Exact Match

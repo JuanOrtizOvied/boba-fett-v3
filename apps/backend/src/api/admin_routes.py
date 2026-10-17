@@ -24,6 +24,7 @@ from auth.dependencies import require_admin
 from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
+from catalog_sync.config import excel_managed_fields
 from db.catalog_excel import build_catalog_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
 from db.catalog_repository import CatalogRepository
@@ -242,6 +243,15 @@ async def list_catalog_entries(
         include_deleted=include_deleted,
     )
     return entries#[e.model_dump() for e in entries]
+
+
+@router.get("/catalog/excel-managed-fields")
+async def get_excel_managed_fields() -> list[str]:
+    """DB fields that are managed from the SharePoint Excel, so the edit
+    modal can show them read-only for entries with a `codigo`
+    (`openspec/changes/catalog-sharepoint-sync`, EM-06, EM-07). Admin only
+    via the router dependency."""
+    return excel_managed_fields()
 
 
 @router.post("/catalog/export")

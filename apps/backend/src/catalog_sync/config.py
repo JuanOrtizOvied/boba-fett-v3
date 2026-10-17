@@ -103,6 +103,19 @@ FIELD_MAPPING: dict[str, FieldMapping] = {
     },
 }
 
+def excel_managed_fields() -> list[str]:
+    """DB fields that have a column in the Excel, in `FIELD_MAPPING` order,
+    excluding the delete control flag (`is_deleted`). The admin edit modal
+    shows these read-only for entries that have a `codigo`
+    (catalog-excel-managed-fields spec, EM-06); derived from the mapping so a
+    new Excel column protects its field with no frontend change (EM-04)."""
+    return [
+        spec["db_field"]
+        for spec in FIELD_MAPPING.values()
+        if spec["type"] != CONTROL_FIELD_TYPE
+    ]
+
+
 # The delete-flag column is looked up by this header name (never by
 # position) — proposal.md, "Delete column header is `Eliminar`".
 DELETE_FLAG_HEADER = "Eliminar"
