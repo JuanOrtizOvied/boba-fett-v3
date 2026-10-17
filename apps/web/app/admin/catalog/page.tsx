@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
+import { DownloadIcon, EditIcon, TrashIcon, XIcon } from "@/components/icons/Icons";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type {
   AdministratorEntity,
@@ -19,6 +19,11 @@ import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useUrlSearch } from "@/hooks/useUrlSearch";
 import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
+import {
+  CatalogFilters,
+  EMPTY_CATALOG_FILTERS,
+  type CatalogFilterState,
+} from "@/components/admin/catalog/CatalogFilters";
 import CreateCatalogModal from "@/components/admin/catalog/CreateCatalogModal"
 import { AllocationListField } from "@/components/admin/catalog/AllocationListField";
 import {
@@ -82,17 +87,23 @@ function CatalogPageContent() {
   const [isFetching, setIsFetching] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isExporting, setIsExporting] = useState(false);
 
   const isDebouncing =
     searchInput.trim() !== debouncedSearch.trim() &&
     searchInput.trim() !== "";
 
   const loadCatalog = useCallback(
-    async (term: string, signal: AbortSignal) => {
+    async (term: string, activeFilters: CatalogFilterState, signal: AbortSignal) => {
       const params = new URLSearchParams();
       if (term) params.set("search", term);
       params.set("limit", String(CATALOG_PAGE_SIZE));
       params.set("offset", "0");
+      for (const [key, values] of Object.entries(activeFilters)) {
+        for (const value of values) params.append(key, value);
+      }
 
       const res = await fetchWithAuth(
         `/api/admin/catalog/entries?${params}`,
@@ -116,7 +127,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
   abortRef.current = controller;
 
   try {
-    await loadCatalog(debouncedSearch.trim(), controller.signal);
+    await loadCatalog(debouncedSearch.trim(), filters, controller.signal);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       return;
@@ -126,7 +137,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
       throw err;
     }
   }
-}, [loadCatalog, debouncedSearch]);
+}, [loadCatalog, debouncedSearch, filters]);
 
   useEffect(() => {
     const term = debouncedSearch.trim();
@@ -139,7 +150,7 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
     setError(null);
     setIsFetching(true);
 
-    loadCatalog(term, controller.signal)
+    loadCatalog(term, filters, controller.signal)
       .catch((err: unknown) => {
         // Ignore cancellation errors (when the user types again)
         if (err instanceof Error && err.name === "AbortError") return;
@@ -153,7 +164,51 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
 
     // Clean up on unmount
     return () => controller.abort();
-  }, [debouncedSearch, loadCatalog]);
+  }, [debouncedSearch, filters, loadCatalog]);
+
+  // Selection is page-level state (a set of catalog IDs), not per-row —
+  // whenever the visible entries change (search, filters, or a delete),
+  // drop any selected id that's no longer visible so "select all" never
+  // silently exports rows the admin can no longer see
+  // (openspec/changes/catalog-export-and-filters/design.md ADR-7).
+  useEffect(() => {
+    if (!entries) return;
+    const visibleIds = new Set(entries.map((e) => e.id));
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [entries]);
+
+  const handleExport = async () => {
+    if (selectedIds.size === 0) return;
+    setIsExporting(true);
+    try {
+      const res = await fetchWithAuth("/api/admin/catalog/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (!res.ok) {
+        toast("No se pudo exportar el catálogo");
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition");
+      const match = disposition?.match(/filename="(.+)"/);
+      const filename = match?.[1] ?? "catalogo-sabbi.xlsx";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast("No se pudo exportar el catálogo");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleDelete = async (id: number) => {
     const previous = entries ?? [];
@@ -202,6 +257,8 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
         </div>
       </div>
 
+      <CatalogFilters value={filters} onChange={setFilters} />
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {entries === null && !error ? (
@@ -218,7 +275,26 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-30 bg-sabbi-neutral-50 text-xs font-medium tracking-wide text-sabbi-neutral-600 uppercase">
                 <tr>
-                  <th className="sticky top-0 left-0 z-40 bg-sabbi-neutral-50 px-4 py-2 whitespace-nowrap after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200">
+                  <th className="sticky top-0 left-0 z-40 w-10 bg-sabbi-neutral-50 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label="Seleccionar todo"
+                      checked={
+                        entries !== null &&
+                        entries.length > 0 &&
+                        entries.every((e) => selectedIds.has(e.id))
+                      }
+                      onChange={(e) => {
+                        if (!entries) return;
+                        setSelectedIds(
+                          e.target.checked
+                            ? new Set(entries.map((entry) => entry.id))
+                            : new Set(),
+                        );
+                      }}
+                    />
+                  </th>
+                  <th className="sticky top-0 left-10 z-40 bg-sabbi-neutral-50 px-4 py-2 whitespace-nowrap after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200">
                     Nombre
                   </th>
                   {CATALOG_COLUMNS.map((column) => (
@@ -246,7 +322,24 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
                       className={`group transition-colors ${isDeleting ? "animate-row-delete" : `${rowBg} ${hoverBg}`}`}
                     >
                       <td
-                        className={`sticky left-0 z-10 px-4 py-2 font-medium whitespace-nowrap text-sabbi-neutral-900 after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
+                        className={`sticky left-0 z-10 w-10 px-3 py-2 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label={`Seleccionar ${entry.name || "producto"}`}
+                          checked={selectedIds.has(entry.id)}
+                          onChange={() => {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(entry.id)) next.delete(entry.id);
+                              else next.add(entry.id);
+                              return next;
+                            });
+                          }}
+                        />
+                      </td>
+                      <td
+                        className={`sticky left-10 z-10 px-4 py-2 font-medium whitespace-nowrap text-sabbi-neutral-900 after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-sabbi-neutral-200 ${isDeleting ? "" : `${rowBg} ${hoverBg}`}`}
                       >
                         {entry.name || "—"}
                       </td>
@@ -301,15 +394,29 @@ const refetchCatalog = useCallback(async (): Promise<void> => {
           </div>
         )
       )}
-      <div className="mt-4 flex justify-end">
-        <button
-          type="button"
-          onClick={() => setIsCreateModalOpen(true)}
-          className="rounded-lg bg-sabbi-primary px-4 py-2 text-sm font-medium 
-          text-white transition-colors hover:bg-sabbi-primary-hover"
-        >
-          Agregar
-        </button>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-sabbi-neutral-500">
+          {selectedIds.size > 0 ? `${selectedIds.size} seleccionados` : ""}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void handleExport()}
+            disabled={selectedIds.size === 0 || isExporting}
+            className="flex items-center gap-1.5 rounded-lg border border-sabbi-neutral-200 px-4 py-2 text-sm font-medium text-sabbi-neutral-700 transition-colors hover:bg-sabbi-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <DownloadIcon size={16} />
+            {isExporting ? "Exportando…" : "Exportar seleccionados"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="rounded-lg bg-sabbi-primary px-4 py-2 text-sm font-medium
+            text-white transition-colors hover:bg-sabbi-primary-hover"
+          >
+            Agregar
+          </button>
+        </div>
       </div>
 
       <ConfirmDeleteDialog

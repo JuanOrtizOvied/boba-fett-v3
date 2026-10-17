@@ -14,7 +14,8 @@ import asyncio
 import base64
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from agent.search import cascade_search
@@ -23,6 +24,8 @@ from auth.dependencies import require_admin
 from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
+from db.catalog_excel import build_catalog_workbook
+from db.catalog_excel import export_filename as catalog_export_filename
 from db.catalog_repository import CatalogRepository
 from db.ficha_patrimonial import (
     FichaConfirmRequest,
@@ -35,6 +38,7 @@ from db.ficha_patrimonial import (
 )
 from db.models import (
     AdministratorCreate,
+    CatalogExportRequest,
     CatalogProductCreate,
     CatalogProductUpdate,
     ManagerCreate,
@@ -190,15 +194,64 @@ async def list_catalog_entries(
     search: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    currency: list[str] | None = Query(None),
+    administrator: list[str] | None = Query(None),
+    manager: list[str] | None = Query(None),
+    asset_class: list[str] | None = Query(None),
+    geographic_focus: list[str] | None = Query(None),
+    underlying: list[str] | None = Query(None),
 ) -> list[dict]:
-    """List all `product_catalog` entries
-    (`sdd/product-catalog-approval/spec` — "Catalog Listing")."""
+    """List all `product_catalog` entries, optionally narrowed by field
+    filters (`sdd/product-catalog-approval/spec` — "Catalog Listing").
+    Each filter param accepts multiple values via repeated query params
+    (e.g. `?currency=Soles&currency=D%C3%B3lares`); values within one
+    field combine with OR, different fields (and `search`) combine with
+    AND (`openspec/changes/catalog-export-and-filters/design.md` ADR-4,
+    ADR-5, ADR-6)."""
     search_term = search.strip() if search is not None else None
     if search_term == "":
         search_term = None
 
-    entries = await catalog_repo.get_catalog(search_term, limit, offset)
+    entries = await catalog_repo.get_catalog(
+        search_term,
+        limit,
+        offset,
+        currency=currency,
+        administrator=administrator,
+        manager=manager,
+        asset_class=asset_class,
+        geographic_focus=geographic_focus,
+        underlying=underlying,
+    )
     return entries#[e.model_dump() for e in entries]
+
+
+@router.post("/catalog/export")
+async def export_catalog_entries(
+    data: CatalogExportRequest,
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> StreamingResponse:
+    """Export selected `product_catalog` entries to an in-memory .xlsx
+    workbook (`openspec/changes/catalog-export-and-filters` — "Export
+    Selected Catalog Entries to Excel"). Built and streamed entirely in
+    memory — no file is ever written to the server's filesystem."""
+    if not data.ids:
+        raise HTTPException(
+            status_code=400, detail="Selecciona al menos un producto para exportar"
+        )
+
+    entries = await catalog_repo.get_by_ids(data.ids)
+    buffer = build_catalog_workbook(entries)
+    filename = catalog_export_filename()
+    return StreamingResponse(
+        buffer,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 
 @router.post("/catalog/create", status_code=201)
 async def create_catalog_entry(
