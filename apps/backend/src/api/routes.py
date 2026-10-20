@@ -42,8 +42,11 @@ from catalog_sync.scheduler import start_maintenance_task, stop_maintenance_task
 from db.catalog_repository import CatalogRepository
 from db.connection import close_pool, get_pool
 from db.encryption import get_serde
-from db.excel import build_portfolio_workbook, export_filename
 from db.models import ProductCreate, ProductUpdate, SnapshotCreate
+from db.portfolio_template_export import (
+    build_portfolio_template_workbook,
+    template_export_filename,
+)
 from db.repository import ProductRepository
 from db.versioning import (
     SnapshotAccessError,
@@ -163,14 +166,13 @@ async def portfolio_summary(user: dict = Depends(get_current_user)) -> dict:
 
 @app.get("/portfolio/me/export")
 async def export_portfolio(user: dict = Depends(get_current_user)) -> StreamingResponse:
-    """Stream a server-generated .xlsx for the portfolio ("Portafolio Final"
-    summary sheet + one sheet per asset class), built straight from Postgres —
-    no client-side spreadsheet dependency (`portfolio-dashboard.spec.md` →
-    "Exportar portafolio a Excel").
+    """Stream the client .xlsx template with the ACTUAL column pre-filled from
+    the user's portfolio, plus a "Sin clasificar (SABBI)" transparency sheet
+    (`db/portfolio_template_export.py`).
     """
     products = await app.state.repo.list_by_user(user["id"])
-    buffer = build_portfolio_workbook(products)
-    filename = export_filename()
+    buffer = build_portfolio_template_workbook(products)
+    filename = template_export_filename()
     return StreamingResponse(
         buffer,
         media_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
