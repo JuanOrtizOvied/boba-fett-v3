@@ -64,7 +64,7 @@ EXPECTED_TAXONOMY = {
         "label": "Otros",
         "groups": {
             "Cripto": ["Bitcoin", "Ethereum", "Otras"],
-            "Commodities": ["Oro"],
+            "Commodities": ["Oro", "Otros"],
         },
     },
     "cash_y_equivalentes": {

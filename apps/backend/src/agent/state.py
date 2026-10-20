@@ -84,7 +84,7 @@ ASSET_CLASSES: dict[str, dict[str, object]] = {
         "label": "Otros",
         "groups": {
             "Cripto": ["Bitcoin", "Ethereum", "Otras"],
-            "Commodities": ["Oro"],
+            "Commodities": ["Oro", "Otros"],
         },
     },
     "cash_y_equivalentes": {

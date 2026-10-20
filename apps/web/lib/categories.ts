@@ -123,7 +123,7 @@ export const ASSET_CLASS_SUBCATEGORIES: Record<AssetClass, SubcategoryGroup[]> =
   ],
   otros: [
     { group: "Cripto", leaves: ["Bitcoin", "Ethereum", "Otras"] },
-    { group: "Commodities", leaves: ["Oro"] },
+    { group: "Commodities", leaves: ["Oro", "Otros"] },
   ],
   cash_y_equivalentes: [{ group: "Cash", leaves: ["Depósitos a plazo", "Fondos de Money Market"] }],
 };
