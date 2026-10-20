@@ -31,11 +31,13 @@ export const EDITABLE_FIELDS: { key: string; label: string }[] = [
 export const modalInputClass =
   "rounded-lg border border-sabbi-neutral-200 px-2.5 py-1.5 text-sm text-sabbi-neutral-900 outline-none focus:border-sabbi-primary";
 
-export const ModalField: FC<{ label: string; children: ReactNode; required?: boolean }> = ({
-  label,
-  children,
-  required,
-}) => (
+export const ModalField: FC<{
+  label: string;
+  children: ReactNode;
+  required?: boolean;
+  /** Small note under the control, e.g. why a field is read-only. */
+  hint?: string;
+}> = ({ label, children, required, hint }) => (
   // Plain <div>, not <label> — a bare <label> auto-forwards clicks on any
   // non-interactive spot inside it to the first form control it contains,
   // which silently "steals" clicks meant for other rows/buttons once a
@@ -47,8 +49,13 @@ export const ModalField: FC<{ label: string; children: ReactNode; required?: boo
       {required && <span className="text-red-600"> *</span>}
     </span>
     {children}
+    {hint && <p className="text-xs text-sabbi-neutral-500">{hint}</p>}
   </div>
 );
+
+/** Muted look for a control locked because the Excel owns its value. */
+export const modalInputReadOnlyClass =
+  " bg-sabbi-neutral-100 text-sabbi-neutral-500 cursor-not-allowed";
 
 export function allocationSum(rows: AssetAllocation[]): number {
   return rows.reduce((sum, a) => sum + (a.percentage || 0), 0);
@@ -99,6 +106,7 @@ export function ScoredVocabularyField({
   addPlaceholder,
   nameInvalid,
   scoreInvalid,
+  disabled,
 }: {
   entities: { name: string; score: number | null; score_is_fixed?: boolean }[];
   name: string;
@@ -108,10 +116,15 @@ export function ScoredVocabularyField({
   addPlaceholder: string;
   nameInvalid?: boolean;
   scoreInvalid?: boolean;
+  /** Locks the name controls (dropdown and "add new" input). The score
+   * keeps following its own rules: it has no Excel column, so it stays
+   * editable whenever the matched entity doesn't fix it. */
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const matched = entities.find((e) => e.name === name);
   const scoreEditable = !matched || matched.score_is_fixed === false;
+  const lockedClass = disabled ? modalInputReadOnlyClass : "";
   const nameInvalidClass = nameInvalid ? " border-red-400 focus:border-red-500" : "";
   const scoreInvalidClass = scoreInvalid ? " border-red-400 focus:border-red-500" : "";
 
@@ -120,6 +133,7 @@ export function ScoredVocabularyField({
       <div className="flex items-center gap-2">
         <select
           value={name}
+          disabled={disabled}
           onChange={(e) => {
             setDraft("");
             const selectedName = e.target.value;
@@ -127,7 +141,7 @@ export function ScoredVocabularyField({
             const found = entities.find((en) => en.name === selectedName);
             onScoreChange(found && found.score_is_fixed !== false ? found.score : null);
           }}
-          className={modalInputClass + " min-w-0 flex-1" + nameInvalidClass}
+          className={modalInputClass + " min-w-0 flex-1" + nameInvalidClass + lockedClass}
         >
           <option value="">—</option>
           {name && !entities.some((e) => e.name === name) && (
@@ -180,7 +194,8 @@ export function ScoredVocabularyField({
           onNameChange(next);
         }}
         placeholder={addPlaceholder}
-        className={modalInputClass}
+        disabled={disabled}
+        className={modalInputClass + lockedClass}
       />
     </div>
   );
@@ -200,13 +215,16 @@ export function NameListField({
   value,
   onChange,
   addPlaceholder,
+  disabled,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   addPlaceholder: string;
+  /** Read-only: no removing, no adding. */
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState("");
-  const canAdd = draft.trim().length >= 3;
+  const canAdd = !disabled && draft.trim().length >= 3;
 
   const addName = () => {
     const trimmed = draft.trim();
@@ -234,8 +252,9 @@ export function NameListField({
           <button
             type="button"
             aria-label={`Quitar ${name}`}
+            disabled={disabled}
             onClick={() => removeAt(index)}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100 hover:text-red-600"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-sabbi-neutral-500 hover:bg-sabbi-neutral-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <XIcon size={14} />
           </button>
@@ -253,7 +272,8 @@ export function NameListField({
             }
           }}
           placeholder={addPlaceholder}
-          className={modalInputClass + " min-w-0 flex-1"}
+          disabled={disabled}
+          className={modalInputClass + " min-w-0 flex-1" + (disabled ? modalInputReadOnlyClass : "")}
         />
         <button
           type="button"

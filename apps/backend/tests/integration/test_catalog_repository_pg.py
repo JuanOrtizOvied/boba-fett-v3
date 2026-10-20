@@ -194,3 +194,165 @@ async def test_deleted_entry_drops_out_of_cascade_search(test_pool):
 
     results = await repo.search("UniqueSearchableFund")
     assert all(r.id != created.id for r in results)
+
+
+# ---------------------------------------------------------------------------
+# get_catalog — field filters (openspec/changes/catalog-export-and-filters)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_catalog_filters_by_single_scalar_value(test_pool):
+    repo = CatalogRepository(test_pool)
+    soles = await repo.insert_if_not_duplicate(_entry(name="Fondo Soles", currency="Soles"))
+    await repo.insert_if_not_duplicate(_entry(name="Fondo Dolares", currency="Dólares"))
+
+    results = await repo.get_catalog(None, 50, 0, currency=["Soles"])
+
+    ids = [r["id"] for r in results]
+    assert soles.id in ids
+    assert all(r["currency"] == "Soles" for r in results)
+
+
+async def test_get_catalog_filters_are_case_and_whitespace_insensitive(test_pool):
+    """`currency` (and `administrator`/`manager`) are free text with no
+    format enforcement on create, so legacy rows can carry inconsistent
+    casing (e.g. `"dólares"` saved lowercase) while the filter UI only
+    offers the canonically-cased option (`"Dólares"`, from
+    `CURRENCY_OPTIONS`). The filter must still match (confirmed against
+    real data: 2026-09-22)."""
+    repo = CatalogRepository(test_pool)
+    lowercase = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo Minusculas", currency="dólares")
+    )
+    padded = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo Espacios", currency="  Dólares  ")
+    )
+
+    results = await repo.get_catalog(None, 50, 0, currency=["Dólares"])
+
+    ids = {r["id"] for r in results}
+    assert lowercase.id in ids
+    assert padded.id in ids
+
+
+async def test_get_catalog_filters_by_multiple_values_on_same_field_combine_with_or(test_pool):
+    """Values within one field combine with OR — filtering by
+    Soles+Dólares must return entries in either currency, excluding a
+    third currency (design.md ADR-4)."""
+    repo = CatalogRepository(test_pool)
+    soles = await repo.insert_if_not_duplicate(_entry(name="Fondo Soles", currency="Soles"))
+    dolares = await repo.insert_if_not_duplicate(_entry(name="Fondo Dolares", currency="Dólares"))
+    euros = await repo.insert_if_not_duplicate(_entry(name="Fondo Euros", currency="Euros"))
+
+    results = await repo.get_catalog(None, 50, 0, currency=["Soles", "Dólares"])
+
+    ids = {r["id"] for r in results}
+    assert soles.id in ids
+    assert dolares.id in ids
+    assert euros.id not in ids
+
+
+async def test_get_catalog_filters_by_allocation_field_ignores_percentage(test_pool):
+    """An allocation filter matches any entry with a matching element
+    `name`, regardless of its `percentage` or the presence of other
+    elements in the same array (design.md ADR-5)."""
+    repo = CatalogRepository(test_pool)
+    mixed = await repo.insert_if_not_duplicate(
+        _entry(
+            name="Fondo Mixto",
+            asset_class=[
+                {"name": "mercados_publicos", "percentage": 60},
+                {"name": "mercados_privados", "percentage": 40},
+            ],
+        )
+    )
+    unrelated = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo Otro", asset_class=[{"name": "club_deals", "percentage": 100}])
+    )
+
+    results = await repo.get_catalog(None, 50, 0, asset_class=["mercados_publicos"])
+
+    ids = {r["id"] for r in results}
+    assert mixed.id in ids
+    assert unrelated.id not in ids
+
+
+async def test_get_catalog_filters_combine_across_fields_with_and(test_pool):
+    """Different filter fields combine with AND — an entry must match both
+    to be included (design.md ADR-6)."""
+    repo = CatalogRepository(test_pool)
+    match = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo Match", currency="Soles", manager="Gestor XYZ")
+    )
+    wrong_manager = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo Otro Gestor", currency="Soles", manager="Otro Gestor")
+    )
+    wrong_currency = await repo.insert_if_not_duplicate(
+        _entry(name="Fondo Otra Moneda", currency="Dólares", manager="Gestor XYZ")
+    )
+
+    results = await repo.get_catalog(
+        None, 50, 0, currency=["Soles"], manager=["Gestor XYZ"]
+    )
+
+    ids = {r["id"] for r in results}
+    assert match.id in ids
+    assert wrong_manager.id not in ids
+    assert wrong_currency.id not in ids
+
+
+async def test_get_catalog_filters_combine_with_search(test_pool):
+    repo = CatalogRepository(test_pool)
+    match = await repo.insert_if_not_duplicate(
+        _entry(name="Bono Especial", currency="Soles")
+    )
+    await repo.insert_if_not_duplicate(_entry(name="Bono Especial Dos", currency="Dólares"))
+
+    results = await repo.get_catalog("Bono Especial", 50, 0, currency=["Soles"])
+
+    ids = {r["id"] for r in results}
+    assert ids == {match.id}
+
+
+async def test_get_catalog_no_filter_matches_returns_empty_list(test_pool):
+    repo = CatalogRepository(test_pool)
+    await repo.insert_if_not_duplicate(_entry(name="Fondo Cualquiera", currency="Soles"))
+
+    results = await repo.get_catalog(None, 50, 0, currency=["Yenes"])
+
+    assert results == []
+
+
+# ---------------------------------------------------------------------------
+# get_by_ids — selective Excel export
+# ---------------------------------------------------------------------------
+
+
+async def test_get_by_ids_returns_matching_entries_only(test_pool):
+    repo = CatalogRepository(test_pool)
+    first = await repo.insert_if_not_duplicate(_entry(name="Fondo Uno"))
+    second = await repo.insert_if_not_duplicate(_entry(name="Fondo Dos", commission="2%"))
+    await repo.insert_if_not_duplicate(_entry(name="Fondo Tres", commission="3%"))
+
+    results = await repo.get_by_ids([first.id, second.id])
+
+    ids = {e.id for e in results}
+    assert ids == {first.id, second.id}
+
+
+async def test_get_by_ids_ignores_nonexistent_ids(test_pool):
+    repo = CatalogRepository(test_pool)
+    created = await repo.insert_if_not_duplicate(_entry(name="Fondo Existente"))
+
+    results = await repo.get_by_ids([created.id, 999999])
+
+    ids = {e.id for e in results}
+    assert ids == {created.id}
+
+
+async def test_get_by_ids_empty_list_returns_empty_list(test_pool):
+    repo = CatalogRepository(test_pool)
+
+    results = await repo.get_by_ids([])
+
+    assert results == []

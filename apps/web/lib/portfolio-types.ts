@@ -187,6 +187,11 @@ export interface CatalogProduct {
   manager_score: number | null;
   approved_from_product_id: string | null;
   approved_at: string | null;
+  /** Business code used to match the Excel sync (e.g. BD-00001); null until assigned. */
+  codigo: string | null;
+  cash_flows: string;
+  /** Soft delete flag. Deleted entries are only returned with `include_deleted=true`. */
+  is_deleted: boolean;
 }
 
 /** Mirrors `db.models.Administrator` — one row from `GET /admin/administrators`. */

@@ -14,7 +14,8 @@ import asyncio
 import base64
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from agent.search import cascade_search
@@ -23,6 +24,14 @@ from auth.dependencies import require_admin
 from auth.models import UserCreate
 from auth.passwords import hash_password
 from auth.repository import UserRepository
+from catalog_sync.config import excel_managed_fields
+from catalog_sync.graph import GraphConfigError, GraphError
+from catalog_sync.lock import LockTimeoutError
+from catalog_sync.parser import MissingSheetError
+from catalog_sync.service import RunReport, SyncDisabledError, run_sync_from_sharepoint
+from db.catalog_excel import build_catalog_workbook, build_sync_workbook
+from db.catalog_excel import export_filename as catalog_export_filename
+from db.catalog_excel import export_filename_for_sync as catalog_sync_export_filename
 from db.catalog_repository import CatalogRepository
 from db.ficha_patrimonial import (
     FichaConfirmRequest,
@@ -35,6 +44,7 @@ from db.ficha_patrimonial import (
 )
 from db.models import (
     AdministratorCreate,
+    CatalogExportRequest,
     CatalogProductCreate,
     CatalogProductUpdate,
     ManagerCreate,
@@ -64,6 +74,19 @@ def _catalog_repo(request: Request) -> CatalogRepository:
 
 def _versioning_repo(request: Request) -> VersioningRepository:
     return request.app.state.versioning_repo
+
+
+async def _duplicate_detail(catalog_repo: CatalogRepository, data: CatalogProductCreate) -> str:
+    """409 message for a duplicate catalog entry. When the match is a
+    soft-deleted entry, tell the admin it can be restored instead of
+    recreated (`openspec/changes/catalog-sharepoint-sync`, SD-12)."""
+    deleted_id = await catalog_repo.find_deleted_duplicate(data)
+    if deleted_id is not None:
+        return (
+            "A matching catalog entry already exists but is deleted "
+            f"(id {deleted_id}). Restore it instead of creating a new one."
+        )
+    return "A matching catalog entry already exists"
 
 
 def _strip_password_hash(row: dict) -> dict:
@@ -190,15 +213,152 @@ async def list_catalog_entries(
     search: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    currency: list[str] | None = Query(None),
+    administrator: list[str] | None = Query(None),
+    manager: list[str] | None = Query(None),
+    asset_class: list[str] | None = Query(None),
+    geographic_focus: list[str] | None = Query(None),
+    underlying: list[str] | None = Query(None),
+    include_deleted: bool = False,
 ) -> list[dict]:
-    """List all `product_catalog` entries
-    (`sdd/product-catalog-approval/spec` — "Catalog Listing")."""
+    """List all `product_catalog` entries, optionally narrowed by field
+    filters (`sdd/product-catalog-approval/spec` — "Catalog Listing").
+    Each filter param accepts multiple values via repeated query params
+    (e.g. `?currency=Soles&currency=D%C3%B3lares`); values within one
+    field combine with OR, different fields (and `search`) combine with
+    AND (`openspec/changes/catalog-export-and-filters/design.md` ADR-4,
+    ADR-5, ADR-6). Soft-deleted entries are hidden unless
+    `include_deleted=true`, in which case every item carries its
+    `is_deleted` flag (`openspec/changes/catalog-sharepoint-sync`, SD-05,
+    SD-08)."""
     search_term = search.strip() if search is not None else None
     if search_term == "":
         search_term = None
 
-    entries = await catalog_repo.get_catalog(search_term, limit, offset)
+    entries = await catalog_repo.get_catalog(
+        search_term,
+        limit,
+        offset,
+        currency=currency,
+        administrator=administrator,
+        manager=manager,
+        asset_class=asset_class,
+        geographic_focus=geographic_focus,
+        underlying=underlying,
+        include_deleted=include_deleted,
+    )
     return entries  # [e.model_dump() for e in entries]
+
+
+@router.get("/catalog/excel-managed-fields")
+async def get_excel_managed_fields() -> list[str]:
+    """DB fields that are managed from the SharePoint Excel, so the edit
+    modal can show them read-only for entries with a `codigo`
+    (`openspec/changes/catalog-sharepoint-sync`, EM-06, EM-07). Admin only
+    via the router dependency."""
+    return excel_managed_fields()
+
+
+def _sync_summary(report: RunReport) -> dict:
+    """Counts of what a sync run did, for the admin who triggered it."""
+    changes = report.changeset
+    parse = report.parse_report
+    return {
+        "skipped": report.skipped,
+        "inserts": len(changes.inserts) if changes else 0,
+        "updates": len(changes.updates) if changes else 0,
+        "adoptions": len(changes.adoptions) if changes else 0,
+        "soft_deletes": len(changes.soft_deletes) if changes else 0,
+        "ignored": len(changes.ignored) if changes else 0,
+        "skipped_blank_codigo": len(parse.skipped_blank_codigo) if parse else 0,
+        "skipped_duplicate_codigo": len(parse.skipped_duplicate_codigo) if parse else 0,
+    }
+
+
+@router.post("/catalog/sync/run")
+async def run_catalog_sync_now(
+    catalog_repo: CatalogRepository = Depends(_catalog_repo), force: bool = False
+) -> dict:
+    """Sync the catalog from the SharePoint workbook right now, as a fallback
+    when the webhook did not (`openspec/changes/catalog-sharepoint-sync`,
+    Phase 7.6). It runs the same pass a notification does and waits for it,
+    so the response says what changed. An unchanged workbook is a no-op
+    (`skipped`) unless `force=true`. Admin only via the router dependency."""
+    try:
+        report = await run_sync_from_sharepoint(catalog_repo, force=force)
+    except SyncDisabledError:
+        raise HTTPException(
+            status_code=409, detail="La sincronización con SharePoint está desactivada"
+        ) from None
+    except GraphConfigError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"La sincronización con SharePoint no está configurada: {exc}",
+        ) from None
+    except GraphError as exc:
+        # Status and Graph error code only; never the response message.
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"No se pudo leer el archivo de SharePoint (estado {exc.status}, código {exc.code})"
+            ),
+        ) from None
+    except LockTimeoutError:
+        raise HTTPException(
+            status_code=409,
+            detail="Ya hay una sincronización en curso. Intenta de nuevo en un momento",
+        ) from None
+    except MissingSheetError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"El archivo de SharePoint no tiene la hoja esperada: {exc}",
+        ) from None
+    return _sync_summary(report)
+
+
+@router.post("/catalog/export")
+async def export_catalog_entries(
+    data: CatalogExportRequest,
+    catalog_repo: CatalogRepository = Depends(_catalog_repo),
+) -> StreamingResponse:
+    """Export selected `product_catalog` entries to an in-memory .xlsx
+    workbook (`openspec/changes/catalog-export-and-filters` — "Export
+    Selected Catalog Entries to Excel"). Built and streamed entirely in
+    memory — no file is ever written to the server's filesystem."""
+    if not data.ids:
+        raise HTTPException(status_code=400, detail="Selecciona al menos un producto para exportar")
+
+    entries = await catalog_repo.get_by_ids(data.ids)
+
+    if data.format == "sync":
+        # The layout the SharePoint sync reads (Phase 8.2). Entries without a
+        # `codigo` have no place in it: they are left out and counted in a
+        # header so the UI can tell the admin.
+        workbook = build_sync_workbook(entries)
+        if workbook.included == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Ninguno de los productos seleccionados tiene código, "
+                    "así que no hay nada que exportar en este formato"
+                ),
+            )
+        return StreamingResponse(
+            workbook.buffer,
+            media_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            headers={
+                "Content-Disposition": (f'attachment; filename="{catalog_sync_export_filename()}"'),
+                "X-Skipped-Without-Codigo": str(len(workbook.skipped_without_codigo)),
+            },
+        )
+
+    buffer = build_catalog_workbook(entries)
+    filename = catalog_export_filename()
+    return StreamingResponse(
+        buffer,
+        media_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/catalog/create", status_code=201)
@@ -213,7 +373,7 @@ async def create_catalog_entry(
     """
     entry = await catalog_repo.insert_if_not_duplicate(data)
     if entry is None:
-        raise HTTPException(status_code=409, detail="A matching catalog entry already exists")
+        raise HTTPException(status_code=409, detail=await _duplicate_detail(catalog_repo, data))
 
     return entry.model_dump()
 
@@ -241,7 +401,7 @@ async def approve_to_catalog(
 
     entry = await catalog_repo.insert_if_not_duplicate(data)
     if entry is None:
-        raise HTTPException(status_code=409, detail="A matching catalog entry already exists")
+        raise HTTPException(status_code=409, detail=await _duplicate_detail(catalog_repo, data))
     return entry.model_dump()
 
 
@@ -262,11 +422,30 @@ async def delete_catalog_entry(
     catalog_id: int, catalog_repo: CatalogRepository = Depends(_catalog_repo)
 ) -> None:
     """Delete a catalog entry (`sdd/product-catalog-approval/spec` —
-    "Catalog Entry Deletion"). Catalog entries are not inline-editable —
-    deletion is the only supported mutation after approval."""
+    "Catalog Entry Deletion"). This is a soft delete: the entry is marked
+    `is_deleted = true`, hidden from default reads and kept in the database
+    (`openspec/changes/catalog-sharepoint-sync`, SD-01..SD-04). Deleting an
+    already-deleted entry succeeds; an unknown id is 404."""
     deleted = await catalog_repo.delete(catalog_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Catalog entry {catalog_id} not found")
+
+
+@router.post("/catalog/entries/{catalog_id}/restore")
+async def restore_catalog_entry(
+    catalog_id: int, catalog_repo: CatalogRepository = Depends(_catalog_repo)
+) -> dict:
+    """Restore a soft-deleted catalog entry (`is_deleted = false`). Returns
+    404 when the id does not exist or the entry is not deleted. This is the
+    only way to reactivate a deleted entry: the Excel sync never does
+    (`openspec/changes/catalog-sharepoint-sync`, SD-09..SD-11)."""
+    entry = await catalog_repo.restore(catalog_id)
+    if entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Catalog entry {catalog_id} not found or not deleted",
+        )
+    return entry.model_dump()
 
 
 @router.get("/administrators")

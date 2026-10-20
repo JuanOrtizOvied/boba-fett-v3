@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 
 import asyncpg
-from sqlalchemy import Column, Integer, MetaData, Table, Text, case, func, select
+from sqlalchemy import Boolean, Column, Integer, MetaData, Table, Text, case, func, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import text
 
+from catalog_sync.normalize import currency_variant_keys, normalize_currency
 from db.models import (
     Administrator,
     AssetAllocation,
@@ -28,6 +29,75 @@ def _slugs_expr(name_expr: str, alternative_names_expr: str) -> str:
         f"FROM unnest(array_prepend({name_expr}, {alternative_names_expr})) AS v "
         "WHERE v IS NOT NULL AND btrim(v) <> '')"
     )
+
+
+def _pg_text_array_literal(values: list[str]) -> str:
+    """Safely-escaped `ARRAY[...]::text[]` literal for embedding directly
+    into a compiled SQL string. `get_catalog` compiles with
+    `literal_binds=True` and executes the resulting string via
+    `conn.fetch`, with no separate bind params — this fragment isn't
+    covered by SQLAlchemy's own literal rendering because it targets a
+    Postgres-specific function (`jsonb_array_elements`) SQLAlchemy Core
+    doesn't model, so escaping is done by hand here."""
+    quoted = ", ".join("'" + v.replace("'", "''") + "'" for v in values)
+    return f"ARRAY[{quoted}]::text[]"
+
+
+def _allocation_filter_clause(column_expr: str, values: list[str]):
+    """`EXISTS` clause matching an entry with at least one allocation
+    element (`asset_class`/`geographic_focus`/`underlying`, each a JSONB
+    array of `{name, percentage}`) whose `name` is in `values` — "any
+    element's name is in the selected set", not exact array equality
+    (design.md ADR-5). Case/whitespace-insensitive, same reasoning as
+    `_ci_in_clause` below."""
+    normalized = [v.strip().lower() for v in values]
+    array_literal = _pg_text_array_literal(normalized)
+    return text(
+        f"EXISTS (SELECT 1 FROM jsonb_array_elements({column_expr}) AS elem "
+        f"WHERE LOWER(TRIM(elem->>'name')) = ANY({array_literal}))"
+    )
+
+
+def _ci_in_clause(column, values: list[str]):
+    """Case/whitespace-insensitive `IN` match for scalar filter fields
+    (`administrator`, `manager`; `currency` has its own
+    `_currency_in_clause`). Mirrors the `LOWER(TRIM(name))`
+    normalization `insert_if_not_duplicate` and
+    `create_administrator`/`create_manager` already use elsewhere in this
+    file. Needed because these are free-text fields with no format
+    enforcement on create — `CatalogProductCreate` doesn't validate
+    `currency` against `CURRENCY_OPTIONS`, only `CatalogProductUpdate`
+    does — so legacy rows can carry inconsistent casing (e.g. `"dólares"`
+    vs `"Dólares"`) that would otherwise silently fail to match a
+    canonically-cased filter option (confirmed against real data:
+    2026-09-22)."""
+    normalized = [v.strip().lower() for v in values]
+    return func.lower(func.trim(column)).in_(normalized)
+
+
+def _canonical_currency(value: str | None) -> str | None:
+    """Official spelling for a stored currency ("dólares", "USD" -> "Dólares";
+    "PEN", "Nuevos soles" -> "Soles"), applied only when a row is read: the
+    database keeps whatever was stored. An unrecognized value is returned
+    unchanged so Observaciones can still flag it."""
+    if not value:
+        return value
+    return normalize_currency(value)
+
+
+def _currency_in_clause(column, values: list[str]):
+    """Currency filter that matches every spelling of the selected official
+    values (`Dólares` also matches "dolares" and "USD"; `Soles` also matches
+    "PEN" and "Nuevos soles"), so the filter agrees with what
+    `_canonical_currency` shows. Compared as lower + unaccent + collapsed
+    whitespace, the same key the Python side builds. Uses the POSIX
+    `[[:space:]]` class (no backslash) because this statement is compiled
+    with `literal_binds`."""
+    variants = sorted(set().union(*(currency_variant_keys(v) for v in values)))
+    normalized_column = func.regexp_replace(
+        func.normalize_catalog_text(func.trim(column)), "[[:space:]]+", " ", "g"
+    )
+    return normalized_column.in_(variants)
 
 
 # Define the table object for SQLAlchemy Core expressions
@@ -52,6 +122,9 @@ product_catalog_table = Table(
     Column("approved_at", Text()),
     Column("alternative_names", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("slugs", postgresql.ARRAY(Text), server_default=text("'{}'::text[]")),
+    Column("is_deleted", Boolean, nullable=False, server_default=text("false")),
+    Column("codigo", Text),
+    Column("cash_flows", Text, nullable=False, server_default=""),
 )
 
 
@@ -59,8 +132,23 @@ class CatalogRepository:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
 
-    async def get_catalog(self, search: str | None, limit: int, offset: int) -> list[dict]:
-        """Fetches the product catalog with optional search and pagination.
+    async def get_catalog(
+        self,
+        search: str | None,
+        limit: int,
+        offset: int,
+        *,
+        currency: list[str] | None = None,
+        administrator: list[str] | None = None,
+        manager: list[str] | None = None,
+        asset_class: list[str] | None = None,
+        geographic_focus: list[str] | None = None,
+        underlying: list[str] | None = None,
+        include_deleted: bool = False,
+    ) -> list[dict]:
+        """Fetches the product catalog with optional search, field filters,
+        and pagination (`openspec/changes/catalog-export-and-filters` —
+        "Catalog Listing").
 
         Uses SQLAlchemy Core for expression construction. Matches against
         `slugs` — the server-computed, already-normalized (lower + unaccent)
@@ -73,9 +161,37 @@ class CatalogRepository:
         `catalog_slugs_text(slugs)` expression — `array_to_string` itself is
         STABLE, not IMMUTABLE, so it can't be indexed directly (42P17);
         `catalog_slugs_text` is a thin SQL wrapper declared IMMUTABLE.
+
+        Every filter kwarg accepts multiple values: values within one field
+        combine with OR (`IN (...)` for scalar fields, `= ANY(...)` against
+        each JSONB element's `name` for allocation fields), while different
+        filter fields — and `search` — combine with AND (design.md ADR-4,
+        ADR-5, ADR-6 in that change).
         """
         # Base selection
         query = select(product_catalog_table)
+
+        # Soft delete: hidden by default, `include_deleted=True` returns
+        # active and deleted entries together (each row carries `is_deleted`).
+        if not include_deleted:
+            query = query.where(product_catalog_table.c.is_deleted.is_(False))
+
+        if currency:
+            query = query.where(_currency_in_clause(product_catalog_table.c.currency, currency))
+        if administrator:
+            query = query.where(_ci_in_clause(product_catalog_table.c.administrator, administrator))
+        if manager:
+            query = query.where(_ci_in_clause(product_catalog_table.c.manager, manager))
+        if asset_class:
+            query = query.where(
+                _allocation_filter_clause("product_catalog.asset_class", asset_class)
+            )
+        if geographic_focus:
+            query = query.where(
+                _allocation_filter_clause("product_catalog.geographic_focus", geographic_focus)
+            )
+        if underlying:
+            query = query.where(_allocation_filter_clause("product_catalog.underlying", underlying))
 
         if search:
             # Normalize the search input
@@ -87,7 +203,11 @@ class CatalogRepository:
                 func.concat("%", normalized_input, "%")
             )
 
-            query = query.where(slugs_match)
+            # `codigo` (e.g. BD-00004) is matched case-insensitively and as
+            # typed, so an admin can paste the code from the Excel (OBS-14).
+            codigo_match = product_catalog_table.c.codigo.icontains(search, autoescape=True)
+
+            query = query.where(or_(slugs_match, codigo_match))
 
             # Ranking logic
             # 1. Exact Match
@@ -128,13 +248,30 @@ class CatalogRepository:
             elif raw is None:
                 d[field] = []
         d["alternative_names"] = list(d.get("alternative_names") or [])
+        d["currency"] = _canonical_currency(d.get("currency"))
         approved_at = d.get("approved_at")
         if approved_at is not None and not isinstance(approved_at, str):
             d["approved_at"] = approved_at.isoformat()
         return d
 
     async def list_all(self) -> list[CatalogProduct]:
-        rows = await self.pool.fetch("SELECT * FROM product_catalog ORDER BY id")
+        rows = await self.pool.fetch(
+            "SELECT * FROM product_catalog WHERE is_deleted = false ORDER BY id"
+        )
+        return [self._row_to_catalog_product(r) for r in rows]
+
+    async def get_by_ids(self, ids: list[int]) -> list[CatalogProduct]:
+        """Fetch catalog entries by id, for selective Excel export
+        (`openspec/changes/catalog-export-and-filters` — "Export Selected
+        Catalog Entries to Excel"). No pagination — admins select a bounded
+        set of rows client-side before exporting."""
+        if not ids:
+            return []
+        rows = await self.pool.fetch(
+            "SELECT * FROM product_catalog "
+            "WHERE id = ANY($1::int[]) AND is_deleted = false ORDER BY id",
+            ids,
+        )
         return [self._row_to_catalog_product(r) for r in rows]
 
     async def insert_if_not_duplicate(self, data: CatalogProductCreate) -> CatalogProduct | None:
@@ -286,10 +423,174 @@ class CatalogRepository:
         return self._row_to_catalog_product(row) if row else None
 
     async def delete(self, catalog_id: int) -> bool:
+        """Soft delete: marks the entry `is_deleted = true` and keeps the row
+        (`openspec/changes/catalog-sharepoint-sync`, SD-01..SD-04). Returns
+        `True` when the entry exists (deleting an already-deleted entry is a
+        no-op success) and `False` when the id is unknown."""
         row = await self.pool.fetchrow(
-            "DELETE FROM product_catalog WHERE id = $1 RETURNING id", catalog_id
+            "UPDATE product_catalog SET is_deleted = true WHERE id = $1 RETURNING id",
+            catalog_id,
         )
         return row is not None
+
+        # Original hard delete, intentionally kept commented out (not removed)
+        # in case a separate hard-delete route is needed later. Catalog rows
+        # must never be physically deleted by the soft-delete flow.
+        # row = await self.pool.fetchrow(
+        #     "DELETE FROM product_catalog WHERE id = $1 RETURNING id", catalog_id
+        # )
+        # return row is not None
+
+    async def restore(self, catalog_id: int) -> CatalogProduct | None:
+        """Reactivate a soft-deleted entry (SD-09, SD-10). Returns `None` when
+        the id does not exist or the entry is not deleted. This is the only
+        way to un-delete: the Excel sync never does it."""
+        row = await self.pool.fetchrow(
+            "UPDATE product_catalog SET is_deleted = false "
+            "WHERE id = $1 AND is_deleted = true RETURNING *",
+            catalog_id,
+        )
+        return self._row_to_catalog_product(row) if row else None
+
+    async def find_deleted_duplicate(self, data: CatalogProductCreate) -> int | None:
+        """Id of a soft-deleted entry that matches `data` on the duplicate
+        identity key (normalized name + asset_class), or `None` (SD-12).
+        Lets the routes tell the admin to restore it instead of recreating."""
+        asset_class_json = json.dumps([a.model_dump() for a in data.asset_class])
+        row = await self.pool.fetchrow(
+            """
+            SELECT id FROM product_catalog
+            WHERE is_deleted = true
+              AND LOWER(TRIM(name)) = LOWER(TRIM($1))
+              AND asset_class = $2::jsonb
+            LIMIT 1
+            """,
+            data.name,
+            asset_class_json,
+        )
+        return row["id"] if row else None
+
+    # -- SharePoint Excel sync (catalog_sync) --------------------------
+    #
+    # Dedicated write paths for `catalog_sync.diff.diff_catalog`'s
+    # `ChangeSet` (`openspec/changes/catalog-sharepoint-sync`, design.md
+    # ADR-4). All four accept an optional `conn` so `apply.py` (Phase 4.3)
+    # can run a whole `ChangeSet` inside one transaction; without one, each
+    # call manages its own. None of these go through
+    # `CatalogProductCreate`/`CatalogProductUpdate` validation — the sync
+    # must be able to save values the web forms would reject (unrecognized
+    # names, allocations not summing to 100).
+
+    @staticmethod
+    def _prepare_sync_fields(fields: dict[str, object]) -> dict[str, object]:
+        """JSON-serialize composite (`list[AssetAllocation]`) values in a
+        `catalog_sync` change's `fields` dict; every other value (already
+        plain text from `catalog_sync.normalize`) passes through as-is."""
+        prepared = dict(fields)
+        for key in ("asset_class", "geographic_focus", "underlying"):
+            if key in prepared:
+                prepared[key] = json.dumps(
+                    [a.model_dump() if isinstance(a, AssetAllocation) else a for a in prepared[key]]
+                )
+        return prepared
+
+    async def list_for_sync(
+        self, *, conn: asyncpg.Connection | None = None
+    ) -> list[CatalogProduct]:
+        """Every catalog row, including soft-deleted ones — the diff
+        engine's `existing_rows` (SYNC-10: a row absent from the Excel is
+        never touched, but the diff engine must still see it to know that)."""
+        executor = conn if conn is not None else self.pool
+        rows = await executor.fetch("SELECT * FROM product_catalog ORDER BY id")
+        # Raw currency on purpose: the diff must compare what is stored, so a
+        # legacy "dólares" is rewritten to "Dólares" when the Excel has the row.
+        return [self._row_to_catalog_product(r, canonical_currency=False) for r in rows]
+
+    async def sync_insert(
+        self,
+        codigo: str,
+        fields: dict[str, object],
+        *,
+        conn: asyncpg.Connection | None = None,
+    ) -> CatalogProduct:
+        """Insert a new entry from the Excel sync (SYNC-01). `fields` holds
+        only the mapped columns the parsed row had a non-blank value for
+        (`catalog_sync.diff.InsertChange.fields`); everything else keeps its
+        column default. `codigo` is always set — the sync never inserts a
+        row without one."""
+        executor = conn if conn is not None else self.pool
+        prepared = self._prepare_sync_fields(fields)
+
+        values: list[object] = [codigo]
+        placeholders: dict[str, str] = {"codigo": "$1"}
+        for key, value in prepared.items():
+            values.append(value)
+            placeholders[key] = f"${len(values)}"
+
+        columns = ["codigo", *prepared.keys()]
+        value_placeholders = [placeholders[c] for c in columns]
+        name_expr = placeholders.get("name", "''")
+        slugs_expr = _slugs_expr(name_expr, "'{}'::text[]")
+
+        query = (
+            f"INSERT INTO product_catalog ({', '.join(columns)}, slugs) "
+            f"VALUES ({', '.join(value_placeholders)}, {slugs_expr}) "
+            "RETURNING *"
+        )
+        row = await executor.fetchrow(query, *values)
+        return self._row_to_catalog_product(row)
+
+    async def sync_update(
+        self,
+        catalog_id: int,
+        fields: dict[str, object],
+        *,
+        conn: asyncpg.Connection | None = None,
+    ) -> CatalogProduct | None:
+        """Apply a diff/adopt change's fields to an existing entry (SYNC-02,
+        SYNC-11). `slugs` is recomputed when `name` is present, same as
+        `update()`; the sync never sends `alternative_names`. Never touches
+        `is_deleted` — that is `sync_soft_delete`'s job alone. Returns
+        `None` only if `catalog_id` doesn't exist."""
+        executor = conn if conn is not None else self.pool
+        if not fields:
+            row = await executor.fetchrow("SELECT * FROM product_catalog WHERE id = $1", catalog_id)
+            return self._row_to_catalog_product(row) if row else None
+
+        prepared = self._prepare_sync_fields(fields)
+
+        values: list[object] = [catalog_id]
+        placeholders: dict[str, str] = {}
+        set_parts: list[str] = []
+        for key, value in prepared.items():
+            values.append(value)
+            placeholders[key] = f"${len(values)}"
+            set_parts.append(f"{key} = {placeholders[key]}")
+
+        if "name" in prepared:
+            alt_expr = "COALESCE(alternative_names, '{}'::text[])"
+            set_parts.append(f"slugs = {_slugs_expr(placeholders['name'], alt_expr)}")
+
+        set_clause = ", ".join(set_parts)
+        row = await executor.fetchrow(
+            f"UPDATE product_catalog SET {set_clause} WHERE id = $1 RETURNING *",
+            *values,
+        )
+        return self._row_to_catalog_product(row) if row else None
+
+    async def sync_soft_delete(
+        self, catalog_id: int, *, conn: asyncpg.Connection | None = None
+    ) -> CatalogProduct | None:
+        """Soft-delete an entry as part of the Excel sync (SYNC-07). Only
+        ever sets `is_deleted = true` — the sync never restores
+        (design.md ADR-3/ADR-4); `restore()` (admin UI only) is the sole
+        way back."""
+        executor = conn if conn is not None else self.pool
+        row = await executor.fetchrow(
+            "UPDATE product_catalog SET is_deleted = true WHERE id = $1 RETURNING *",
+            catalog_id,
+        )
+        return self._row_to_catalog_product(row) if row else None
 
     async def list_administrators(self) -> list[Administrator]:
         rows = await self.pool.fetch(
@@ -352,7 +653,8 @@ class CatalogRepository:
                     ), 0)
                 ) AS sim
             FROM product_catalog pc
-            WHERE
+            WHERE pc.is_deleted = false
+              AND (
                 similarity(name, $1) > 0.1
                 OR name ILIKE '%' || $1 || '%'
                 OR asset_class::text ILIKE '%' || $1 || '%'
@@ -361,6 +663,7 @@ class CatalogRepository:
                     WHERE similarity(alt, $1) > 0.1
                        OR alt ILIKE '%' || $1 || '%'
                 )
+              )
             ORDER BY sim DESC
             LIMIT $2
             """,
@@ -375,8 +678,13 @@ class CatalogRepository:
             raw = json.loads(raw)
         return [AssetAllocation(**a) for a in (raw or [])]
 
-    def _row_to_catalog_product(self, row: asyncpg.Record) -> CatalogProduct:
+    def _row_to_catalog_product(
+        self, row: asyncpg.Record, *, canonical_currency: bool = True
+    ) -> CatalogProduct:
         raw = row["underlying"]
+        currency = row["currency"] or ""
+        if canonical_currency:
+            currency = _canonical_currency(currency) or ""
         if isinstance(raw, str):
             raw = json.loads(raw)
         return CatalogProduct(
@@ -386,7 +694,7 @@ class CatalogRepository:
             asset_class=self._parse_json_allocations(row["asset_class"]),
             underlying=[AssetAllocation(**a) for a in (raw or [])],
             commission=row["commission"] or "",
-            currency=row["currency"] or "",
+            currency=currency,
             administrator=row["administrator"] or "",
             manager=row["manager"] or "",
             liquidity=row["liquidity"] or "",
@@ -401,4 +709,7 @@ class CatalogRepository:
             approved_at=(
                 row["approved_at"].isoformat() if row["approved_at"] is not None else None
             ),
+            codigo=row["codigo"],
+            cash_flows=row["cash_flows"] or "",
+            is_deleted=row["is_deleted"],
         )

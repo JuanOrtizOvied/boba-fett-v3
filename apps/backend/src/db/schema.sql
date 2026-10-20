@@ -156,7 +156,10 @@ CREATE TABLE IF NOT EXISTS product_catalog (
     liquidity TEXT DEFAULT '',
     return_rate TEXT DEFAULT '',
     isin TEXT DEFAULT '',
-    distribution TEXT DEFAULT ''
+    distribution TEXT DEFAULT '',
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    codigo VARCHAR(50),
+    cash_flows TEXT NOT NULL DEFAULT ''
 );
 
 -- Migration: product_catalog asset_class TEXT -> JSONB array
@@ -242,6 +245,23 @@ ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS administrator_score INTEGER
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS manager_score INTEGER;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS isin TEXT DEFAULT '';
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS distribution TEXT DEFAULT '';
+-- Soft delete + Excel sync fields. Mirrors
+-- migrations/versions/a7c3e91d5b24_add_soft_delete_codigo_cash_flows.py.
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS codigo VARCHAR(50);
+-- Mirrors migrations/versions/9c4e7a2b5d16_widen_product_catalog_codigo.py: a database
+-- created with the old VARCHAR(20) column is widened in place (keeps data and the index).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='product_catalog' AND column_name='codigo'
+      AND character_maximum_length < 50
+  ) THEN
+    ALTER TABLE product_catalog ALTER COLUMN codigo TYPE VARCHAR(50);
+  END IF;
+END $$;
+ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS cash_flows TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_product_catalog_codigo ON product_catalog (codigo);
 
 INSERT INTO administrator (name, score, score_is_fixed) VALUES
     ('ACRES Sociedad Titulizadora S.A', 5, true),
@@ -593,3 +613,20 @@ END $$;
 ALTER TABLE portfolio_changes DROP CONSTRAINT IF EXISTS changes_source_check;
 ALTER TABLE portfolio_changes ADD CONSTRAINT changes_source_check
     CHECK (source IN ('agent', 'api', 'admin', 'admin_ficha_import'));
+
+-- SharePoint catalog sync: tracks the Microsoft Graph webhook subscription
+-- and the last successfully processed file hash (idempotency). Mirrors
+-- migrations/versions/881f4c8ef19f_add_webhook_subscriptions.py.
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+    id SERIAL PRIMARY KEY,
+    subscription_id VARCHAR(255) NOT NULL UNIQUE,
+    client_state VARCHAR(255) NOT NULL,
+    expiration TIMESTAMPTZ NOT NULL,
+    drive_item_id VARCHAR(255) NOT NULL,
+    last_processed_hash VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_subs_expiration
+    ON webhook_subscriptions (expiration);

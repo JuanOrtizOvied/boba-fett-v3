@@ -15,6 +15,7 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
+    String,
     Table,
     Text,
     text,
@@ -91,12 +92,18 @@ product_catalog = Table(
     Column("manager", Text, server_default=""),
     Column("liquidity", Text, server_default=""),
     Column("return_rate", Text, server_default=""),
+    Column("isin", Text, nullable=False, server_default=""),
+    Column("distribution", Text, nullable=False, server_default=""),
     Column("approved_from_product_id", Text),
     Column("approved_at", DateTime(timezone=True)),
     Column("alternative_names", ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("slugs", ARRAY(Text), server_default=text("'{}'::text[]")),
     Column("administrator_score", Integer),
     Column("manager_score", Integer),
+    Column("is_deleted", Boolean, nullable=False, server_default=text("false")),
+    Column("codigo", String(50)),
+    Column("cash_flows", Text, nullable=False, server_default=""),
+    Index("uq_product_catalog_codigo", "codigo", unique=True),
 )
 
 # Reference entities behind the catalog edit modal's Administrador/Gestor
@@ -120,6 +127,23 @@ manager = Table(
     Column("name", Text, unique=True, nullable=False),
     Column("score", Integer),
     Column("created_at", DateTime(timezone=True), server_default=text("now()")),
+)
+
+# SharePoint catalog sync: one row per active Graph webhook subscription.
+# `last_processed_hash` is the SHA-256 of the last successfully applied
+# file content, for idempotent reprocessing (design.md ADR-8).
+webhook_subscriptions = Table(
+    "webhook_subscriptions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("subscription_id", String(255), unique=True, nullable=False),
+    Column("client_state", String(255), nullable=False),
+    Column("expiration", DateTime(timezone=True), nullable=False),
+    Column("drive_item_id", String(255), nullable=False),
+    Column("last_processed_hash", String(64)),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Index("idx_webhook_subs_expiration", "expiration"),
 )
 
 portfolio_snapshots = Table(

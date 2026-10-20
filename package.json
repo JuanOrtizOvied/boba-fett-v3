@@ -23,7 +23,7 @@
       "ruff format"
     ],
     "apps/web/**/*.{ts,tsx}": [
-      "eslint --fix"
+      "bash -c 'cd apps/web && eslint --fix \"$@\"' --"
     ]
   },
   "devDependencies": {
