@@ -8,6 +8,7 @@ Fee, commission, flow and return values are FRACTIONS as in the source Excel
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 import asyncpg
@@ -62,6 +63,16 @@ class CatalogProductRow(BaseModel):
     currency: str = ""
     investment_horizon: str = ""
     series: list[CatalogProductSeries] = Field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class NormalizedSnapshot:
+    """Every row of the three tables, flat (series and administrators are not
+    nested), for the SharePoint sync to compare against the workbook."""
+
+    products: list[CatalogProductRow]
+    series: list[CatalogProductSeries]
+    admins: list[CatalogProductSeriesAdmin]
 
 
 _PRODUCT_COLS = (
@@ -226,6 +237,22 @@ class NormalizedCatalogRepository:
                 f"SELECT {_PRODUCT_COLS} FROM catalog_product ORDER BY code"
             )
         return [_product_from_record(r) for r in rows]
+
+    async def list_for_sync(self) -> NormalizedSnapshot:
+        """All products, series and administrators in three plain queries."""
+        products = await self.list_products()
+        series_rows = await self._pool.fetch(
+            "SELECT * FROM catalog_product_series ORDER BY product_code, series"
+        )
+        admin_rows = await self._pool.fetch(
+            "SELECT * FROM catalog_product_series_admin "
+            "ORDER BY product_code, series, administrator"
+        )
+        return NormalizedSnapshot(
+            products=products,
+            series=[_series_from_record(r) for r in series_rows],
+            admins=[_admin_from_record(r) for r in admin_rows],
+        )
 
     async def get_product_detail(self, code: str) -> CatalogProductRow | None:
         """Product with nested series and, under each series, its administrators."""
