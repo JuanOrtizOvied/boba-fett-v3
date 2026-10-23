@@ -681,3 +681,15 @@ CREATE TABLE IF NOT EXISTS catalog_product_series_admin (
         REFERENCES catalog_product_series(product_code, series) ON DELETE CASCADE,
     UNIQUE (product_code, administrator, series)
 );
+
+-- ---------------------------------------------------------------------------
+-- Normalized catalog SharePoint sync: hash of the last workbook applied, so an
+-- unchanged file is skipped. One row only (id is always 1). Separate from
+-- webhook_subscriptions.last_processed_hash, which tracks the file of the
+-- legacy `product_catalog` sync.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS normalized_sync_state (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    last_processed_hash VARCHAR(64),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
