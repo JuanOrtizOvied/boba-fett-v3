@@ -38,6 +38,9 @@ from api.chat_routes import router as chat_router
 from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
+from catalog_normalized_sync.scheduler import (
+    start_maintenance_task as start_normalized_maintenance_task,
+)
 from catalog_sync.scheduler import start_maintenance_task, stop_maintenance_task
 from db.catalog_normalized import NormalizedCatalogRepository
 from db.catalog_repository import CatalogRepository
@@ -100,12 +103,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # SharePoint catalog sync upkeep; None (and no Graph call) unless
     # SHAREPOINT_SYNC_ENABLED is true.
     maintenance_task = start_maintenance_task(app.state.catalog_repo)
+    # Same for the normalized catalog, behind SHAREPOINT_NORMALIZED_SYNC_ENABLED.
+    normalized_maintenance_task = start_normalized_maintenance_task(pool)
     try:
         async with AsyncExitStack() as stack:
             await _init_chat_graph(app, stack)
             yield
     finally:
         await stop_maintenance_task(maintenance_task)
+        await stop_maintenance_task(normalized_maintenance_task)
 
     await close_pool()
 
