@@ -83,9 +83,17 @@ are NEVER guessed.
   against test DB). TDD: RED (AttributeError) → GREEN. Integration PG: 12/12 passed
   (`test_catalog_normalized_pg.py`, incl. 4 new `search_for_enrichment` cases) against a dedicated
   alembic-migrated test DB.
-- [ ] **T-2 — V2 cascade + ficha wiring (backend).** Option models + `SearchResult` fields;
-  `_search_catalog_v2` + `cascade_search_v2` (product-only L2/L3 merge); wire `_enrich_ficha_row`.
-  RED→GREEN unit tests. Assert `cascade_search` (V1) unchanged.
+- [x] **T-2 — V2 cascade + ficha wiring (backend).** DONE. Route: INLINE (full context loaded,
+  surgical edits, live TDD loop) — writer-trigger (4 files) noted; chose inline deliberately.
+  Added `CatalogSeriesOption`/`CatalogSeriesAdminOption` + `SearchResult.catalog_product_code` /
+  `series_options` (`db/models.py`); `PRODUCT_FIELD_NAMES`, `fields=` param on `_merge_fields`,
+  `_is_product_complete`, `_series_options`, `_search_catalog_v2`, `cascade_search_v2`
+  (`agent/search.py`); `_enrich_ficha_row` now calls `cascade_search_v2` (`api/admin_routes.py`);
+  updated `test_ficha_patrimonial_routes.py` monkeypatch target. `cascade_search` (V1/chat) and
+  `agent/tools.py` UNCHANGED. TDD: RED (missing symbols) → GREEN, `test_search_v2.py` 4/4 incl. a
+  regression guard that V1 `cascade_search` STILL fills commercial fields. Full backend suite:
+  452 passed, 13 pre-existing env failures (all `amount` field-encryption in untouched
+  product/audit/versioning tests — verified identical on base+T-1 via stash), 0 new.
 - [ ] **T-3 — Series/admin picker (frontend).** TS types + ReviewTable picker filling commercial
   fields from the selected series/admin; liquidity blank. RED→GREEN vitest.
 - [ ] **T-4 — Final verification.** Full backend + web suites; confirm 0 new failures vs. base;
@@ -110,7 +118,7 @@ are NEVER guessed.
   `alembic upgrade head` first (correct schema), then the conftest's idempotent `schema.sql` apply
   skips the `DO` migration block. Dedicated DB `boba_fett_ficha_test` (TEMPLATE template0), creds
   from user-provided DSN. Run: `TEST_DATABASE_URL='postgresql://admin:pass@localhost:5432/boba_fett_ficha_test' .venv/bin/python -m pytest tests/integration/...`.
-- **T-1:** integration PG 12/12 passed (4 new `search_for_enrichment` cases). Commit: (below).
+- **T-1:** integration PG 12/12 passed (4 new `search_for_enrichment` cases). Commit `26812f5`.
 
 ## Next step
 

@@ -128,7 +128,7 @@ def test_unknown_client_email_still_succeeds(app_client, build_ficha_workbook, m
     async def fake_cascade_search(name, pool):
         return SearchResult(name=name)
 
-    monkeypatch.setattr(admin_routes, "cascade_search", fake_cascade_search)
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade_search)
 
     workbook_bytes = build_ficha_workbook(
         [{"name": "Fondo A", "amount": 1000}], client_email="ghost@example.com"
@@ -163,7 +163,7 @@ def test_valid_ficha_returns_enriched_rows(app_client, build_ficha_workbook, mon
             primary_source="catalog",
         )
 
-    monkeypatch.setattr(admin_routes, "cascade_search", fake_cascade_search)
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade_search)
 
     workbook_bytes = build_ficha_workbook(
         [
@@ -210,7 +210,7 @@ def test_enrichment_bounded_by_semaphore_of_three(
             in_flight -= 1
         return SearchResult(name=name)
 
-    monkeypatch.setattr(admin_routes, "cascade_search", fake_cascade_search)
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade_search)
 
     products = [
         {"name": f"Fondo {i}", "amount": 1000 + i} for i in range(8)
@@ -238,7 +238,7 @@ def test_per_row_enrichment_failure_is_isolated(
             raise RuntimeError("boom")
         return SearchResult(name=f"{name} - OK")
 
-    monkeypatch.setattr(admin_routes, "cascade_search", flaky_cascade_search)
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", flaky_cascade_search)
 
     workbook_bytes = build_ficha_workbook(
         [

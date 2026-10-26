@@ -23,8 +23,15 @@ from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
 from agent.state import ASSET_CLASSES
+from db.catalog_normalized import NormalizedCatalogRepository
 from db.catalog_repository import CatalogRepository
-from db.models import AssetAllocation, FieldSource, SearchResult
+from db.models import (
+    AssetAllocation,
+    CatalogSeriesAdminOption,
+    CatalogSeriesOption,
+    FieldSource,
+    SearchResult,
+)
 
 # String fields the cascade searches/returns at every level (field parity
 # — `cascading-search.spec.md`, "Search Field Parity").
@@ -38,6 +45,17 @@ FIELD_NAMES = (
     "manager",
     "liquidity",
     "return_rate",
+)
+
+# Ficha-patrimonial V2 enrichment fills ONLY product-level string fields from
+# L1/L2/L3. The commercial fields (commission, administrator, liquidity,
+# return_rate) are never auto-guessed — the admin picks a series/administrator
+# in the review table, which supplies them. (List fields asset_class /
+# geographic_focus / underlying are product-level and merged separately.)
+PRODUCT_FIELD_NAMES = (
+    "name",
+    "currency",
+    "manager",
 )
 
 # Rank of trust for each source, lowest = most trusted. `primary_source`
@@ -105,13 +123,23 @@ class ExtractedProduct(BaseModel):
     underlying: list[_ExtractedAllocation] = Field(default_factory=list)
 
 
-def _merge_fields(result: SearchResult, new_data: dict, source: FieldSource) -> SearchResult:
+def _merge_fields(
+    result: SearchResult,
+    new_data: dict,
+    source: FieldSource,
+    fields: tuple[str, ...] = FIELD_NAMES,
+) -> SearchResult:
     """Fill only the fields `result` doesn't already have, tagging each
     newly-filled field's provenance with `source`. Never overwrites a field
     that already has a value — this is what keeps catalog (L1) data
-    authoritative regardless of what L2/L3 return."""
+    authoritative regardless of what L2/L3 return.
+
+    `fields` restricts which string fields may be filled; the ficha V2 cascade
+    passes `PRODUCT_FIELD_NAMES` so commercial fields are never auto-filled.
+    The list fields (underlying/geographic_focus/asset_class) are always
+    product-level and merged regardless."""
     filled_any = False
-    for field in FIELD_NAMES:
+    for field in fields:
         current = getattr(result, field)
         new_value = (new_data.get(field) or "").strip()
         if not current and new_value:
@@ -145,6 +173,17 @@ def _merge_fields(result: SearchResult, new_data: dict, source: FieldSource) -> 
 def _is_complete(result: SearchResult) -> bool:
     return (
         all(getattr(result, field) for field in FIELD_NAMES)
+        and bool(result.underlying)
+        and bool(result.geographic_focus)
+        and bool(result.asset_class)
+    )
+
+
+def _is_product_complete(result: SearchResult) -> bool:
+    """Completeness for the ficha V2 cascade — only the product-level fields
+    (commercial fields come from the admin's pick, so they never gate L2/L3)."""
+    return (
+        all(getattr(result, field) for field in PRODUCT_FIELD_NAMES)
         and bool(result.underlying)
         and bool(result.geographic_focus)
         and bool(result.asset_class)
@@ -335,6 +374,91 @@ async def cascade_search(query: str, pool: asyncpg.Pool) -> SearchResult | None:
         tavily_data = await _search_tavily(query)
         if tavily_data:
             _merge_fields(result, tavily_data, "web_search")
+
+    _sanitize_taxonomy(result)
+    _classify(result)
+
+    if not _has_any_data(result):
+        return None
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Ficha-patrimonial V2 enrichment — normalized catalog (catalog_product*).
+# Separate from the chat `cascade_search` above (which stays on the flat V1
+# catalog): the only difference is L1 and that L2/L3 may fill PRODUCT fields
+# only. Commercial fields come from the admin's series/admin pick, never a
+# guess (`odd/tasks/ficha-patrimonial-v2.md`).
+# ---------------------------------------------------------------------------
+
+
+def _series_options(product) -> list[CatalogSeriesOption]:
+    """Map the normalized product's nested series/admins into the lightweight
+    option models the review-table picker consumes."""
+    return [
+        CatalogSeriesOption(
+            series=s.series,
+            management_fee_ter=s.management_fee_ter,
+            flows_min=s.flows_min,
+            flows_max=s.flows_max,
+            return_min=s.return_min,
+            return_max=s.return_max,
+            administrators=[
+                CatalogSeriesAdminOption(
+                    administrator=a.administrator,
+                    custody_fee=a.custody_fee,
+                    buy_commission=a.buy_commission,
+                    sell_commission=a.sell_commission,
+                    billing_currency=a.billing_currency,
+                    minimum_usd=a.minimum_usd,
+                    min_commission_usd=a.min_commission_usd,
+                )
+                for a in s.administrators
+            ],
+        )
+        for s in product.series
+    ]
+
+
+async def _search_catalog_v2(query: str, pool: asyncpg.Pool) -> SearchResult:
+    """L1 for ficha V2 — best fuzzy match in the normalized catalog. Fills
+    only product-level fields (plus asset_class/geographic_focus/underlying)
+    and attaches `series_options`; commercial fields stay empty for the admin
+    to resolve by picking a series/administrator."""
+    repo = NormalizedCatalogRepository(pool)
+    match = await repo.search_for_enrichment(query)
+    result = SearchResult()
+    if match is None:
+        return result
+    result.catalog_product_code = match.code
+    result.series_options = _series_options(match)
+    product_data = {
+        "name": match.name,
+        "currency": match.currency,
+        "manager": match.manager,
+        "asset_class": match.asset_class,
+        "geographic_focus": match.geographic_focus,
+        "underlying": match.underlying,
+    }
+    return _merge_fields(result, product_data, "catalog", fields=PRODUCT_FIELD_NAMES)
+
+
+async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | None:
+    """Ficha-patrimonial enrichment cascade on the V2 normalized catalog.
+    L1 = normalized catalog; L2/L3 fill PRODUCT-level gaps only. Returns None
+    only if all levels find nothing."""
+    result = await _search_catalog_v2(query, pool)
+
+    if not _is_product_complete(result):
+        claude_data = await _extract_from_claude(query)
+        if claude_data:
+            _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
+
+    if not _is_product_complete(result):
+        tavily_data = await _search_tavily(query)
+        if tavily_data:
+            _merge_fields(result, tavily_data, "web_search", fields=PRODUCT_FIELD_NAMES)
 
     _sanitize_taxonomy(result)
     _classify(result)

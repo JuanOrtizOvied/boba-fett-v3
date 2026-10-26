@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
-from agent.search import cascade_search
+from agent.search import cascade_search_v2
 from api.chat_routes import _graph_config, _serialize_message, _state_messages
 from auth.dependencies import require_admin
 from auth.models import UserCreate
@@ -566,7 +566,7 @@ async def _enrich_ficha_row(
     amount/currency win; enriched fields fill gaps")."""
     async with semaphore:
         try:
-            result = await cascade_search(row.raw_name, pool)
+            result = await cascade_search_v2(row.raw_name, pool)
         except Exception:
             result = None
             failed = True

@@ -385,6 +385,35 @@ class ManagerCreate(BaseModel):
 FieldSource = Literal["catalog", "claude_knowledge", "web_search"]
 
 
+class CatalogSeriesAdminOption(BaseModel):
+    """One administrator option under a series, offered to the admin in the
+    ficha-patrimonial V2 review table. Mirrors
+    `db.catalog_normalized.CatalogProductSeriesAdmin` but lives here to keep
+    `SearchResult` free of a circular import (fractions, as in the catalog)."""
+
+    administrator: str
+    custody_fee: float | None = None
+    buy_commission: float | None = None
+    sell_commission: float | None = None
+    billing_currency: str = ""
+    minimum_usd: float | None = None
+    min_commission_usd: float | None = None
+
+
+class CatalogSeriesOption(BaseModel):
+    """One series option (with its administrators) offered to the admin in the
+    ficha-patrimonial V2 review table. The admin picks a series + administrator;
+    the commercial fields are NEVER auto-guessed."""
+
+    series: str
+    management_fee_ter: float | None = None
+    flows_min: float | None = None
+    flows_max: float | None = None
+    return_min: float | None = None
+    return_max: float | None = None
+    administrators: list[CatalogSeriesAdminOption] = Field(default_factory=list)
+
+
 class SearchResult(BaseModel):
     """Unified result of a cascading L1 (catalog) -> L2 (Claude knowledge) ->
     L3 (Tavily web search) product search, with per-field provenance."""
@@ -400,5 +429,10 @@ class SearchResult(BaseModel):
     return_rate: str = ""
     underlying: list[AssetAllocation] = Field(default_factory=list)
     catalog_product_id: int | None = None
+    # Ficha-patrimonial V2 enrichment only: the matched normalized-catalog
+    # product `code` and the series/admin options the reviewer picks from.
+    # Left empty by the flat-catalog (chat) cascade.
+    catalog_product_code: str = ""
+    series_options: list[CatalogSeriesOption] = Field(default_factory=list)
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)
