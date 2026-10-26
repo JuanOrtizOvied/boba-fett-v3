@@ -94,6 +94,35 @@ export interface EnrichedProposedProduct extends ProposedProduct {
 }
 
 /**
+ * Mirrors `db.models.CatalogSeriesAdminOption` — one administrator option
+ * under a series in the ficha V2 review-table picker. Fee/commission values
+ * are FRACTIONS (0.0384 = 3.84%), as in the catalog.
+ */
+export interface CatalogSeriesAdminOption {
+  administrator: string;
+  custody_fee: number | null;
+  buy_commission: number | null;
+  sell_commission: number | null;
+  billing_currency: string;
+  minimum_usd: number | null;
+  min_commission_usd: number | null;
+}
+
+/**
+ * Mirrors `db.models.CatalogSeriesOption` — one series option (with its
+ * administrators) the admin picks from in the ficha V2 review table.
+ */
+export interface CatalogSeriesOption {
+  series: string;
+  management_fee_ter: number | null;
+  flows_min: number | null;
+  flows_max: number | null;
+  return_min: number | null;
+  return_max: number | null;
+  administrators: CatalogSeriesAdminOption[];
+}
+
+/**
  * Mirrors `db.models.SearchResult` — the unified result of the cascading
  * L1 (catalog) -> L2 (Claude knowledge) -> L3 (Tavily web search) product
  * search, as embedded in `FichaEnrichedRow.enriched`.
@@ -110,6 +139,10 @@ export interface SearchResult {
   return_rate: string;
   underlying: AssetAllocation[];
   catalog_product_id: number | null;
+  /** Ficha V2 enrichment only — matched normalized-catalog product code and
+   * the series/admin options the reviewer picks from. Absent for chat/V1. */
+  catalog_product_code?: string;
+  series_options?: CatalogSeriesOption[];
   primary_source: FieldSource;
   provenance: ProvenanceMap;
 }

@@ -6,7 +6,11 @@
  * `ReviewTable`.
  */
 
-import type { AssetAllocation, FichaEnrichedRow } from "@/lib/portfolio-types";
+import type {
+  AssetAllocation,
+  CatalogSeriesOption,
+  FichaEnrichedRow,
+} from "@/lib/portfolio-types";
 
 export type FichaAssetClassKey =
   | "inmobiliario_directo"
@@ -104,6 +108,11 @@ export interface EditableFichaRow {
   returnRateMax: string;
   source: RowSource;
   enriched: FichaEnrichedRow["enriched"];
+  // Ficha V2: series/admin options for this row (empty when the product was
+  // not matched in the normalized catalog) and the admin's current pick.
+  seriesOptions: CatalogSeriesOption[];
+  selectedSeries: string;
+  selectedAdministrator: string;
 }
 
 export function resolveRowSource(row: FichaEnrichedRow): RowSource {
@@ -148,6 +157,50 @@ export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
     returnRateMax: "",
     source: resolveRowSource(row),
     enriched: row.enriched,
+    seriesOptions: row.enriched?.series_options ?? [],
+    selectedSeries: "",
+    selectedAdministrator: "",
+  };
+}
+
+/**
+ * Formats a catalog fraction (0.0384) as a percent string ("3.84%"), trimming
+ * trailing zeros. Returns "" for null/undefined (an unknown value, not 0%).
+ */
+export function formatFractionAsPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  const pct = value * 100;
+  // Round to 4 decimals to avoid float noise (0.0384 * 100 = 3.8400000000000003).
+  const rounded = Math.round(pct * 10000) / 10000;
+  return `${rounded}%`;
+}
+
+/**
+ * Computes the editable-row patch when the admin picks a series/administrator
+ * in the V2 review table. The series supplies the commission
+ * (`management_fee_ter`) and the return range; the administrator supplies its
+ * name. Commercial fields are only set from an actual pick — never guessed.
+ * An unknown series yields just the selection (no field changes).
+ */
+export function applySeriesAdminSelection(
+  row: EditableFichaRow,
+  series: string,
+  administrator: string,
+): Partial<EditableFichaRow> {
+  const seriesOption = row.seriesOptions.find((s) => s.series === series);
+  if (!seriesOption) {
+    return { selectedSeries: series, selectedAdministrator: administrator };
+  }
+  const adminOption = seriesOption.administrators.find(
+    (a) => a.administrator === administrator,
+  );
+  return {
+    selectedSeries: series,
+    selectedAdministrator: adminOption ? administrator : "",
+    commission: formatFractionAsPercent(seriesOption.management_fee_ter),
+    returnRateMin: formatFractionAsPercent(seriesOption.return_min),
+    returnRateMax: formatFractionAsPercent(seriesOption.return_max),
+    administrator: adminOption ? adminOption.administrator : "",
   };
 }
 

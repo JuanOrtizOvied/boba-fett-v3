@@ -51,6 +51,79 @@ const UNMAPPED_ROW: FichaEnrichedRow = {
   enrichment_failed: true,
 };
 
+const V2_ROW: FichaEnrichedRow = {
+  excel_row: 10,
+  raw_name: "Latam Credit",
+  raw_tipo_activo: "Fondos mutuos",
+  raw_amount: 8000,
+  raw_currency: "USD",
+  raw_return_rate: "",
+  raw_pertenencia: "Titular",
+  mapped_asset_class: "Mercados Privados",
+  normalized_return_rate: "",
+  enriched: {
+    name: "Latam Credit Opportunities Fund",
+    asset_class: [{ name: "Mercados Privados", percentage: 100 }],
+    geographic_focus: [],
+    commission: "",
+    currency: "USD",
+    administrator: "",
+    manager: "Acme Manager",
+    liquidity: "",
+    return_rate: "",
+    underlying: [],
+    catalog_product_id: null,
+    catalog_product_code: "BD-00001",
+    series_options: [
+      {
+        series: "A",
+        management_fee_ter: 0.0384,
+        flows_min: null,
+        flows_max: null,
+        return_min: 0.05,
+        return_max: 0.08,
+        administrators: [
+          {
+            administrator: "Admin Co",
+            custody_fee: 0.001,
+            buy_commission: null,
+            sell_commission: null,
+            billing_currency: "USD",
+            minimum_usd: null,
+            min_commission_usd: null,
+          },
+        ],
+      },
+    ],
+    primary_source: "catalog",
+    provenance: {},
+  },
+  enrichment_failed: false,
+};
+
+describe("ReviewTable V2 series/admin picker", () => {
+  test("picking a series fills commission and return range; picking an admin fills its name", async () => {
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    // Commercial fields start blank — nothing is guessed.
+    const seriesSelect = screen.getByRole("combobox", { name: "Serie" });
+    const adminSelect = screen.getByRole("combobox", { name: "Administrador del catálogo" });
+    expect(adminSelect).toBeDisabled();
+
+    await user.selectOptions(seriesSelect, "A");
+
+    expect(screen.getByDisplayValue("3.84%")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("5%")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("8%")).toBeInTheDocument();
+    expect(adminSelect).toBeEnabled();
+
+    await user.selectOptions(adminSelect, "Admin Co");
+    // The free-text Administrador field is filled from the pick.
+    expect(screen.getByRole("textbox", { name: "Administrador" })).toHaveValue("Admin Co");
+  });
+});
+
 describe("ReviewTable rendering", () => {
   test("renders one card per parsed product with editable fields", () => {
     render(

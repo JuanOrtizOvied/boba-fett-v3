@@ -5,6 +5,7 @@ import { extractErrorDetail } from "./fichaUploadShared";
 import {
   ASSET_CLASS_LABELS,
   SOURCE_BADGES,
+  applySeriesAdminSelection,
   buildConfirmProducts,
   hasUnmappedRow,
   resolveRowSource,
@@ -166,6 +167,51 @@ function ProductCard({
       <div className="grid grid-cols-2 gap-x-6 gap-y-4">
         {/* Left column: simple fields */}
         <div className="flex flex-col gap-3">
+          {row.seriesOptions.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 rounded-lg bg-sabbi-neutral-50 p-2">
+              <Field label="Serie (catálogo)">
+                <select
+                  value={row.selectedSeries}
+                  aria-label="Serie"
+                  onChange={(e) =>
+                    onUpdate(applySeriesAdminSelection(row, e.target.value, ""))
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Seleccionar…</option>
+                  {row.seriesOptions.map((s) => (
+                    <option key={s.series} value={s.series}>
+                      {s.series}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Administrador (catálogo)">
+                <select
+                  value={row.selectedAdministrator}
+                  aria-label="Administrador del catálogo"
+                  disabled={!row.selectedSeries}
+                  onChange={(e) =>
+                    onUpdate(
+                      applySeriesAdminSelection(row, row.selectedSeries, e.target.value),
+                    )
+                  }
+                  className={inputClass + (!row.selectedSeries ? " opacity-60" : "")}
+                >
+                  <option value="">Seleccionar…</option>
+                  {(
+                    row.seriesOptions.find((s) => s.series === row.selectedSeries)
+                      ?.administrators ?? []
+                  ).map((a) => (
+                    <option key={a.administrator} value={a.administrator}>
+                      {a.administrator}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          )}
+
           <Field label="Clase de activo">
             <select
               value={row.assetClass}
@@ -208,6 +254,7 @@ function ProductCard({
           <Field label="Administrador">
             <input
               value={row.administrator}
+              aria-label="Administrador"
               onChange={(e) => onUpdate({ administrator: e.target.value })}
               className={inputClass}
             />

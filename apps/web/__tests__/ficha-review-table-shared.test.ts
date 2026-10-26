@@ -1,11 +1,55 @@
 import { describe, expect, test } from "vitest";
 import {
+  applySeriesAdminSelection,
   buildConfirmProducts,
+  formatFractionAsPercent,
   hasUnmappedRow,
   resolveRowSource,
   toEditableRow,
 } from "@/components/admin/ficha-patrimonial/reviewTableShared";
 import type { FichaEnrichedRow } from "@/lib/portfolio-types";
+
+/** A V2-enriched row: product-level fields filled, commercial fields blank,
+ * series/admin options attached for the review-table picker. */
+function v2Enriched(): NonNullable<FichaEnrichedRow["enriched"]> {
+  return {
+    name: "Latam Credit Opportunities Fund",
+    asset_class: [{ name: "Mercados Privados", percentage: 100 }],
+    geographic_focus: [],
+    commission: "",
+    currency: "USD",
+    administrator: "",
+    manager: "Acme Manager",
+    liquidity: "",
+    return_rate: "",
+    underlying: [],
+    catalog_product_id: null,
+    catalog_product_code: "BD-00001",
+    series_options: [
+      {
+        series: "A",
+        management_fee_ter: 0.0384,
+        flows_min: null,
+        flows_max: null,
+        return_min: 0.05,
+        return_max: 0.08,
+        administrators: [
+          {
+            administrator: "Admin Co",
+            custody_fee: 0.001,
+            buy_commission: null,
+            sell_commission: null,
+            billing_currency: "USD",
+            minimum_usd: null,
+            min_commission_usd: null,
+          },
+        ],
+      },
+    ],
+    primary_source: "catalog",
+    provenance: {},
+  };
+}
 
 function baseRow(overrides: Partial<FichaEnrichedRow> = {}): FichaEnrichedRow {
   return {
@@ -130,6 +174,68 @@ describe("toEditableRow", () => {
     expect(editable.geographicFocus).toEqual([]);
     expect(editable.underlying).toEqual([]);
     expect(editable.source).toBe("not_found");
+  });
+});
+
+describe("formatFractionAsPercent", () => {
+  test("formats a catalog fraction as a percent, trimming trailing zeros", () => {
+    expect(formatFractionAsPercent(0.0384)).toBe("3.84%");
+    expect(formatFractionAsPercent(0.05)).toBe("5%");
+    expect(formatFractionAsPercent(0)).toBe("0%");
+  });
+
+  test("returns an empty string for null/undefined", () => {
+    expect(formatFractionAsPercent(null)).toBe("");
+    expect(formatFractionAsPercent(undefined)).toBe("");
+  });
+});
+
+describe("toEditableRow with V2 series options", () => {
+  test("carries series options, starts unselected, commercial fields blank", () => {
+    const editable = toEditableRow(
+      baseRow({ normalized_return_rate: "", enriched: v2Enriched() }),
+    );
+    expect(editable.name).toBe("Latam Credit Opportunities Fund");
+    expect(editable.seriesOptions.map((s) => s.series)).toEqual(["A"]);
+    expect(editable.selectedSeries).toBe("");
+    expect(editable.selectedAdministrator).toBe("");
+    // Commercial fields are not auto-filled — the admin picks a series/admin.
+    expect(editable.commission).toBe("");
+    expect(editable.administrator).toBe("");
+    expect(editable.returnRateMin).toBe("");
+  });
+
+  test("defaults seriesOptions to an empty array when enrichment has none", () => {
+    const editable = toEditableRow(baseRow({ enriched: null }));
+    expect(editable.seriesOptions).toEqual([]);
+  });
+});
+
+describe("applySeriesAdminSelection", () => {
+  test("selecting a series fills commission and return range; admin blank until picked", () => {
+    const row = toEditableRow(baseRow({ normalized_return_rate: "", enriched: v2Enriched() }));
+    const patch = applySeriesAdminSelection(row, "A", "");
+    expect(patch.selectedSeries).toBe("A");
+    expect(patch.commission).toBe("3.84%");
+    expect(patch.returnRateMin).toBe("5%");
+    expect(patch.returnRateMax).toBe("8%");
+    expect(patch.administrator).toBe("");
+    expect(patch.selectedAdministrator).toBe("");
+  });
+
+  test("selecting an administrator fills its name", () => {
+    const row = toEditableRow(baseRow({ normalized_return_rate: "", enriched: v2Enriched() }));
+    const patch = applySeriesAdminSelection(row, "A", "Admin Co");
+    expect(patch.selectedAdministrator).toBe("Admin Co");
+    expect(patch.administrator).toBe("Admin Co");
+  });
+
+  test("an unknown series yields only the selection, no commercial field changes", () => {
+    const row = toEditableRow(baseRow({ normalized_return_rate: "", enriched: v2Enriched() }));
+    const patch = applySeriesAdminSelection(row, "ZZ", "");
+    expect(patch.selectedSeries).toBe("ZZ");
+    expect(patch.commission).toBeUndefined();
+    expect(patch.returnRateMin).toBeUndefined();
   });
 });
 

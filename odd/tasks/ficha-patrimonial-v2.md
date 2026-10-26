@@ -94,10 +94,22 @@ are NEVER guessed.
   regression guard that V1 `cascade_search` STILL fills commercial fields. Full backend suite:
   452 passed, 13 pre-existing env failures (all `amount` field-encryption in untouched
   product/audit/versioning tests — verified identical on base+T-1 via stash), 0 new.
-- [ ] **T-3 — Series/admin picker (frontend).** TS types + ReviewTable picker filling commercial
-  fields from the selected series/admin; liquidity blank. RED→GREEN vitest.
-- [ ] **T-4 — Final verification.** Full backend + web suites; confirm 0 new failures vs. base;
-  confirm chat path untouched.
+- [x] **T-3 — Series/admin picker (frontend).** DONE. Route: INLINE (harness: no subagents unless
+  asked). TS types `CatalogSeriesOption`/`CatalogSeriesAdminOption` + optional
+  `SearchResult.catalog_product_code`/`series_options` (`portfolio-types.ts`); `EditableFichaRow`
+  gains `seriesOptions`/`selectedSeries`/`selectedAdministrator`; pure helpers
+  `formatFractionAsPercent` and `applySeriesAdminSelection` (fills commission from
+  `management_fee_ter`, return range from series, administrator from pick; unknown series =
+  selection only) in `reviewTableShared.ts`; Serie + Administrador selects in `ProductCard`
+  (`ReviewTable.tsx`), admin select disabled until a series is picked; `aria-label` added to the
+  free-text Administrador input. `liquidity` left blank (no V2 field). TDD: RED->GREEN. Ficha
+  review-table tests 23/23 (7 new shared + 1 new component picker test).
+- [x] **T-4 — Final verification.** DONE. Backend full suite 452 passed / 13 pre-existing env
+  failures (`amount` field-encryption, verified identical on base via stash) / 0 new. Web full
+  suite 87 passed / 8 failed — the 8 are EXACTLY the 4 pre-existing stale files
+  (admin-portfolio-approval, bulk-accept-bar, ficha-patrimonial-page, propose-product-card),
+  verified identical (same 8) on base+T1+T2 via stash; my 8 new tests pass, 0 new failures.
+  Chat path (`cascade_search`, `agent/tools.py`) confirmed untouched.
 
 ## Acceptance criteria / checks
 
@@ -119,7 +131,13 @@ are NEVER guessed.
   skips the `DO` migration block. Dedicated DB `boba_fett_ficha_test` (TEMPLATE template0), creds
   from user-provided DSN. Run: `TEST_DATABASE_URL='postgresql://admin:pass@localhost:5432/boba_fett_ficha_test' .venv/bin/python -m pytest tests/integration/...`.
 - **T-1:** integration PG 12/12 passed (4 new `search_for_enrichment` cases). Commit `26812f5`.
+- **T-2:** `test_search_v2.py` 4/4; full backend suite 452 passed / 13 pre-existing env failures /
+  0 new. Commit `aa888f7`.
+- **T-3/T-4:** ficha review-table tests 23/23; web suite 87 passed / 8 pre-existing failures / 0
+  new; backend 452 passed / 0 new. Commit below.
 
 ## Next step
 
-Start T-1.
+Feature complete (T-1..T-4 done, all on branch `feat/ficha-patrimonial-v2`). Push / PR are the
+user's call under ordinary repo policy. Open follow-up (separate, pre-existing on `main`): the 4
+stale web test files and the `schema.sql` fresh-apply `products.geographic_focus` default-cast bug.
