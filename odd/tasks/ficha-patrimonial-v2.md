@@ -134,7 +134,7 @@ are NEVER guessed.
 - **T-2:** `test_search_v2.py` 4/4; full backend suite 452 passed / 13 pre-existing env failures /
   0 new. Commit `aa888f7`.
 - **T-3/T-4:** ficha review-table tests 23/23; web suite 87 passed / 8 pre-existing failures / 0
-  new; backend 452 passed / 0 new. Commit below.
+  new; backend 452 passed / 0 new. Commit `146ab4e`.
 
 ## Next step
 
