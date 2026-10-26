@@ -251,6 +251,29 @@ class NormalizedCatalogRepository:
         product.series = list(by_series.values())
         return product
 
+    async def search_for_enrichment(self, query: str) -> CatalogProductRow | None:
+        """Best fuzzy name match for ficha-patrimonial V2 enrichment, with its
+        series and administrators nested. Mirrors the flat catalog's pg_trgm
+        approach (`CatalogRepository.search`): a `similarity(name, $1) > 0.1`
+        hit or a case-insensitive substring match, best similarity first.
+        Returns None when `query` is blank or nothing matches."""
+        if not query or not query.strip():
+            return None
+        row = await self._pool.fetchrow(
+            """
+            SELECT code, similarity(name, $1) AS sim
+            FROM catalog_product
+            WHERE similarity(name, $1) > 0.1
+               OR name ILIKE '%' || $1 || '%'
+            ORDER BY sim DESC
+            LIMIT 1
+            """,
+            query.strip(),
+        )
+        if row is None:
+            return None
+        return await self.get_product_detail(row["code"])
+
     # --- writes -------------------------------------------------------------
     # Constraint violations (asyncpg UniqueViolationError / ForeignKeyViolationError)
     # propagate to the caller; the route layer maps them to HTTP errors.

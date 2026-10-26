@@ -114,3 +114,50 @@ async def test_get_product_detail_nests_series_and_admins(test_pool):
 
 async def test_get_product_detail_missing_returns_none(test_pool):
     assert await NormalizedCatalogRepository(test_pool).get_product_detail("BD-NOPE") is None
+
+
+# --- ficha-patrimonial-v2 T-1: enrichment search ----------------------------
+
+
+async def test_search_for_enrichment_fuzzy_matches_by_name(test_pool):
+    """A close (not exact) name query resolves to the product, with its
+    series and administrators nested (mirrors V1 `CatalogRepository.search`
+    pg_trgm behaviour, then reuses `get_product_detail`)."""
+    await _product(test_pool, "BD-00001", "Latam Credit Opportunities Fund")
+    await _series(test_pool, "BD-00001", series="A", ter=0.0384)
+    await _admin(test_pool, "BD-00001", series="A", administrator="Admin Co")
+
+    match = await NormalizedCatalogRepository(test_pool).search_for_enrichment(
+        "latam credit opportunities"
+    )
+
+    assert match is not None
+    assert match.code == "BD-00001"
+    assert [s.series for s in match.series] == ["A"]
+    assert match.series[0].management_fee_ter == pytest.approx(0.0384)
+    assert [a.administrator for a in match.series[0].administrators] == ["Admin Co"]
+
+
+async def test_search_for_enrichment_returns_none_for_no_match(test_pool):
+    await _product(test_pool, "BD-00001", "Latam Credit Opportunities Fund")
+    match = await NormalizedCatalogRepository(test_pool).search_for_enrichment(
+        "zzzz totally unrelated query xkcd"
+    )
+    assert match is None
+
+
+async def test_search_for_enrichment_picks_best_similarity(test_pool):
+    await _product(test_pool, "BD-00001", "Global Equity Fund")
+    await _product(test_pool, "BD-00002", "Latam Fixed Income Fund")
+
+    match = await NormalizedCatalogRepository(test_pool).search_for_enrichment(
+        "latam fixed income"
+    )
+
+    assert match is not None
+    assert match.code == "BD-00002"
+
+
+async def test_search_for_enrichment_empty_query_returns_none(test_pool):
+    await _product(test_pool, "BD-00001", "Global Equity Fund")
+    assert await NormalizedCatalogRepository(test_pool).search_for_enrichment("") is None
