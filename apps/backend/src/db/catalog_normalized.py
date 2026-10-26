@@ -278,6 +278,29 @@ class NormalizedCatalogRepository:
         product.series = list(by_series.values())
         return product
 
+    async def list_with_children(self) -> list[CatalogProductRow]:
+        """Every product with its series and their administrators, in three
+        queries (not one per product), ordered by code."""
+        products = await self.list_products()
+        series_rows = await self._pool.fetch(
+            "SELECT * FROM catalog_product_series ORDER BY product_code, series, id"
+        )
+        admin_rows = await self._pool.fetch(
+            "SELECT * FROM catalog_product_series_admin "
+            "ORDER BY product_code, series, administrator, id"
+        )
+        by_code = {p.code: p for p in products}
+        by_series: dict[tuple[str, str], CatalogProductSeries] = {}
+        for row in series_rows:
+            series = _series_from_record(row)
+            by_code[series.product_code].series.append(series)
+            by_series[(series.product_code, series.series)] = series
+        for row in admin_rows:
+            by_series[(row["product_code"], row["series"])].administrators.append(
+                _admin_from_record(row)
+            )
+        return products
+
     # --- writes -------------------------------------------------------------
     # Constraint violations (asyncpg UniqueViolationError / ForeignKeyViolationError)
     # propagate to the caller; the route layer maps them to HTTP errors.
