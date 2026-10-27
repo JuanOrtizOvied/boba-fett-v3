@@ -134,7 +134,7 @@ def _row_values(row: tuple, spec: SheetSpec, index: dict[str, int]) -> dict[str,
             continue
         raw = row[position] if position < len(row) else None
         value = _convert(column, raw)
-        if column.required and not value:
+        if column.required and not column.allow_blank and not value:
             raise _InvalidRowError(f"blank {column.headers[0]!r}")
         values[column.field] = value
     return values

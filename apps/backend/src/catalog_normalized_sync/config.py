@@ -28,12 +28,16 @@ ColumnType = Literal["text", "number", "allocations"]
 @dataclass(frozen=True)
 class Column:
     """One synced column. `required` means the header must exist and the
-    value must not be blank (a row that breaks it is skipped, not synced)."""
+    value must not be blank (a row that breaks it is skipped, not synced).
+    `allow_blank` keeps the header requirement but lets the value be blank:
+    the row is synced with an empty value so the observations can flag it,
+    instead of dropping it and hiding the gap from the owners."""
 
     field: str
     headers: tuple[str, ...]
     type: ColumnType
     required: bool = False
+    allow_blank: bool = False
     fallback_100: bool = False
 
 
@@ -59,7 +63,7 @@ PRODUCT_COLUMNS = (
 
 SERIES_COLUMNS = (
     Column("product_code", ("Código", "Codigo"), "text", required=True),
-    Column("series", ("Serie / Clase",), "text", required=True),
+    Column("series", ("Serie / Clase",), "text", required=True, allow_blank=True),
     Column("management_fee_ter", ("Comisión de Gestión (TER) con IGV",), "number"),
     Column("flows_min", ("Flujos Min",), "number"),
     Column("flows_max", ("Flujos Max",), "number"),
@@ -70,7 +74,7 @@ SERIES_COLUMNS = (
 ADMIN_COLUMNS = (
     Column("product_code", ("Código", "Codigo"), "text", required=True),
     Column("administrator", ("Administrador",), "text", required=True),
-    Column("series", ("Serie / Clase",), "text", required=True),
+    Column("series", ("Serie / Clase",), "text", required=True, allow_blank=True),
     Column("custody_fee", ("Custodia con IGV",), "number"),
     Column("buy_commission", ("Comisión de Compra",), "number"),
     Column("sell_commission", ("Comisión de Venta",), "number"),

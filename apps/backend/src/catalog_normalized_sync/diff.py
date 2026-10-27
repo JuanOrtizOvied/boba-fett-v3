@@ -6,6 +6,9 @@ Pure module: no network, no database. Rows are matched by business key
 never by `id` or name. Only the columns present in the workbook are compared,
 so a column that is missing from a sheet leaves that field untouched.
 
+An administrator whose series is missing from the series sheet creates that
+series empty, so it is flagged by the observations and not lost.
+
 Deletes are not computed yet. A DB row that is absent from the workbook is
 only counted (`not_in_workbook`), never reported as a change.
 """
@@ -143,6 +146,18 @@ def diff_workbook(snapshot: NormalizedSnapshot, parsed: ParsedWorkbook) -> Chang
         row.key[0] for row in parsed.products
     }
     series_keys = set(existing[LEVEL_SERIES]) | {row.key for row in parsed.series}
+    # An administrator whose series is not in the series sheet (a typo, or a
+    # series the owners forgot) still reaches the table: its series is created
+    # empty so the observations flag it, instead of dropping the administrator.
+    sheet_series = {row.key for row in parsed.series}
+    implicit_series = list(
+        dict.fromkeys(
+            row.key[:2]
+            for row in parsed.admins
+            if row.key[0] in product_codes and row.key[:2] not in sheet_series
+        )
+    )
+    series_keys |= set(implicit_series)
     parent_checks = {
         LEVEL_PRODUCT: lambda row: True,
         LEVEL_SERIES: lambda row: row.key[0] in product_codes,
@@ -160,10 +175,18 @@ def diff_workbook(snapshot: NormalizedSnapshot, parsed: ParsedWorkbook) -> Chang
             level, sheet_rows[level], existing[level], spec.key_fields, parent_checks[level]
         )
         inserts += new_inserts
+        if level == LEVEL_SERIES:
+            inserts += [
+                Insert(level, key, {"product_code": key[0], "series": key[1]})
+                for key in implicit_series
+                if key not in existing[LEVEL_SERIES]
+            ]
         updates += new_updates
         ignored += new_ignored
         unchanged[level] = same
         in_workbook = {row.key for row in sheet_rows[level]}
+        if level == LEVEL_SERIES:
+            in_workbook |= set(implicit_series)
         not_in_workbook[level] = sum(1 for key in existing[level] if key not in in_workbook)
 
     return ChangeSet(

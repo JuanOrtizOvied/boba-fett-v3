@@ -57,6 +57,14 @@ export function observationMessages(
     .map(observationMessage);
 }
 
+/** A series the workbook left without "Serie / Clase" is kept with an empty
+ * name; this is what the screen shows in its place. */
+export const BLANK_SERIES_LABEL = "(sin nombre)";
+
+export function seriesName(series: string): string {
+  return series.trim() ? series : BLANK_SERIES_LABEL;
+}
+
 /** "1 observación" / "3 observaciones". */
 export function observationCountLabel(count: number): string {
   return `${count} ${count === 1 ? "observación" : "observaciones"}`;

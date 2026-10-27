@@ -28,6 +28,7 @@ import {
   indexObservations,
   observationCountLabel,
   observationMessages,
+  seriesName,
   type ObservationScope,
 } from "@/lib/normalizedCatalogObservations";
 
@@ -323,7 +324,7 @@ function NormalizedCatalogContent() {
               onAddSeries={() => setModal({ kind: "series", series: null })}
               onEditSeries={(s) => setModal({ kind: "series", series: s })}
               onDeleteSeries={(s) =>
-                setDeleteTarget({ kind: "series", id: s.id, label: s.series })
+                setDeleteTarget({ kind: "series", id: s.id, label: seriesName(s.series) })
               }
               onAddAdmin={(s) =>
                 setModal({ kind: "admin", seriesLabel: s.series, admin: null })
@@ -572,15 +573,29 @@ function ProductDetail({
             className="rounded-xl border border-sabbi-neutral-200 bg-white p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold text-sabbi-neutral-900">
-                {s.series}
-              </h4>
+              <div>
+                <h4
+                  className={`text-sm font-semibold ${
+                    s.series.trim() ? "text-sabbi-neutral-900" : "text-amber-800 italic"
+                  }`}
+                >
+                  {seriesName(s.series)}
+                </h4>
+                {seriesIssues("series").map((issue) => (
+                  <p key={issue} className="text-xs font-medium text-amber-800">
+                    {issue}
+                  </p>
+                ))}
+              </div>
               <div className="flex gap-1">
-                <IconButton title={`Editar serie ${s.series}`} onClick={() => onEditSeries(s)}>
+                <IconButton
+                  title={`Editar serie ${seriesName(s.series)}`}
+                  onClick={() => onEditSeries(s)}
+                >
                   <EditIcon size={16} />
                 </IconButton>
                 <IconButton
-                  title={`Eliminar serie ${s.series}`}
+                  title={`Eliminar serie ${seriesName(s.series)}`}
                   danger
                   onClick={() => onDeleteSeries(s)}
                 >
