@@ -48,9 +48,14 @@ class ParsedRow:
 
 @dataclass(frozen=True)
 class SkippedRow:
+    """`key` is the row's business key when it could be read. The diff counts
+    such a row as still in the workbook, so a row that only has a bad value
+    never gets its database row soft-deleted."""
+
     sheet: str
     row_number: int
     reason: str
+    key: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +145,22 @@ def _row_values(row: tuple, spec: SheetSpec, index: dict[str, int]) -> dict[str,
     return values
 
 
+def _raw_key(row: tuple, spec: SheetSpec, index: dict[str, int]) -> tuple[str, ...] | None:
+    """The business key of a row that failed validation, or None when a key
+    cell is missing or blank (and may not be)."""
+    columns = {column.field: column for column in spec.columns}
+    parts: list[str] = []
+    for field in spec.key_fields:
+        position = index.get(field)
+        if position is None:
+            return None
+        value = _text(row[position]) if position < len(row) else ""
+        if not value and not columns[field].allow_blank:
+            return None
+        parts.append(value)
+    return tuple(parts)
+
+
 def _parse_sheet(workbook: Any, spec: SheetSpec) -> tuple[list[ParsedRow], list[SkippedRow]]:
     if spec.sheet_name not in workbook.sheetnames:
         raise MissingSheetError(
@@ -160,11 +181,13 @@ def _parse_sheet(workbook: Any, spec: SheetSpec) -> tuple[list[ParsedRow], list[
         try:
             values = _row_values(row, spec, index)
         except _InvalidRowError as exc:
-            skipped.append(SkippedRow(spec.sheet_name, row_number, str(exc)))
+            skipped.append(
+                SkippedRow(spec.sheet_name, row_number, str(exc), _raw_key(row, spec, index))
+            )
             continue
         key = tuple(values[field] for field in spec.key_fields)
         if key in seen:
-            skipped.append(SkippedRow(spec.sheet_name, row_number, "duplicate key"))
+            skipped.append(SkippedRow(spec.sheet_name, row_number, "duplicate key", key))
             continue
         seen.add(key)
         parsed.append(ParsedRow(row_number, key, values))

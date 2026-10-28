@@ -53,14 +53,19 @@ def _print_changeset(changeset: ChangeSet, limit: int) -> None:
         inserts = [c for c in changeset.inserts if c.level == level]
         updates = [c for c in changeset.updates if c.level == level]
         ignored = [c for c in changeset.ignored if c.level == level]
+        deletes = [c for c in changeset.deletes if c.level == level]
+        restores = [c for c in changeset.restores if c.level == level]
         print(
             f"\n{label}: {len(inserts)} to insert, {len(updates)} to update, "
-            f"{changeset.unchanged.get(level, 0)} unchanged, {len(ignored)} ignored, "
-            f"{changeset.not_in_workbook.get(level, 0)} in the database but not in the workbook "
-            "(left alone)"
+            f"{len(deletes)} to delete, {len(restores)} to restore, "
+            f"{changeset.unchanged.get(level, 0)} unchanged, {len(ignored)} ignored"
         )
         for change in inserts[:limit]:
             print(f"  + {' | '.join(change.key)}")
+        for change in deletes[:limit]:
+            print(f"  - {' | '.join(change.key)}")
+        for change in restores[:limit]:
+            print(f"  ^ {' | '.join(change.key)} (restored)")
         for change in updates[:limit]:
             print(f"  ~ {' | '.join(change.key)}")
             for field_change in change.changes:
@@ -70,9 +75,11 @@ def _print_changeset(changeset: ChangeSet, limit: int) -> None:
                 )
         for row in ignored[:limit]:
             print(f"  ! row {row.row_number} {' | '.join(row.key)}: {row.reason}")
-        hidden = max(len(inserts) - limit, 0) + max(len(updates) - limit, 0)
+        hidden = sum(max(len(items) - limit, 0) for items in (inserts, updates, deletes, restores))
         if hidden:
             print(f"  ... {hidden} more not shown (use --limit)")
+    if changeset.deletes_blocked:
+        print(f"\n!! Deletes held back: {changeset.deletes_blocked}")
 
 
 async def _run(args: argparse.Namespace) -> None:
