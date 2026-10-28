@@ -229,11 +229,31 @@ def _db_value(col: str, value: Any) -> Any:
     return value
 
 
-def _insert_sql(table: str, cols: list[str]) -> str:
+def _insert_or_restore_sql(table: str, cols: list[str], conflict_cols: tuple[str, ...]) -> str:
+    """Insert a row, or bring back the soft-deleted one that has the same key.
+    When the key belongs to an active row nothing is written and no row comes
+    back (the caller reports the duplicate)."""
     placeholders = ", ".join(
         f"${i}::jsonb" if c in _JSON_COLS else f"${i}" for i, c in enumerate(cols, 1)
     )
-    return f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) RETURNING *"
+    sets = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c not in conflict_cols)
+    return (
+        f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) "
+        f"ON CONFLICT ({', '.join(conflict_cols)}) DO UPDATE "
+        f"SET {sets}, is_deleted = false, deleted_at = NULL "
+        f"WHERE {table}.is_deleted RETURNING *"
+    )
+
+
+class AlreadyExistsError(ValueError):
+    """An active row already has that key."""
+
+
+class ParentNotFoundError(LookupError):
+    """The product or series the new row hangs from does not exist, or was deleted."""
+
+
+_FLAG_DELETED = "is_deleted = true, deleted_at = now()"
 
 
 class NormalizedCatalogRepository:
@@ -331,14 +351,24 @@ class NormalizedCatalogRepository:
         return products
 
     # --- writes -------------------------------------------------------------
-    # Constraint violations (asyncpg UniqueViolationError / ForeignKeyViolationError)
-    # propagate to the caller; the route layer maps them to HTTP errors.
+    # Deleting only flags the row (and what hangs from it); creating a key that
+    # was deleted brings that row back, so the same key keeps its id. The route
+    # layer maps AlreadyExistsError and ParentNotFoundError to HTTP errors.
 
-    async def _insert(self, table: str, data: BaseModel) -> asyncpg.Record:
+    async def _insert(
+        self, table: str, conflict_cols: tuple[str, ...], data: BaseModel
+    ) -> asyncpg.Record:
         values = data.model_dump(exclude_unset=False)
         cols = list(values)
         args = [_db_value(c, getattr(data, c)) for c in cols]
-        return await self._pool.fetchrow(_insert_sql(table, cols), *args)
+        row = await self._pool.fetchrow(_insert_or_restore_sql(table, cols, conflict_cols), *args)
+        if row is None:
+            raise AlreadyExistsError(table)
+        return row
+
+    async def _require_active(self, sql: str, *args: Any) -> None:
+        if await self._pool.fetchval(sql, *args) is None:
+            raise ParentNotFoundError(sql)
 
     async def _update(
         self, table: str, key_col: str, key: Any, data: BaseModel
@@ -361,14 +391,8 @@ class NormalizedCatalogRepository:
             key,
         )
 
-    async def _delete(self, table: str, key_col: str, key: Any) -> bool:
-        row = await self._pool.fetchrow(
-            f"DELETE FROM {table} WHERE {key_col} = $1 RETURNING 1", key
-        )
-        return row is not None
-
     async def create_product(self, data: CatalogProductCreate) -> CatalogProductRow:
-        return _product_from_record(await self._insert("catalog_product", data))
+        return _product_from_record(await self._insert("catalog_product", ("code",), data))
 
     async def update_product(
         self, code: str, data: CatalogProductUpdate
@@ -377,10 +401,29 @@ class NormalizedCatalogRepository:
         return None if row is None else _product_from_record(row)
 
     async def delete_product(self, code: str) -> bool:
-        return await self._delete("catalog_product", "code", code)
+        """Flag the product, its series and their administrators as deleted."""
+        async with self._pool.acquire() as conn, conn.transaction():
+            hit = await conn.fetchval(
+                f"UPDATE catalog_product SET {_FLAG_DELETED} "
+                "WHERE code = $1 AND NOT is_deleted RETURNING 1",
+                code,
+            )
+            if hit is None:
+                return False
+            for table in ("catalog_product_series", "catalog_product_series_admin"):
+                await conn.execute(
+                    f"UPDATE {table} SET {_FLAG_DELETED} "
+                    "WHERE product_code = $1 AND NOT is_deleted",
+                    code,
+                )
+        return True
 
     async def create_series(self, data: CatalogProductSeriesCreate) -> CatalogProductSeries:
-        return _series_from_record(await self._insert("catalog_product_series", data))
+        await self._require_active(
+            "SELECT 1 FROM catalog_product WHERE code = $1 AND NOT is_deleted", data.product_code
+        )
+        row = await self._insert("catalog_product_series", ("product_code", "series"), data)
+        return _series_from_record(row)
 
     async def update_series(
         self, series_id: int, data: CatalogProductSeriesUpdate
@@ -389,12 +432,36 @@ class NormalizedCatalogRepository:
         return None if row is None else _series_from_record(row)
 
     async def delete_series(self, series_id: int) -> bool:
-        return await self._delete("catalog_product_series", "id", series_id)
+        """Flag the series and its administrators as deleted."""
+        async with self._pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                f"UPDATE catalog_product_series SET {_FLAG_DELETED} "
+                "WHERE id = $1 AND NOT is_deleted RETURNING product_code, series",
+                series_id,
+            )
+            if row is None:
+                return False
+            await conn.execute(
+                f"UPDATE catalog_product_series_admin SET {_FLAG_DELETED} "
+                "WHERE product_code = $1 AND series = $2 AND NOT is_deleted",
+                row["product_code"],
+                row["series"],
+            )
+        return True
 
     async def create_admin(
         self, data: CatalogProductSeriesAdminCreate
     ) -> CatalogProductSeriesAdmin:
-        return _admin_from_record(await self._insert("catalog_product_series_admin", data))
+        await self._require_active(
+            "SELECT 1 FROM catalog_product_series "
+            "WHERE product_code = $1 AND series = $2 AND NOT is_deleted",
+            data.product_code,
+            data.series,
+        )
+        row = await self._insert(
+            "catalog_product_series_admin", ("product_code", "administrator", "series"), data
+        )
+        return _admin_from_record(row)
 
     async def update_admin(
         self, admin_id: int, data: CatalogProductSeriesAdminUpdate
@@ -403,4 +470,9 @@ class NormalizedCatalogRepository:
         return None if row is None else _admin_from_record(row)
 
     async def delete_admin(self, admin_id: int) -> bool:
-        return await self._delete("catalog_product_series_admin", "id", admin_id)
+        hit = await self._pool.fetchval(
+            f"UPDATE catalog_product_series_admin SET {_FLAG_DELETED} "
+            "WHERE id = $1 AND NOT is_deleted RETURNING 1",
+            admin_id,
+        )
+        return hit is not None

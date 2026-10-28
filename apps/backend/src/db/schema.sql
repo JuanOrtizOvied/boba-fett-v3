@@ -688,6 +688,15 @@ CREATE TABLE IF NOT EXISTS catalog_product_series_admin (
     UNIQUE (product_code, administrator, series)
 );
 
+-- Soft delete (migrations/versions/b9d4f6a8c2e1_add_soft_delete_to_normalized_catalog.py).
+-- Idempotent so a database built before the columns existed gets them too.
+ALTER TABLE catalog_product ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE catalog_product ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE catalog_product_series ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE catalog_product_series ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE catalog_product_series_admin ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE catalog_product_series_admin ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
 -- ---------------------------------------------------------------------------
 -- Normalized catalog SharePoint sync: hash of the last workbook applied, so an
 -- unchanged file is skipped. One row only (id is always 1). Separate from
