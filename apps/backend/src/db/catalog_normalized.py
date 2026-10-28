@@ -3,12 +3,17 @@
 Three levels: product -> product x series -> product x series x administrator.
 Fee, commission, flow and return values are FRACTIONS as in the source Excel
 (0.0384 = 3.84%), not percentages.
+
+Rows are soft-deleted (`is_deleted`, `deleted_at`): every read and write here
+ignores them except `list_for_sync`, which the sync needs to restore a key that
+comes back.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import asyncpg
@@ -37,6 +42,8 @@ class CatalogProductSeriesAdmin(BaseModel):
     billing_currency: str = ""
     minimum_usd: float | None = None
     min_commission_usd: float | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
 
 
 class CatalogProductSeries(BaseModel):
@@ -48,6 +55,8 @@ class CatalogProductSeries(BaseModel):
     flows_max: float | None = None
     return_min: float | None = None
     return_max: float | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     administrators: list[CatalogProductSeriesAdmin] = Field(default_factory=list)
 
 
@@ -62,6 +71,8 @@ class CatalogProductRow(BaseModel):
     underlying: list[AssetAllocation] = Field(default_factory=list)
     currency: str = ""
     investment_horizon: str = ""
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     series: list[CatalogProductSeries] = Field(default_factory=list)
 
 
@@ -77,7 +88,7 @@ class NormalizedSnapshot:
 
 _PRODUCT_COLS = (
     "id, code, name, ticker_isin, manager, asset_class, geographic_focus, "
-    "underlying, currency, investment_horizon"
+    "underlying, currency, investment_horizon, is_deleted, deleted_at"
 )
 
 
@@ -93,6 +104,8 @@ def _product_from_record(r: asyncpg.Record) -> CatalogProductRow:
         underlying=_allocations(r["underlying"]),
         currency=r["currency"] or "",
         investment_horizon=r["investment_horizon"] or "",
+        is_deleted=r["is_deleted"],
+        deleted_at=r["deleted_at"],
     )
 
 
@@ -106,6 +119,8 @@ def _series_from_record(r: asyncpg.Record) -> CatalogProductSeries:
         flows_max=_to_float(r["flows_max"]),
         return_min=_to_float(r["return_min"]),
         return_max=_to_float(r["return_max"]),
+        is_deleted=r["is_deleted"],
+        deleted_at=r["deleted_at"],
     )
 
 
@@ -121,6 +136,8 @@ def _admin_from_record(r: asyncpg.Record) -> CatalogProductSeriesAdmin:
         billing_currency=r["billing_currency"] or "",
         minimum_usd=_to_float(r["minimum_usd"]),
         min_commission_usd=_to_float(r["min_commission_usd"]),
+        is_deleted=r["is_deleted"],
+        deleted_at=r["deleted_at"],
     )
 
 
@@ -223,24 +240,27 @@ class NormalizedCatalogRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 
-    async def list_products(self, search: str | None = None) -> list[CatalogProductRow]:
+    async def list_products(
+        self, search: str | None = None, *, include_deleted: bool = False
+    ) -> list[CatalogProductRow]:
         """Products only (no nested series), ordered by code. `search` filters
-        by code/name (case-insensitive substring)."""
+        by code/name (case-insensitive substring). Soft-deleted products are
+        left out unless `include_deleted`."""
+        conditions = [] if include_deleted else ["NOT is_deleted"]
+        args: list[Any] = []
         if search:
-            rows = await self._pool.fetch(
-                f"SELECT {_PRODUCT_COLS} FROM catalog_product "
-                "WHERE code ILIKE $1 OR name ILIKE $1 ORDER BY code",
-                f"%{search}%",
-            )
-        else:
-            rows = await self._pool.fetch(
-                f"SELECT {_PRODUCT_COLS} FROM catalog_product ORDER BY code"
-            )
+            conditions.append("(code ILIKE $1 OR name ILIKE $1)")
+            args.append(f"%{search}%")
+        where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = await self._pool.fetch(
+            f"SELECT {_PRODUCT_COLS} FROM catalog_product{where} ORDER BY code", *args
+        )
         return [_product_from_record(r) for r in rows]
 
     async def list_for_sync(self) -> NormalizedSnapshot:
-        """All products, series and administrators in three plain queries."""
-        products = await self.list_products()
+        """All products, series and administrators in three plain queries,
+        soft-deleted ones included so the sync can restore a key that returns."""
+        products = await self.list_products(include_deleted=True)
         series_rows = await self._pool.fetch(
             "SELECT * FROM catalog_product_series ORDER BY product_code, series"
         )
@@ -255,50 +275,59 @@ class NormalizedCatalogRepository:
         )
 
     async def get_product_detail(self, code: str) -> CatalogProductRow | None:
-        """Product with nested series and, under each series, its administrators."""
+        """Product with nested series and, under each series, its administrators.
+        None when the product does not exist or is soft-deleted."""
         row = await self._pool.fetchrow(
-            f"SELECT {_PRODUCT_COLS} FROM catalog_product WHERE code = $1", code
+            f"SELECT {_PRODUCT_COLS} FROM catalog_product WHERE code = $1 AND NOT is_deleted",
+            code,
         )
         if row is None:
             return None
         product = _product_from_record(row)
 
         series_rows = await self._pool.fetch(
-            "SELECT * FROM catalog_product_series WHERE product_code = $1 ORDER BY series, id",
+            "SELECT * FROM catalog_product_series "
+            "WHERE product_code = $1 AND NOT is_deleted ORDER BY series, id",
             code,
         )
         admin_rows = await self._pool.fetch(
-            "SELECT * FROM catalog_product_series_admin WHERE product_code = $1 "
-            "ORDER BY series, administrator, id",
+            "SELECT * FROM catalog_product_series_admin "
+            "WHERE product_code = $1 AND NOT is_deleted ORDER BY series, administrator, id",
             code,
         )
         by_series = {s.series: s for s in map(_series_from_record, series_rows)}
         for admin_row in admin_rows:
-            by_series[admin_row["series"]].administrators.append(_admin_from_record(admin_row))
+            parent = by_series.get(admin_row["series"])
+            if parent is not None:
+                parent.administrators.append(_admin_from_record(admin_row))
         product.series = list(by_series.values())
         return product
 
     async def list_with_children(self) -> list[CatalogProductRow]:
-        """Every product with its series and their administrators, in three
-        queries (not one per product), ordered by code."""
+        """Every active product with its series and their administrators, in
+        three queries (not one per product), ordered by code."""
         products = await self.list_products()
         series_rows = await self._pool.fetch(
-            "SELECT * FROM catalog_product_series ORDER BY product_code, series, id"
+            "SELECT * FROM catalog_product_series WHERE NOT is_deleted "
+            "ORDER BY product_code, series, id"
         )
         admin_rows = await self._pool.fetch(
-            "SELECT * FROM catalog_product_series_admin "
+            "SELECT * FROM catalog_product_series_admin WHERE NOT is_deleted "
             "ORDER BY product_code, series, administrator, id"
         )
         by_code = {p.code: p for p in products}
         by_series: dict[tuple[str, str], CatalogProductSeries] = {}
+        # A child under a deleted parent is skipped, not an error: deletes
+        # cascade down, but a stray active child must not hide the whole list.
         for row in series_rows:
             series = _series_from_record(row)
-            by_code[series.product_code].series.append(series)
-            by_series[(series.product_code, series.series)] = series
+            if series.product_code in by_code:
+                by_code[series.product_code].series.append(series)
+                by_series[(series.product_code, series.series)] = series
         for row in admin_rows:
-            by_series[(row["product_code"], row["series"])].administrators.append(
-                _admin_from_record(row)
-            )
+            parent = by_series.get((row["product_code"], row["series"]))
+            if parent is not None:
+                parent.administrators.append(_admin_from_record(row))
         return products
 
     # --- writes -------------------------------------------------------------
@@ -316,7 +345,9 @@ class NormalizedCatalogRepository:
     ) -> asyncpg.Record | None:
         changes = data.model_dump(exclude_none=True)
         if not changes:
-            return await self._pool.fetchrow(f"SELECT * FROM {table} WHERE {key_col} = $1", key)
+            return await self._pool.fetchrow(
+                f"SELECT * FROM {table} WHERE {key_col} = $1 AND NOT is_deleted", key
+            )
         cols = list(changes)
         sets = ", ".join(
             f"{c} = ${i}::jsonb" if c in _JSON_COLS else f"{c} = ${i}"
@@ -324,7 +355,8 @@ class NormalizedCatalogRepository:
         )
         args = [_db_value(c, getattr(data, c)) for c in cols]
         return await self._pool.fetchrow(
-            f"UPDATE {table} SET {sets} WHERE {key_col} = ${len(cols) + 1} RETURNING *",
+            f"UPDATE {table} SET {sets} "
+            f"WHERE {key_col} = ${len(cols) + 1} AND NOT is_deleted RETURNING *",
             *args,
             key,
         )

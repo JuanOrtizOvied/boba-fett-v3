@@ -649,7 +649,9 @@ CREATE TABLE IF NOT EXISTS catalog_product (
     underlying JSONB DEFAULT '[]',
     currency TEXT DEFAULT '',
     investment_horizon TEXT DEFAULT '',
-    created_at TIMESTAMPTZ DEFAULT now()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS catalog_product_series (
@@ -662,6 +664,8 @@ CREATE TABLE IF NOT EXISTS catalog_product_series (
     return_min NUMERIC,
     return_max NUMERIC,
     created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    deleted_at TIMESTAMPTZ,
     UNIQUE (product_code, series)
 );
 
@@ -677,6 +681,8 @@ CREATE TABLE IF NOT EXISTS catalog_product_series_admin (
     minimum_usd NUMERIC,
     min_commission_usd NUMERIC,
     created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    deleted_at TIMESTAMPTZ,
     FOREIGN KEY (product_code, series)
         REFERENCES catalog_product_series(product_code, series) ON DELETE CASCADE,
     UNIQUE (product_code, administrator, series)
