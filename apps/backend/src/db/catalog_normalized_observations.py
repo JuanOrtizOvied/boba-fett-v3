@@ -164,7 +164,8 @@ def _admin_observations(
 
 def _series_observations(series: CatalogProductSeries) -> list[Observation]:
     where = {"level": "series", "series": series.series}
-    found = [
+    found = [Observation(field="series", issue="empty", **where)] if _blank(series.series) else []
+    found += [
         Observation(field=field, issue="empty", **where)
         for field in ("management_fee_ter", "flows_min", "flows_max", "return_min", "return_max")
         if getattr(series, field) is None
