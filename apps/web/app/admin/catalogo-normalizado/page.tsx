@@ -18,10 +18,18 @@ import {
 } from "@/components/admin/catalog-normalized/shared";
 import type { AssetAllocation } from "@/lib/portfolio-types";
 import type {
+  CatalogObservation,
   CatalogProductRow,
   CatalogProductSeries,
   CatalogProductSeriesAdmin,
+  ProductObservations,
 } from "@/lib/normalized-catalog-types";
+import {
+  indexObservations,
+  observationCountLabel,
+  observationMessages,
+  type ObservationScope,
+} from "@/lib/normalizedCatalogObservations";
 
 const BASE = "/api/admin/normalized-catalog";
 
@@ -136,14 +144,41 @@ function NormalizedCatalogContent() {
     return () => controller.abort();
   }, [selectedCode, loadDetail]);
 
+  // Observations cover the whole catalog, so they do not depend on the search
+  // term or the selected product. A failed load simply shows none.
+  const [observations, setObservations] = useState<
+    Map<string, CatalogObservation[]>
+  >(new Map());
+
+  const loadObservations = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${BASE}/observations`);
+      if (!res.ok) return;
+      const data: unknown = await res.json();
+      if (Array.isArray(data)) {
+        setObservations(indexObservations(data as ProductObservations[]));
+      }
+    } catch {
+      // Observations are a hint; the catalog still works without them.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadObservations();
+  }, [loadObservations]);
+
   const refetchDetail = useCallback(async () => {
     if (selectedCode) await loadDetail(selectedCode);
-  }, [selectedCode, loadDetail]);
+    await loadObservations();
+  }, [selectedCode, loadDetail, loadObservations]);
 
   const handleProductSaved = async (code: string) => {
     await refetchList();
     if (code === selectedCode) await refetchDetail();
-    else setSelectedCode(code);
+    else {
+      setSelectedCode(code);
+      await loadObservations();
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -163,6 +198,7 @@ function NormalizedCatalogContent() {
       if (deleteTarget.kind === "product") {
         setSelectedCode(null);
         await refetchList();
+        await loadObservations();
         toast("Producto eliminado.", "success");
       } else {
         await refetchDetail();
@@ -237,6 +273,7 @@ function NormalizedCatalogContent() {
             <ul className="max-h-[70vh] divide-y divide-sabbi-neutral-200 overflow-auto rounded-xl border border-sabbi-neutral-200 bg-white">
               {(products ?? []).map((p) => {
                 const active = p.code === selectedCode;
+                const observationCount = observations.get(p.code)?.length ?? 0;
                 return (
                   <li key={p.code}>
                     <button
@@ -249,6 +286,11 @@ function NormalizedCatalogContent() {
                     >
                       <span className="text-sm font-medium text-sabbi-neutral-900">
                         {p.name}
+                        {observationCount > 0 && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap text-amber-800 uppercase">
+                            {observationCountLabel(observationCount)}
+                          </span>
+                        )}
                       </span>
                       <span className="text-xs text-sabbi-neutral-500">{p.code}</span>
                     </button>
@@ -273,6 +315,7 @@ function NormalizedCatalogContent() {
           ) : (
             <ProductDetail
               product={detail}
+              observations={observations.get(detail.code) ?? []}
               onEditProduct={() => setModal({ kind: "product", product: detail })}
               onDeleteProduct={() =>
                 setDeleteTarget({ kind: "product", code: detail.code, name: detail.name })
@@ -340,12 +383,51 @@ function formatAllocations(rows: AssetAllocation[]): string {
     : rows.map((r) => `${r.name} ${r.percentage}%`).join(", ");
 }
 
-function Attr({ label, value }: { label: string; value: string }) {
+/** One read-only field. `issues` are the observations of this field: it turns
+ * amber and each one is written under the value, where the data is. */
+function Attr({
+  label,
+  value,
+  issues = [],
+}: {
+  label: string;
+  value: string;
+  issues?: string[];
+}) {
+  const flagged = issues.length > 0;
   return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs font-medium text-sabbi-neutral-500">{label}</dt>
+    <div
+      className={`flex flex-col gap-0.5 ${
+        flagged ? "rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5" : ""
+      }`}
+    >
+      <dt
+        className={`text-xs font-medium ${
+          flagged ? "text-amber-800" : "text-sabbi-neutral-500"
+        }`}
+      >
+        {label}
+      </dt>
       <dd className="text-sm text-sabbi-neutral-900">{value || "—"}</dd>
+      {issues.map((issue) => (
+        <dd key={issue} className="text-xs font-medium text-amber-800">
+          {issue}
+        </dd>
+      ))}
     </div>
+  );
+}
+
+/** Amber replacement for the "nothing here yet" line of an empty list. */
+function EmptyNote({ children, issues }: { children: string; issues: string[] }) {
+  return (
+    <p
+      className={`text-sm ${
+        issues.length > 0 ? "font-medium text-amber-800" : "text-sabbi-neutral-600"
+      }`}
+    >
+      {children}
+    </p>
   );
 }
 
@@ -382,6 +464,7 @@ const linkButtonClass =
 
 function ProductDetail({
   product,
+  observations,
   onEditProduct,
   onDeleteProduct,
   onAddSeries,
@@ -392,6 +475,7 @@ function ProductDetail({
   onDeleteAdmin,
 }: {
   product: CatalogProductRow;
+  observations: CatalogObservation[];
   onEditProduct: () => void;
   onDeleteProduct: () => void;
   onAddSeries: () => void;
@@ -401,6 +485,10 @@ function ProductDetail({
   onEditAdmin: (s: CatalogProductSeries, a: CatalogProductSeriesAdmin) => void;
   onDeleteAdmin: (a: CatalogProductSeriesAdmin) => void;
 }) {
+  const issuesOf = (scope: ObservationScope, field: string) =>
+    observationMessages(observations, scope, field);
+  const productIssues = (field: string) => issuesOf({ level: "product" }, field);
+
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-xl border border-sabbi-neutral-200 bg-white p-5">
@@ -432,12 +520,28 @@ function ProductDetail({
         </div>
         <dl className="grid gap-3 sm:grid-cols-2">
           <Attr label="Ticker / ISIN" value={product.ticker_isin} />
-          <Attr label="Gestor" value={product.manager} />
-          <Attr label="Moneda" value={product.currency} />
-          <Attr label="Horizonte de inversión" value={product.investment_horizon} />
-          <Attr label="Clase de activo" value={formatAllocations(product.asset_class)} />
-          <Attr label="Foco geográfico" value={formatAllocations(product.geographic_focus)} />
-          <Attr label="Subyacente" value={formatAllocations(product.underlying)} />
+          <Attr label="Gestor" value={product.manager} issues={productIssues("manager")} />
+          <Attr label="Moneda" value={product.currency} issues={productIssues("currency")} />
+          <Attr
+            label="Horizonte de inversión"
+            value={product.investment_horizon}
+            issues={productIssues("investment_horizon")}
+          />
+          <Attr
+            label="Clase de activo"
+            value={formatAllocations(product.asset_class)}
+            issues={productIssues("asset_class")}
+          />
+          <Attr
+            label="Foco geográfico"
+            value={formatAllocations(product.geographic_focus)}
+            issues={productIssues("geographic_focus")}
+          />
+          <Attr
+            label="Subyacente"
+            value={formatAllocations(product.underlying)}
+            issues={productIssues("underlying")}
+          />
         </dl>
       </div>
 
@@ -454,12 +558,15 @@ function ProductDetail({
         </div>
 
         {product.series.length === 0 && (
-          <p className="text-sm text-sabbi-neutral-600">
+          <EmptyNote issues={productIssues("series")}>
             Este producto aún no tiene series.
-          </p>
+          </EmptyNote>
         )}
 
-        {product.series.map((s) => (
+        {product.series.map((s) => {
+          const seriesIssues = (field: string) =>
+            issuesOf({ level: "series", series: s.series }, field);
+          return (
           <div
             key={s.id}
             className="rounded-xl border border-sabbi-neutral-200 bg-white p-4"
@@ -482,11 +589,31 @@ function ProductDetail({
               </div>
             </div>
             <dl className="grid gap-3 sm:grid-cols-3">
-              <Attr label="Comisión de gestión (TER)" value={formatFraction(s.management_fee_ter)} />
-              <Attr label="Flujos mínimo" value={formatFraction(s.flows_min)} />
-              <Attr label="Flujos máximo" value={formatFraction(s.flows_max)} />
-              <Attr label="Rentabilidad mínima" value={formatFraction(s.return_min)} />
-              <Attr label="Rentabilidad máxima" value={formatFraction(s.return_max)} />
+              <Attr
+                label="Comisión de gestión (TER)"
+                value={formatFraction(s.management_fee_ter)}
+                issues={seriesIssues("management_fee_ter")}
+              />
+              <Attr
+                label="Flujos mínimo"
+                value={formatFraction(s.flows_min)}
+                issues={seriesIssues("flows_min")}
+              />
+              <Attr
+                label="Flujos máximo"
+                value={formatFraction(s.flows_max)}
+                issues={seriesIssues("flows_max")}
+              />
+              <Attr
+                label="Rentabilidad mínima"
+                value={formatFraction(s.return_min)}
+                issues={seriesIssues("return_min")}
+              />
+              <Attr
+                label="Rentabilidad máxima"
+                value={formatFraction(s.return_max)}
+                issues={seriesIssues("return_max")}
+              />
             </dl>
 
             <div className="mt-4 border-t border-sabbi-neutral-200 pt-3">
@@ -499,12 +626,18 @@ function ProductDetail({
                 </button>
               </div>
               {s.administrators.length === 0 && (
-                <p className="text-sm text-sabbi-neutral-600">
+                <EmptyNote issues={seriesIssues("administrators")}>
                   Sin administradores en esta serie.
-                </p>
+                </EmptyNote>
               )}
               <ul className="flex flex-col gap-2">
-                {s.administrators.map((a) => (
+                {s.administrators.map((a) => {
+                  const adminIssues = (field: string) =>
+                    issuesOf(
+                      { level: "admin", series: s.series, administrator: a.administrator },
+                      field,
+                    );
+                  return (
                   <li
                     key={a.id}
                     className="rounded-lg border border-sabbi-neutral-200 bg-sabbi-neutral-50 p-3"
@@ -530,19 +663,45 @@ function ProductDetail({
                       </div>
                     </div>
                     <dl className="grid gap-3 sm:grid-cols-3">
-                      <Attr label="Comisión de custodia" value={formatFraction(a.custody_fee)} />
-                      <Attr label="Comisión de compra" value={formatFraction(a.buy_commission)} />
-                      <Attr label="Comisión de venta" value={formatFraction(a.sell_commission)} />
-                      <Attr label="Moneda de facturación" value={a.billing_currency} />
-                      <Attr label="Mínimo (USD)" value={formatUsd(a.minimum_usd)} />
-                      <Attr label="Comisión mínima (USD)" value={formatUsd(a.min_commission_usd)} />
+                      <Attr
+                        label="Comisión de custodia"
+                        value={formatFraction(a.custody_fee)}
+                        issues={adminIssues("custody_fee")}
+                      />
+                      <Attr
+                        label="Comisión de compra"
+                        value={formatFraction(a.buy_commission)}
+                        issues={adminIssues("buy_commission")}
+                      />
+                      <Attr
+                        label="Comisión de venta"
+                        value={formatFraction(a.sell_commission)}
+                        issues={adminIssues("sell_commission")}
+                      />
+                      <Attr
+                        label="Moneda de facturación"
+                        value={a.billing_currency}
+                        issues={adminIssues("billing_currency")}
+                      />
+                      <Attr
+                        label="Mínimo (USD)"
+                        value={formatUsd(a.minimum_usd)}
+                        issues={adminIssues("minimum_usd")}
+                      />
+                      <Attr
+                        label="Comisión mínima (USD)"
+                        value={formatUsd(a.min_commission_usd)}
+                        issues={adminIssues("min_commission_usd")}
+                      />
                     </dl>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

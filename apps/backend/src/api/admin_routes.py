@@ -44,6 +44,7 @@ from db.catalog_normalized import (
     NormalizedCatalogRepository,
 )
 from db.catalog_normalized import CatalogProductUpdate as NormalizedProductUpdate
+from db.catalog_normalized_observations import ProductObservations, catalog_observations
 from db.catalog_repository import CatalogRepository
 from db.ficha_patrimonial import (
     FichaConfirmRequest,
@@ -658,6 +659,15 @@ async def list_normalized_products(
 ) -> list[CatalogProductRow]:
     term = search.strip() if search else None
     return await repo.list_products(term or None)
+
+
+@router.get("/normalized-catalog/observations")
+async def list_normalized_observations(
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> list[ProductObservations]:
+    """Products with something missing or outside the official lists. The ones
+    that are complete are left out."""
+    return catalog_observations(await repo.list_with_children())
 
 
 @router.get("/normalized-catalog/products/{code}")
