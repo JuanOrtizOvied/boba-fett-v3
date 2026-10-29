@@ -18,7 +18,7 @@ import {
   CURRENCY_OPTIONS,
   GEOGRAPHIC_FOCUS_OPTIONS,
   UNDERLYING_OPTIONS,
-} from "@/lib/catalogOptions";
+} from "@/lib/normalizedCatalogOptions";
 import { ModalShell, SelectField, TextField, sendJson } from "./shared";
 
 const BASE = "/api/admin/normalized-catalog/products";

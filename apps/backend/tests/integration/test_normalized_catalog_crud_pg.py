@@ -103,6 +103,16 @@ async def test_patch_missing_product_404(admin_api_client):
     assert r.status_code == 404
 
 
+async def _active(test_pool, table, where="product_code = 'BD-1'"):
+    return await test_pool.fetchval(
+        f"SELECT count(*) FROM {table} WHERE {where} AND NOT is_deleted"
+    )
+
+
+async def _all(test_pool, table, where="product_code = 'BD-1'"):
+    return await test_pool.fetchval(f"SELECT count(*) FROM {table} WHERE {where}")
+
+
 async def test_delete_product_cascades(admin_api_client, test_pool):
     _app, client = admin_api_client
     await _mk_product(client)
@@ -110,12 +120,15 @@ async def test_delete_product_cascades(admin_api_client, test_pool):
     await _mk_admin(client)
     r = await client.delete(f"{BASE}/products/BD-1")
     assert r.status_code == 204
+    assert await _active(test_pool, "catalog_product_series") == 0
+    assert await _active(test_pool, "catalog_product_series_admin") == 0
+    # Flagged, not removed.
+    assert await _all(test_pool, "catalog_product", "code = 'BD-1'") == 1
+    assert await _all(test_pool, "catalog_product_series") == 1
+    assert await _all(test_pool, "catalog_product_series_admin") == 1
     assert await test_pool.fetchval(
-        "SELECT count(*) FROM catalog_product_series WHERE product_code = 'BD-1'"
-    ) == 0
-    assert await test_pool.fetchval(
-        "SELECT count(*) FROM catalog_product_series_admin WHERE product_code = 'BD-1'"
-    ) == 0
+        "SELECT deleted_at IS NOT NULL FROM catalog_product WHERE code = 'BD-1'"
+    )
 
 
 async def test_delete_missing_product_404(admin_api_client):
@@ -164,12 +177,9 @@ async def test_delete_series_cascades_admins(admin_api_client, test_pool):
     s = await _mk_series(client)
     await _mk_admin(client)
     assert (await client.delete(f"{BASE}/series/{s['id']}")).status_code == 204
-    assert await test_pool.fetchval(
-        "SELECT count(*) FROM catalog_product_series_admin WHERE product_code = 'BD-1'"
-    ) == 0
-    assert await test_pool.fetchval(
-        "SELECT count(*) FROM catalog_product WHERE code = 'BD-1'"
-    ) == 1
+    assert await _active(test_pool, "catalog_product_series_admin") == 0
+    assert await _all(test_pool, "catalog_product_series_admin") == 1
+    assert await _active(test_pool, "catalog_product", "code = 'BD-1'") == 1
 
 
 async def test_delete_missing_series_404(admin_api_client):

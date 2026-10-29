@@ -17,6 +17,9 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 from fastapi.responses import PlainTextResponse
 
+from catalog_normalized_sync.config import NormalizedSettings
+from catalog_normalized_sync.service import SyncDisabledError as NormalizedSyncDisabledError
+from catalog_normalized_sync.service import run_sync_from_sharepoint as run_normalized_sync
 from catalog_sync.config import Settings
 from catalog_sync.graph import GraphClient
 from catalog_sync.service import SyncDisabledError, run_sync_from_sharepoint
@@ -95,6 +98,28 @@ async def _sync_in_background(repo: CatalogRepository) -> None:
             )
 
 
+async def _normalized_sync_in_background(repo: CatalogRepository) -> None:
+    """Same as `_sync_in_background`, for the normalized catalog. Graph
+    notifies per drive, so one notification starts both syncs and each one
+    decides by its own flag and its own hash whether there is work."""
+    try:
+        report = await run_normalized_sync(repo.pool)
+    except NormalizedSyncDisabledError:
+        logger.info("Normalized catalog sync notification ignored: sync is disabled")
+    except Exception as exc:  # a background task must never raise
+        logger.error("Normalized catalog sync failed: %s: %s", type(exc).__name__, exc)
+    else:
+        if report.skipped:
+            logger.info("Normalized catalog sync skipped: content unchanged")
+        else:
+            changes = report.changeset
+            logger.info(
+                "Normalized catalog sync applied: inserts=%d updates=%d",
+                len(changes.inserts),
+                len(changes.updates),
+            )
+
+
 @router.post("/notifications")
 async def graph_notifications(
     request: Request, background_tasks: BackgroundTasks, validationToken: str | None = None
@@ -114,6 +139,7 @@ async def graph_notifications(
         return Response(status_code=401)
 
     background_tasks.add_task(_sync_in_background, repo)
+    background_tasks.add_task(_normalized_sync_in_background, repo)
     return Response(status_code=202)
 
 
@@ -121,7 +147,8 @@ async def _handle_lifecycle_event(repo: CatalogRepository, item: dict[str, Any])
     event = item.get("lifecycleEvent")
     subscription_id = item.get("subscriptionId")
     settings = Settings.from_env()
-    if not settings.sync_enabled:
+    # The subscription is shared, so either sync being on keeps it alive.
+    if not (settings.sync_enabled or NormalizedSettings.from_env().sync_enabled):
         logger.info("Lifecycle event ignored: sync is disabled")
         return
 
@@ -137,6 +164,7 @@ async def _handle_lifecycle_event(repo: CatalogRepository, item: dict[str, Any])
         elif event == "missed":
             # Notifications were lost: catch up from the workbook itself.
             await _sync_in_background(repo)
+            await _normalized_sync_in_background(repo)
         else:
             logger.info("Lifecycle event ignored: %s", event)
     except Exception as exc:  # a background task must never raise

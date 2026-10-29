@@ -7,7 +7,7 @@ import type {
   CatalogAdminUpdateInput,
   CatalogProductSeriesAdmin,
 } from "@/lib/normalized-catalog-types";
-import { CURRENCY_OPTIONS } from "@/lib/catalogOptions";
+import { CURRENCY_OPTIONS } from "@/lib/normalizedCatalogOptions";
 import {
   AmountField,
   FractionField,

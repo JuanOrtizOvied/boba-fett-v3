@@ -49,6 +49,32 @@ export interface CatalogProductRow {
   series: CatalogProductSeries[];
 }
 
+// -- Observations -----------------------------------------------------------
+
+export type CatalogObservationIssue =
+  | "empty"
+  | "allocation_sum"
+  | "not_in_list"
+  | "no_series"
+  | "no_administrators";
+
+/** One problem of a product. `series` / `administrator` say which series or
+ * administrator it belongs to when `level` is not "product". `value` is the
+ * offending name or the allocation total. */
+export interface CatalogObservation {
+  level: "product" | "series" | "admin";
+  field: string;
+  issue: CatalogObservationIssue;
+  value: string;
+  series: string | null;
+  administrator: string | null;
+}
+
+export interface ProductObservations {
+  code: string;
+  observations: CatalogObservation[];
+}
+
 // -- Create / update inputs -------------------------------------------------
 
 export interface CatalogProductCreateInput {
