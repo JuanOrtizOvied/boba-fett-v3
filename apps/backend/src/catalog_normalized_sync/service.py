@@ -10,6 +10,7 @@ applied, so a failed run is retried by the next notification.
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass
 
 import asyncpg
@@ -26,6 +27,8 @@ from db.catalog_normalized import NormalizedCatalogRepository
 # Distinct from SYNC_RUN_LOCK_KEY (..001) and SUBSCRIPTION_JOB_LOCK_KEY (..002)
 # in `catalog_sync.lock`: advisory lock keys share one namespace per database.
 NORMALIZED_SYNC_LOCK_KEY = 8_401_002_003
+
+logger = logging.getLogger(__name__)
 
 
 class SyncDisabledError(RuntimeError):
@@ -72,6 +75,10 @@ async def _run_locked(pool: asyncpg.Pool, data: bytes, *, force: bool) -> RunRep
         return RunReport(content_hash=content_hash, skipped=True)
 
     parsed, changeset = await preview(pool, data)
+    if changeset.deletes_blocked:
+        logger.warning(
+            "Normalized catalog sync held back its deletes: %s", changeset.deletes_blocked
+        )
     await apply_changeset(pool, changeset)
     await _store_hash(pool, content_hash)
     return RunReport(content_hash=content_hash, skipped=False, parsed=parsed, changeset=changeset)

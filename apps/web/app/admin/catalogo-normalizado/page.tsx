@@ -34,6 +34,11 @@ import {
 
 const BASE = "/api/admin/normalized-catalog";
 
+/** Deleting only hides the row: the Excel is the source of truth, so a row that
+ * is still in it comes back with the next sync. */
+const STILL_IN_EXCEL_NOTE =
+  "Si sigue en el Excel de SharePoint, volverá en la próxima sincronización.";
+
 type ModalState =
   | { kind: "product"; product: CatalogProductRow | null }
   | { kind: "series"; series: CatalogProductSeries | null }
@@ -221,18 +226,18 @@ function NormalizedCatalogContent() {
     if (t.kind === "product") {
       return {
         title: "Eliminar producto",
-        message: `Se eliminará "${t.name}" junto con todas sus series y administradores. Esta acción no se puede deshacer.`,
+        message: `Se eliminará "${t.name}" junto con todas sus series y administradores. ${STILL_IN_EXCEL_NOTE}`,
       };
     }
     if (t.kind === "series") {
       return {
         title: "Eliminar serie",
-        message: `Se eliminará la serie "${t.label}" y sus administradores. Esta acción no se puede deshacer.`,
+        message: `Se eliminará la serie "${t.label}" y sus administradores. ${STILL_IN_EXCEL_NOTE}`,
       };
     }
     return {
       title: "Eliminar administrador",
-      message: `Se eliminará el administrador "${t.label}". Esta acción no se puede deshacer.`,
+      message: `Se eliminará el administrador "${t.label}". ${STILL_IN_EXCEL_NOTE}`,
     };
   };
 

@@ -1,8 +1,9 @@
 """Apply a `ChangeSet` to the normalized catalog tables in one transaction.
 
 Parents are inserted before their children (products, series, administrators)
-and updates only set the fields that changed. Either every change lands or
-none does. Nothing is ever deleted here.
+and updates only set the fields that changed. Rows are never removed: a delete
+sets `is_deleted` and `deleted_at`, a restore clears them. Either every change
+lands or none does.
 
 Table and column names come from `catalog_normalized_sync.config`, never from
 the workbook; only values are passed as query parameters.
@@ -62,9 +63,24 @@ def _update_statement(
     return sql, [_db_value(f, new_values[f]) for f in fields] + list(key)
 
 
+def _flag_statement(level: str, key: tuple[str, ...], *, deleted: bool) -> tuple[str, list[Any]]:
+    """Set or clear the soft-delete of one row. `now()` is the transaction's
+    start, so every row of one run gets the same `deleted_at`."""
+    where = " AND ".join(f"{f} = ${i}" for i, f in enumerate(_KEY_FIELDS[level], start=1))
+    flag = (
+        "is_deleted = true, deleted_at = now()"
+        if deleted
+        else "is_deleted = false, deleted_at = NULL"
+    )
+    return f"UPDATE {_TABLES[level]} SET {flag} WHERE {where}", list(key)
+
+
 async def apply_changeset(pool: asyncpg.Pool, changeset: ChangeSet) -> None:
     """Write `changeset` in a single transaction."""
     async with pool.acquire() as conn, conn.transaction():
+        for restore in changeset.restores:
+            sql, args = _flag_statement(restore.level, restore.key, deleted=False)
+            await conn.execute(sql, *args)
         for spec in SHEETS:
             for insert in changeset.inserts:
                 if insert.level == spec.level:
@@ -75,3 +91,6 @@ async def apply_changeset(pool: asyncpg.Pool, changeset: ChangeSet) -> None:
                 update.level, update.key, {c.field: c.new for c in update.changes}
             )
             await conn.execute(sql, *args)
+        for delete in changeset.deletes:
+            sql, args = _flag_statement(delete.level, delete.key, deleted=True)
+            await conn.execute(f"{sql} AND NOT is_deleted", *args)
