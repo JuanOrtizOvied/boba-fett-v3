@@ -44,6 +44,32 @@ COL_AMOUNT = "M"
 COL_RETURN_RATE = "N"
 
 
+# -- Ficha status lifecycle (Slice 3a) ----------------------------------------
+
+# Per-line decision states.
+LINE_DECIDED = ("approved", "discarded")
+
+
+def derive_ficha_status(parse_failed: bool, line_statuses: list[str], confirmed: bool) -> str:
+    """Derive a ficha's lifecycle status from its per-line decisions
+    ("por decisiones de línea"): ``con_error`` when the parse/enrichment failed,
+    ``por_validar`` when parsed but nothing is decided, ``en_proceso`` once at
+    least one line is decided (approved/discarded) but it is not yet all-decided-
+    and-confirmed, and ``validada`` only when every line is decided AND the ficha
+    was confirmed."""
+    if parse_failed:
+        return "con_error"
+    total = len(line_statuses)
+    if total == 0:
+        return "por_validar"
+    decided = sum(1 for s in line_statuses if s in LINE_DECIDED)
+    if confirmed and decided == total:
+        return "validada"
+    if decided > 0:
+        return "en_proceso"
+    return "por_validar"
+
+
 class FichaParseError(ValueError):
     """Raised when an uploaded workbook cannot be parsed as a valid ficha
     patrimonial: corrupt/non-`.xlsx` file or missing the "Sabbi" sheet
