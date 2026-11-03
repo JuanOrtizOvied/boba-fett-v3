@@ -134,6 +134,18 @@ describe("ReviewTable rendering", () => {
     expect(screen.getByDisplayValue("5.0")).toBeInTheDocument();
   });
 
+  test("shows a confidence badge derived from the source and the declared summary", () => {
+    render(
+      <ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />,
+    );
+    // primary_source "catalog" -> Confianza alta.
+    expect(screen.getByText("Confianza alta")).toBeInTheDocument();
+    // Declared (raw) summary panel, read-only.
+    expect(
+      screen.getByText("USD · 5,000 · declara 5%"),
+    ).toBeInTheDocument();
+  });
+
   test("flags the unmapped row with a warning", () => {
     render(
       <ReviewTable rows={[UNMAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />,

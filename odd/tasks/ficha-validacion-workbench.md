@@ -74,10 +74,18 @@ emits plus frontend-derivable values.
   GREEN. New tests: `ficha-summary.test.ts` 4/4, `ficha-summary-bar.test.tsx`
   2/2. Full web suite 93 passed / 8 pre-existing failures / 0 new (stash-verified
   `ficha-patrimonial-page`'s 2 failures are identical on clean HEAD). tsc clean
-  on new files. Commit: `__T1__`.
-- [ ] **T-2 — Card header + confidence/source badges.** Left declared panel and
-  a frontend-derived confidence badge from `primary_source`. Pure derivation
-  helper + card render test.
+  on new files. Commit: `15b1f22`.
+- [x] **T-2 — Card header + confidence/source badges.** DONE. Route: INLINE.
+  Restructured `ProductCard` into a two-column **declared rail | enriched panel**
+  layout (mockup shape): left rail shows the raw declared product (quoted name,
+  `formatDeclaredSummary` line "Soles · 10,294 · declara 4.13%", source badge);
+  right panel header shows the **confidence badge** (`deriveConfidence` from the
+  match source: catalog→alta, claude→media, web→baja, none→sin datos). Pure
+  helpers `deriveConfidence` + `formatDeclaredSummary` added to
+  `reviewTableShared.ts`. TDD: RED (missing fns / no badge) → GREEN. New tests:
+  4 shared (`deriveConfidence` 2, `formatDeclaredSummary` 2) + 1 component
+  (`ficha-review-table` 28/28). eslint clean. Full web suite 98 passed / 8
+  pre-existing / 0 new. Commit: `__T2__`.
 - [ ] **T-3 — Editable Series table.** Render `series_options` as an editable
   table (TER/flujos/rent/mínimo). Edits update editable-row state. Keep the
   existing `Serie/Admin del cliente` picker behavior green.

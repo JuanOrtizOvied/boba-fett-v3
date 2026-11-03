@@ -120,6 +120,65 @@ export function resolveRowSource(row: FichaEnrichedRow): RowSource {
   return row.enriched.primary_source;
 }
 
+/** Confidence level shown on a validation card, derived from the match source. */
+export type ConfidenceLevel = "alta" | "media" | "baja" | "sin_datos";
+
+export interface ConfidenceBadge {
+  level: ConfidenceLevel;
+  label: string;
+  className: string;
+}
+
+/**
+ * Derives the Slice-1 confidence badge from the enrichment source: a catalog
+ * match is the most trustworthy, Claude knowledge is medium, a web search is
+ * low, and no match means no data. This is a frontend derivation — Slice 2 may
+ * later replace it with a backend-computed confidence score.
+ */
+const CONFIDENCE_BY_SOURCE: Record<RowSource, ConfidenceBadge> = {
+  catalog: {
+    level: "alta",
+    label: "Confianza alta",
+    className: "border-green-200 bg-green-50 text-green-700",
+  },
+  claude_knowledge: {
+    level: "media",
+    label: "Confianza media",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  web_search: {
+    level: "baja",
+    label: "Confianza baja",
+    className: "border-orange-200 bg-orange-50 text-orange-700",
+  },
+  not_found: {
+    level: "sin_datos",
+    label: "Sin datos",
+    className: "border-sabbi-neutral-200 bg-sabbi-neutral-100 text-sabbi-neutral-600",
+  },
+};
+
+export function deriveConfidence(source: RowSource): ConfidenceBadge {
+  return CONFIDENCE_BY_SOURCE[source];
+}
+
+/**
+ * Builds the read-only "declared" summary line shown on a card's left rail,
+ * from the raw Excel values: "Soles · 10,294 · declara 4.13%". Blank parts and
+ * a zero amount are omitted.
+ */
+export function formatDeclaredSummary(row: FichaEnrichedRow): string {
+  const parts: string[] = [];
+  if (row.raw_currency?.trim()) parts.push(row.raw_currency.trim());
+  if (Number.isFinite(row.raw_amount) && row.raw_amount !== 0) {
+    parts.push(row.raw_amount.toLocaleString("en-US"));
+  }
+  if (row.raw_return_rate?.trim()) {
+    parts.push(`declara ${row.raw_return_rate.trim()}`);
+  }
+  return parts.join(" · ");
+}
+
 /** Format an `AssetAllocation[]` as editable text: "US 60%, Europe 40%". */
 export function formatAllocations(allocations: AssetAllocation[] | undefined): string {
   if (!allocations || allocations.length === 0) return "";

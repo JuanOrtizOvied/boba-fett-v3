@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   applySeriesAdminSelection,
   buildConfirmProducts,
+  deriveConfidence,
+  formatDeclaredSummary,
   formatFractionAsPercent,
   hasUnmappedRow,
   resolveRowSource,
@@ -236,6 +238,46 @@ describe("applySeriesAdminSelection", () => {
     expect(patch.selectedSeries).toBe("ZZ");
     expect(patch.commission).toBeUndefined();
     expect(patch.returnRateMin).toBeUndefined();
+  });
+});
+
+describe("deriveConfidence", () => {
+  test("maps the match source to a confidence level", () => {
+    expect(deriveConfidence("catalog").level).toBe("alta");
+    expect(deriveConfidence("catalog").label).toBe("Confianza alta");
+    expect(deriveConfidence("claude_knowledge").level).toBe("media");
+    expect(deriveConfidence("claude_knowledge").label).toBe("Confianza media");
+    expect(deriveConfidence("web_search").level).toBe("baja");
+    expect(deriveConfidence("web_search").label).toBe("Confianza baja");
+  });
+
+  test("reports no data when the cascade found nothing", () => {
+    expect(deriveConfidence("not_found").level).toBe("sin_datos");
+    expect(deriveConfidence("not_found").label).toBe("Sin datos");
+  });
+});
+
+describe("formatDeclaredSummary", () => {
+  test("joins declared currency, amount, and rate as the mockup shows", () => {
+    const row = baseRow({
+      raw_currency: "Soles",
+      raw_amount: 10_294,
+      raw_return_rate: "4.13%",
+    });
+    expect(formatDeclaredSummary(row)).toBe("Soles · 10,294 · declara 4.13%");
+  });
+
+  test("omits parts that are blank or a zero amount", () => {
+    expect(
+      formatDeclaredSummary(
+        baseRow({ raw_currency: "", raw_amount: 0, raw_return_rate: "" }),
+      ),
+    ).toBe("");
+    expect(
+      formatDeclaredSummary(
+        baseRow({ raw_currency: "USD", raw_amount: 0, raw_return_rate: "" }),
+      ),
+    ).toBe("USD");
   });
 });
 

@@ -7,6 +7,8 @@ import {
   SOURCE_BADGES,
   applySeriesAdminSelection,
   buildConfirmProducts,
+  deriveConfidence,
+  formatDeclaredSummary,
   hasUnmappedRow,
   resolveRowSource,
   toEditableRow,
@@ -140,6 +142,8 @@ function ProductCard({
   const isUnmapped = row.assetClass === "";
   const source = resolveRowSource(rawRow);
   const badge = SOURCE_BADGES[source];
+  const confidence = deriveConfidence(source);
+  const declaredSummary = formatDeclaredSummary(rawRow);
 
   return (
     <div
@@ -149,22 +153,40 @@ function ProductCard({
           : "border-sabbi-neutral-200 bg-white"
       }`}
     >
-      {/* Header: name + source badge */}
-      <div className="mb-4 flex items-start gap-3">
-        <input
-          value={row.name}
-          onChange={(e) => onUpdate({ name: e.target.value })}
-          className="flex-1 rounded-lg border border-sabbi-neutral-200 px-3 py-2 text-sm font-medium text-sabbi-neutral-900 outline-none focus:border-sabbi-primary"
-        />
-        <span
-          className={`mt-1 shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${badge.className}`}
-        >
-          {badge.label}
-        </span>
-      </div>
+      <div className="flex flex-col gap-4 md:flex-row">
+        {/* Left rail: declared (raw) product — read-only */}
+        <div className="flex w-full flex-col gap-2 md:w-56 md:shrink-0">
+          <p className="text-sm font-medium italic text-sabbi-neutral-900">
+            “{rawRow.raw_name}”
+          </p>
+          {declaredSummary && (
+            <p className="text-xs text-sabbi-neutral-600">{declaredSummary}</p>
+          )}
+          <span
+            className={`self-start rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+          >
+            {badge.label}
+          </span>
+        </div>
 
-      {/* Body: two-column grid */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        {/* Right panel: enriched (editable) product */}
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          {/* Confidence + enriched name */}
+          <div className="flex items-start gap-3">
+            <input
+              value={row.name}
+              onChange={(e) => onUpdate({ name: e.target.value })}
+              className="flex-1 rounded-lg border border-sabbi-neutral-200 px-3 py-2 text-sm font-medium text-sabbi-neutral-900 outline-none focus:border-sabbi-primary"
+            />
+            <span
+              className={`mt-1 shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${confidence.className}`}
+            >
+              {confidence.label}
+            </span>
+          </div>
+
+          {/* Body: two-column grid */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
         {/* Left column: simple fields */}
         <div className="flex flex-col gap-3">
           {row.seriesOptions.length > 0 && (
@@ -299,6 +321,8 @@ function ProductCard({
               allocations={row.underlying}
               onChange={(next) => onUpdate({ underlying: next })}
             />
+          </div>
+        </div>
           </div>
         </div>
       </div>
