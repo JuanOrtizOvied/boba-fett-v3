@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import FichaSummaryBar from "@/components/admin/ficha-patrimonial/FichaSummaryBar";
 import ReviewTable from "@/components/admin/ficha-patrimonial/ReviewTable";
 import UploadZone from "@/components/admin/ficha-patrimonial/UploadZone";
 import {
@@ -115,6 +116,7 @@ export default function FichaPatrimonialPage() {
               {parseResult.rows.length === 1 ? "" : "s"} para revisar.
             </p>
           </div>
+          <FichaSummaryBar rows={parseResult.rows} />
           <ReviewTable
             rows={parseResult.rows}
             userId={parseResult.client.user_id}
