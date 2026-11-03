@@ -85,10 +85,21 @@ emits plus frontend-derivable values.
   `reviewTableShared.ts`. TDD: RED (missing fns / no badge) → GREEN. New tests:
   4 shared (`deriveConfidence` 2, `formatDeclaredSummary` 2) + 1 component
   (`ficha-review-table` 28/28). eslint clean. Full web suite 98 passed / 8
-  pre-existing / 0 new. Commit: `__T2__`.
-- [ ] **T-3 — Editable Series table.** Render `series_options` as an editable
-  table (TER/flujos/rent/mínimo). Edits update editable-row state. Keep the
-  existing `Serie/Admin del cliente` picker behavior green.
+  pre-existing / 0 new. Commit: `1955b5f`.
+- [x] **T-3 — Editable Series table.** DONE. Route: INLINE. New `SeriesTable`
+  component renders every catalog `series_options` entry as an editable row —
+  columns `Serie` (read-only), `TER c/IGV`, `Flujos mín/máx`, `Rent. mín/máx`,
+  `Mínimo USD`, `Cómo se calculó`. Catalog fractions shown as plain percent
+  values via new `formatFractionValue` (0.0384 → "3.84"); `Mínimo USD` and
+  `Cómo se calculó` have no series-level catalog source in Slice 1 and start
+  blank. `EditableFichaRow` gains `editableSeries: EditableSeriesRow[]`
+  (initialised by `toEditableSeriesRows` in `toEditableRow`); edits are held in
+  that state (independent of the existing `Serie/Admin del cliente` picker, which
+  stays green). Inputs carry `aria-label="<col> serie <X>"`. `formatFractionAsPercent`
+  refactored onto a shared `fractionToPercentNumber` (behaviour unchanged). TDD:
+  RED (missing fns / no table) → GREEN. New tests: 4 shared + 1 component
+  (`ficha-review-table` 33/33). tsc + eslint clean. Full web suite 103 passed /
+  8 pre-existing / 0 new. Commit: `__T3__`.
 - [ ] **T-4 — Editable Administradores table.** Admins of the selected series,
   editable. Render + edit tests.
 - [ ] **T-5 — Per-line actions + confirm gating.** Aprobar/Descartar line state;

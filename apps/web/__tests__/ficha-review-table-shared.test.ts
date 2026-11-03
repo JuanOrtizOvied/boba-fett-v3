@@ -5,9 +5,11 @@ import {
   deriveConfidence,
   formatDeclaredSummary,
   formatFractionAsPercent,
+  formatFractionValue,
   hasUnmappedRow,
   resolveRowSource,
   toEditableRow,
+  toEditableSeriesRows,
 } from "@/components/admin/ficha-patrimonial/reviewTableShared";
 import type { FichaEnrichedRow } from "@/lib/portfolio-types";
 
@@ -192,6 +194,40 @@ describe("formatFractionAsPercent", () => {
   });
 });
 
+describe("formatFractionValue", () => {
+  test("renders a catalog fraction as a plain percent value (no % sign)", () => {
+    expect(formatFractionValue(0.0384)).toBe("3.84");
+    expect(formatFractionValue(0.05)).toBe("5");
+    expect(formatFractionValue(0)).toBe("0");
+  });
+
+  test("returns an empty string for a null/undefined value", () => {
+    expect(formatFractionValue(null)).toBe("");
+    expect(formatFractionValue(undefined)).toBe("");
+  });
+});
+
+describe("toEditableSeriesRows", () => {
+  test("maps catalog series options to editable rows (fractions as plain percents)", () => {
+    const rows = toEditableSeriesRows(v2Enriched().series_options ?? []);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({
+      series: "A",
+      ter: "3.84",
+      flowsMin: "",
+      flowsMax: "",
+      returnMin: "5",
+      returnMax: "8",
+      minimumUsd: "",
+      howCalculated: "",
+    });
+  });
+
+  test("returns an empty array when there are no series options", () => {
+    expect(toEditableSeriesRows([])).toEqual([]);
+  });
+});
+
 describe("toEditableRow with V2 series options", () => {
   test("carries series options, starts unselected, commercial fields blank", () => {
     const editable = toEditableRow(
@@ -199,6 +235,8 @@ describe("toEditableRow with V2 series options", () => {
     );
     expect(editable.name).toBe("Latam Credit Opportunities Fund");
     expect(editable.seriesOptions.map((s) => s.series)).toEqual(["A"]);
+    expect(editable.editableSeries.map((s) => s.series)).toEqual(["A"]);
+    expect(editable.editableSeries[0].ter).toBe("3.84");
     expect(editable.selectedSeries).toBe("");
     expect(editable.selectedAdministrator).toBe("");
     // Commercial fields are not auto-filled — the admin picks a series/admin.

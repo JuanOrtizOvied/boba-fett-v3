@@ -92,6 +92,23 @@ export const SOURCE_BADGES: Record<RowSource, { label: string; className: string
   },
 };
 
+/**
+ * One editable row of the validation card's Series table — the catalog series
+ * values the admin can review/correct. Numeric catalog fields are held as plain
+ * percent-value strings (e.g. "3.84"); `minimumUsd` and `howCalculated` have no
+ * series-level catalog source in Slice 1 and start blank.
+ */
+export interface EditableSeriesRow {
+  series: string;
+  ter: string;
+  flowsMin: string;
+  flowsMax: string;
+  returnMin: string;
+  returnMax: string;
+  minimumUsd: string;
+  howCalculated: string;
+}
+
 /** One row's editable review state. */
 export interface EditableFichaRow {
   excelRow: number;
@@ -113,6 +130,8 @@ export interface EditableFichaRow {
   seriesOptions: CatalogSeriesOption[];
   selectedSeries: string;
   selectedAdministrator: string;
+  // Editable copy of the catalog series values (the Series table).
+  editableSeries: EditableSeriesRow[];
 }
 
 export function resolveRowSource(row: FichaEnrichedRow): RowSource {
@@ -198,6 +217,26 @@ export function parseAllocations(text: string): AssetAllocation[] {
 }
 
 /**
+ * Maps the catalog series options into editable Series-table rows, formatting
+ * the fraction fields as plain percent values. `minimumUsd`/`howCalculated`
+ * have no series-level source yet and start blank.
+ */
+export function toEditableSeriesRows(
+  options: CatalogSeriesOption[],
+): EditableSeriesRow[] {
+  return options.map((s) => ({
+    series: s.series,
+    ter: formatFractionValue(s.management_fee_ter),
+    flowsMin: formatFractionValue(s.flows_min),
+    flowsMax: formatFractionValue(s.flows_max),
+    returnMin: formatFractionValue(s.return_min),
+    returnMax: formatFractionValue(s.return_max),
+    minimumUsd: "",
+    howCalculated: "",
+  }));
+}
+
+/**
  * Maps a parsed+enriched row into its initial editable review state.
  */
 export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
@@ -219,7 +258,21 @@ export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
     seriesOptions: row.enriched?.series_options ?? [],
     selectedSeries: "",
     selectedAdministrator: "",
+    editableSeries: toEditableSeriesRows(row.enriched?.series_options ?? []),
   };
+}
+
+/**
+ * Converts a catalog fraction (0.0384) to its percent value as a trimmed number
+ * string ("3.84"). Returns null for an unknown value (null/undefined), so the
+ * callers can distinguish "no value" from "0%".
+ */
+function fractionToPercentNumber(value: number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const pct = value * 100;
+  // Round to 4 decimals to avoid float noise (0.0384 * 100 = 3.8400000000000003).
+  const rounded = Math.round(pct * 10000) / 10000;
+  return `${rounded}`;
 }
 
 /**
@@ -227,11 +280,17 @@ export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
  * trailing zeros. Returns "" for null/undefined (an unknown value, not 0%).
  */
 export function formatFractionAsPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "";
-  const pct = value * 100;
-  // Round to 4 decimals to avoid float noise (0.0384 * 100 = 3.8400000000000003).
-  const rounded = Math.round(pct * 10000) / 10000;
-  return `${rounded}%`;
+  const n = fractionToPercentNumber(value);
+  return n === null ? "" : `${n}%`;
+}
+
+/**
+ * Like `formatFractionAsPercent` but without the "%" sign — the plain percent
+ * value shown in the editable Series/Administradores tables ("3.84"). Returns
+ * "" for an unknown value.
+ */
+export function formatFractionValue(value: number | null | undefined): string {
+  return fractionToPercentNumber(value) ?? "";
 }
 
 /**

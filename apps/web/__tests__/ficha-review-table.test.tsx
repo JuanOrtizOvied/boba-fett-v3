@@ -124,6 +124,22 @@ describe("ReviewTable V2 series/admin picker", () => {
   });
 });
 
+describe("ReviewTable V2 editable Series table", () => {
+  test("renders the catalog series as editable rows (plain percent values) and keeps edits", async () => {
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    const ter = screen.getByLabelText("TER c/IGV serie A");
+    expect(ter).toHaveValue("3.84");
+    expect(screen.getByLabelText("Rent. mín serie A")).toHaveValue("5");
+    expect(screen.getByLabelText("Rent. máx serie A")).toHaveValue("8");
+
+    await user.clear(ter);
+    await user.type(ter, "4.00");
+    expect(screen.getByLabelText("TER c/IGV serie A")).toHaveValue("4.00");
+  });
+});
+
 describe("ReviewTable rendering", () => {
   test("renders one card per parsed product with editable fields", () => {
     render(

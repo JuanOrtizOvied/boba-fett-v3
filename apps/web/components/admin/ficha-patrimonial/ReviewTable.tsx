@@ -13,6 +13,7 @@ import {
   resolveRowSource,
   toEditableRow,
   type EditableFichaRow,
+  type EditableSeriesRow,
   type FichaAssetClassKey,
 } from "./reviewTableShared";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
@@ -124,6 +125,71 @@ function Field({
     <div className="flex flex-col gap-1">
       <label className="text-xs font-medium text-sabbi-neutral-500">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// -- Series table (editable catalog series) -----------------------------------
+
+const SERIES_COLUMNS: { key: keyof EditableSeriesRow; label: string }[] = [
+  { key: "ter", label: "TER c/IGV" },
+  { key: "flowsMin", label: "Flujos mín" },
+  { key: "flowsMax", label: "Flujos máx" },
+  { key: "returnMin", label: "Rent. mín" },
+  { key: "returnMax", label: "Rent. máx" },
+  { key: "minimumUsd", label: "Mínimo USD" },
+  { key: "howCalculated", label: "Cómo se calculó" },
+];
+
+function SeriesTable({
+  series,
+  onChange,
+}: {
+  series: EditableSeriesRow[];
+  onChange: (next: EditableSeriesRow[]) => void;
+}) {
+  const update = (index: number, patch: Partial<EditableSeriesRow>) => {
+    onChange(series.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium text-sabbi-neutral-500">
+        Series (porcentajes en %)
+      </span>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="text-left text-sabbi-neutral-500">
+              <th className="px-1 py-1 font-medium">Serie</th>
+              {SERIES_COLUMNS.map((c) => (
+                <th key={c.key} className="px-1 py-1 font-medium">
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {series.map((s, i) => (
+              <tr key={s.series || i}>
+                <td className="px-1 py-1 font-medium text-sabbi-neutral-700">
+                  {s.series || "—"}
+                </td>
+                {SERIES_COLUMNS.map((c) => (
+                  <td key={c.key} className="px-1 py-1">
+                    <input
+                      value={s[c.key]}
+                      aria-label={`${c.label} serie ${s.series}`}
+                      onChange={(e) => update(i, { [c.key]: e.target.value })}
+                      className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -324,6 +390,13 @@ function ProductCard({
           </div>
         </div>
           </div>
+
+          {row.editableSeries.length > 0 && (
+            <SeriesTable
+              series={row.editableSeries}
+              onChange={(next) => onUpdate({ editableSeries: next })}
+            />
+          )}
         </div>
       </div>
     </div>
