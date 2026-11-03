@@ -434,5 +434,14 @@ class SearchResult(BaseModel):
     # Left empty by the flat-catalog (chat) cascade.
     catalog_product_code: str = ""
     series_options: list[CatalogSeriesOption] = Field(default_factory=list)
+    # Ficha-patrimonial V2 Slice-2 signals (catalog-sourced). Left at defaults by
+    # the flat-catalog (chat) cascade.
+    ticker_isin: str = ""
+    investment_horizon: str = ""
+    # Fuzzy-match score (0..1) of the L1 catalog match; 0.0 when not catalog-matched.
+    similarity: float = 0.0
+    # Data-as-of date for the catalog match (proxy: the catalog row's created_at),
+    # ISO date string or "".
+    data_asof: str = ""
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)

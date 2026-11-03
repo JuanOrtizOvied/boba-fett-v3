@@ -433,6 +433,10 @@ async def _search_catalog_v2(query: str, pool: asyncpg.Pool) -> SearchResult:
         return result
     result.catalog_product_code = match.code
     result.series_options = _series_options(match)
+    result.ticker_isin = match.ticker_isin
+    result.investment_horizon = match.investment_horizon
+    result.similarity = match.match_similarity or 0.0
+    result.data_asof = match.created_at.date().isoformat() if match.created_at else ""
     product_data = {
         "name": match.name,
         "currency": match.currency,

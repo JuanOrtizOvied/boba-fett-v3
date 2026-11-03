@@ -8,6 +8,7 @@ Fee, commission, flow and return values are FRACTIONS as in the source Excel
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 
 import asyncpg
@@ -61,12 +62,16 @@ class CatalogProductRow(BaseModel):
     underlying: list[AssetAllocation] = Field(default_factory=list)
     currency: str = ""
     investment_horizon: str = ""
+    created_at: datetime | None = None
+    # Fuzzy-match similarity of the query that produced this row — set by
+    # `search_for_enrichment`, NOT a stored column. None for direct lookups.
+    match_similarity: float | None = None
     series: list[CatalogProductSeries] = Field(default_factory=list)
 
 
 _PRODUCT_COLS = (
     "id, code, name, ticker_isin, manager, asset_class, geographic_focus, "
-    "underlying, currency, investment_horizon"
+    "underlying, currency, investment_horizon, created_at"
 )
 
 
@@ -82,6 +87,7 @@ def _product_from_record(r: asyncpg.Record) -> CatalogProductRow:
         underlying=_allocations(r["underlying"]),
         currency=r["currency"] or "",
         investment_horizon=r["investment_horizon"] or "",
+        created_at=r["created_at"],
     )
 
 
@@ -272,7 +278,10 @@ class NormalizedCatalogRepository:
         )
         if row is None:
             return None
-        return await self.get_product_detail(row["code"])
+        product = await self.get_product_detail(row["code"])
+        if product is not None:
+            product.match_similarity = float(row["sim"]) if row["sim"] is not None else None
+        return product
 
     # --- writes -------------------------------------------------------------
     # Constraint violations (asyncpg UniqueViolationError / ForeignKeyViolationError)

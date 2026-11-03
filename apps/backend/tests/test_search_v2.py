@@ -85,6 +85,37 @@ async def test_v2_fills_product_fields_and_attaches_series_options(monkeypatch):
     assert [a.administrator for a in result.series_options[0].administrators] == ["Admin Co"]
 
 
+async def test_v2_carries_catalog_signals(monkeypatch):
+    """Slice 2: the V2 cascade surfaces ticker/ISIN, horizon, the match
+    similarity, and a data-as-of date from the catalog product."""
+    from datetime import datetime, timezone
+
+    product = _canned_product()
+    product.ticker_isin = "US12345"
+    product.investment_horizon = "Largo plazo"
+    product.created_at = datetime(2026, 1, 19, tzinfo=timezone.utc)
+    product.match_similarity = 0.73
+
+    async def fake_search(self, query):
+        return product
+
+    async def no_claude(query):
+        return {}
+
+    monkeypatch.setattr(
+        search_mod.NormalizedCatalogRepository, "search_for_enrichment", fake_search
+    )
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+
+    result = await search_mod.cascade_search_v2("latam credit", object())
+
+    assert result is not None
+    assert result.ticker_isin == "US12345"
+    assert result.investment_horizon == "Largo plazo"
+    assert result.similarity == pytest.approx(0.73)
+    assert result.data_asof == "2026-01-19"
+
+
 async def test_v2_never_fills_commercial_fields_from_claude(monkeypatch):
     """Even when L2 (Claude) returns commercial values, the V2 cascade must
     drop them — only product-level fields get gap-filled."""
