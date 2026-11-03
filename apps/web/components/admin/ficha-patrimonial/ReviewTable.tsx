@@ -9,8 +9,8 @@ import {
   buildConfirmProducts,
   deriveConfidence,
   formatDeclaredSummary,
-  hasUnmappedRow,
   resolveRowSource,
+  selectApprovedRows,
   toEditableRow,
   type EditableAdminRow,
   type EditableFichaRow,
@@ -471,6 +471,47 @@ function ProductCard({
               onChange={(next) => onUpdate({ editableAdmins: next })}
             />
           )}
+
+          {/* Per-line actions */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-sabbi-neutral-100 pt-3">
+            <button
+              type="button"
+              onClick={() => onUpdate({ lineStatus: "approved" })}
+              disabled={isUnmapped}
+              className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
+            >
+              Aprobar y crear producto
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Disponible en una próxima etapa"
+              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm text-sabbi-neutral-500 opacity-60"
+            >
+              Es un producto existente
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Disponible en una próxima etapa"
+              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm text-sabbi-neutral-500 opacity-60"
+            >
+              Volver a investigar
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdate({ lineStatus: "discarded" })}
+              className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+            >
+              Descartar línea
+            </button>
+            {row.lineStatus === "approved" && (
+              <span className="text-xs font-medium text-green-700">Aprobada</span>
+            )}
+            {row.lineStatus === "discarded" && (
+              <span className="text-xs font-medium text-red-600">Descartada</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -492,14 +533,14 @@ export default function ReviewTable({ rows, userId, onConfirmed }: ReviewTablePr
     );
   };
 
-  const confirmDisabled =
-    isSubmitting || editableRows.length === 0 || hasUnmappedRow(editableRows);
+  const approvedRows = selectApprovedRows(editableRows);
+  const confirmDisabled = isSubmitting || approvedRows.length === 0;
 
   const handleConfirm = async () => {
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      const products = buildConfirmProducts(editableRows);
+      const products = buildConfirmProducts(selectApprovedRows(editableRows));
       const res = await fetchWithAuth("/api/admin/ficha-patrimonial/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -108,10 +108,22 @@ emits plus frontend-derivable values.
   `toEditableAdminRows` in `toEditableRow`); inputs carry
   `aria-label="<col> <admin> serie <series>"`. TDD: RED → GREEN. New tests: 4
   shared + 1 component (`ficha-review-table` 38/38). tsc + eslint clean. Full web
-  suite 108 passed / 8 pre-existing / 0 new. Commit: `__T4__`.
-- [ ] **T-5 — Per-line actions + confirm gating.** Aprobar/Descartar line state;
-  deferred buttons disabled; confirm posts only approved lines. Update the
-  existing confirm tests.
+  suite 108 passed / 8 pre-existing / 0 new. Commit: `796dc3a`.
+- [x] **T-5 — Per-line actions + confirm gating.** DONE. Route: INLINE. Added
+  `FichaLineStatus` (`pending`/`approved`/`discarded`) + `lineStatus` on
+  `EditableFichaRow` (default `pending`), and `selectApprovedRows`. Per-line
+  button bar in the card: **Aprobar y crear producto** (→approved, disabled while
+  unmapped), **Descartar línea** (→discarded), **Es un producto existente** and
+  **Volver a investigar** rendered but DISABLED (Slice 2/3). Bulk **Confirmar**
+  now posts ONLY approved lines (`buildConfirmProducts(selectApprovedRows(...))`)
+  and is enabled only when ≥1 line is approved; approved/discarded show an
+  inline "Aprobada"/"Descartada" tag. Updated the 2 existing confirm-submission
+  tests to approve first and rewrote the gating test; removed the now-unused
+  `hasUnmappedRow` import. TDD: RED → GREEN. New/updated tests: 2 shared + 3
+  component (gating/deferred/discard) → `ficha-review-table.test` 11/11,
+  `ficha-review-table-shared` 31/31. tsc + eslint clean. Full web suite 112
+  passed / 8 pre-existing / 0 new (`ficha-patrimonial-page` still 2 failed / 5
+  passed — confirm-semantics change added no regression). Commit: `__T5__`.
 
 ## Acceptance criteria / checks
 

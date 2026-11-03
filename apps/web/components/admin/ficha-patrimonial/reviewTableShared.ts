@@ -123,6 +123,12 @@ export interface EditableAdminRow {
   minimumUsd: string;
 }
 
+/**
+ * Per-line validation state. `pending` = not yet decided, `approved` = the admin
+ * accepted it (included in confirm), `discarded` = dropped (excluded).
+ */
+export type FichaLineStatus = "pending" | "approved" | "discarded";
+
 /** One row's editable review state. */
 export interface EditableFichaRow {
   excelRow: number;
@@ -148,6 +154,8 @@ export interface EditableFichaRow {
   editableSeries: EditableSeriesRow[];
   // Editable copy of the catalog administrators (the Administradores table).
   editableAdmins: EditableAdminRow[];
+  // Per-line validation decision.
+  lineStatus: FichaLineStatus;
 }
 
 export function resolveRowSource(row: FichaEnrichedRow): RowSource {
@@ -296,7 +304,13 @@ export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
     selectedAdministrator: "",
     editableSeries: toEditableSeriesRows(row.enriched?.series_options ?? []),
     editableAdmins: toEditableAdminRows(row.enriched?.series_options ?? []),
+    lineStatus: "pending",
   };
+}
+
+/** Returns only the rows the admin approved — the ones a confirm will create. */
+export function selectApprovedRows(rows: EditableFichaRow[]): EditableFichaRow[] {
+  return rows.filter((row) => row.lineStatus === "approved");
 }
 
 /**

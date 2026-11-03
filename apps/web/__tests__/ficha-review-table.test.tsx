@@ -189,7 +189,7 @@ describe("ReviewTable rendering", () => {
 });
 
 describe("ReviewTable confirm gating", () => {
-  test("disables Confirmar while any row is unmapped, enables it once an asset class is selected", async () => {
+  test("enables Confirmar only after a line is approved; approving needs a mapped asset class", async () => {
     const user = userEvent.setup();
     render(
       <ReviewTable
@@ -201,10 +201,63 @@ describe("ReviewTable confirm gating", () => {
     const confirmButton = screen.getByRole("button", { name: /confirmar/i });
     expect(confirmButton).toBeDisabled();
 
-    const select = screen.getByRole("combobox");
-    await user.selectOptions(select, "cash_y_otros");
+    const approve = screen.getByRole("button", {
+      name: "Aprobar y crear producto",
+    });
+    // An unmapped row cannot be approved.
+    expect(approve).toBeDisabled();
 
+    await user.selectOptions(screen.getByRole("combobox"), "cash_y_otros");
+    expect(approve).toBeEnabled();
+
+    await user.click(approve);
     expect(confirmButton).toBeEnabled();
+  });
+
+  test("deferred per-line actions are rendered but disabled", () => {
+    render(
+      <ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Es un producto existente" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Volver a investigar" }),
+    ).toBeDisabled();
+  });
+
+  test("discarding a line excludes it from the confirm payload", async () => {
+    vi.mocked(fetchWithAuth).mockReset();
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ created_count: 1, product_ids: ["p1"] }),
+    } as Response);
+
+    const user = userEvent.setup();
+    render(
+      <ReviewTable
+        rows={[MAPPED_ROW, { ...MAPPED_ROW, excel_row: 99 }]}
+        userId="user-1"
+        onConfirmed={vi.fn()}
+      />,
+    );
+
+    const approveButtons = screen.getAllByRole("button", {
+      name: "Aprobar y crear producto",
+    });
+    const discardButtons = screen.getAllByRole("button", {
+      name: "Descartar línea",
+    });
+    // Approve the first line, discard the second.
+    await user.click(approveButtons[0]);
+    await user.click(discardButtons[1]);
+
+    await user.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    const [, init] = vi.mocked(fetchWithAuth).mock.calls[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.products).toHaveLength(1);
   });
 });
 
@@ -226,6 +279,9 @@ describe("ReviewTable confirm submission", () => {
       <ReviewTable rows={[MAPPED_ROW]} userId="user-42" onConfirmed={onConfirmed} />,
     );
 
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
     await user.click(screen.getByRole("button", { name: /confirmar/i }));
 
     expect(fetchWithAuth).toHaveBeenCalledTimes(1);
@@ -255,6 +311,9 @@ describe("ReviewTable confirm submission", () => {
       <ReviewTable rows={[MAPPED_ROW]} userId="user-42" onConfirmed={onConfirmed} />,
     );
 
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
     await user.click(screen.getByRole("button", { name: /confirmar/i }));
 
     expect(

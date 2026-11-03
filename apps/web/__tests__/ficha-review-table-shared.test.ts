@@ -9,6 +9,7 @@ import {
   formatPlainNumber,
   hasUnmappedRow,
   resolveRowSource,
+  selectApprovedRows,
   toEditableAdminRows,
   toEditableRow,
   toEditableSeriesRows,
@@ -353,6 +354,22 @@ describe("formatDeclaredSummary", () => {
         baseRow({ raw_currency: "USD", raw_amount: 0, raw_return_rate: "" }),
       ),
     ).toBe("USD");
+  });
+});
+
+describe("line status", () => {
+  test("toEditableRow starts a row as pending", () => {
+    expect(toEditableRow(baseRow({})).lineStatus).toBe("pending");
+  });
+
+  test("selectApprovedRows keeps only approved rows (pending/discarded excluded)", () => {
+    const a = toEditableRow(baseRow({ excel_row: 8 }));
+    const b = toEditableRow(baseRow({ excel_row: 9 }));
+    const c = toEditableRow(baseRow({ excel_row: 10 }));
+    a.lineStatus = "approved";
+    b.lineStatus = "discarded";
+    // c stays pending
+    expect(selectApprovedRows([a, b, c]).map((r) => r.excelRow)).toEqual([8]);
   });
 });
 
