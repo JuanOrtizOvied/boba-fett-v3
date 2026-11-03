@@ -7,8 +7,9 @@ import {
   SOURCE_BADGES,
   applySeriesAdminSelection,
   buildConfirmProducts,
-  deriveConfidence,
   formatDeclaredSummary,
+  formatSimilarityPercent,
+  resolveConfidence,
   resolveRowSource,
   selectApprovedRows,
   toEditableRow,
@@ -275,8 +276,11 @@ function ProductCard({
   const isUnmapped = row.assetClass === "";
   const source = resolveRowSource(rawRow);
   const badge = SOURCE_BADGES[source];
-  const confidence = deriveConfidence(source);
+  const confidence = resolveConfidence(rawRow);
   const declaredSummary = formatDeclaredSummary(rawRow);
+  const similarity = formatSimilarityPercent(rawRow.enriched?.similarity);
+  const catalogMatched = rawRow.enriched?.catalog_matched ?? false;
+  const dataAsof = rawRow.enriched?.data_asof || "—";
 
   return (
     <div
@@ -300,6 +304,11 @@ function ProductCard({
           >
             {badge.label}
           </span>
+          {similarity && (
+            <span className="text-[11px] text-sabbi-neutral-500">
+              similitud {similarity}
+            </span>
+          )}
         </div>
 
         {/* Right panel: enriched (editable) product */}
@@ -312,7 +321,8 @@ function ProductCard({
               {confidence.label}
             </span>
             <span className="text-xs text-sabbi-neutral-500">
-              Producto nuevo · dato al —
+              {catalogMatched ? "Producto existente" : "Producto nuevo"} · dato al{" "}
+              {dataAsof}
             </span>
           </div>
 
@@ -338,12 +348,10 @@ function ProductCard({
               </Field>
               <Field label="Ticker / ISIN">
                 <input
-                  value=""
+                  value={rawRow.enriched?.ticker_isin ?? ""}
                   aria-label="Ticker / ISIN"
                   readOnly
-                  disabled
-                  title="Disponible en una próxima etapa"
-                  className={inputClass + " opacity-60"}
+                  className={inputClass + " bg-sabbi-neutral-50"}
                 />
               </Field>
             </div>
@@ -359,12 +367,10 @@ function ProductCard({
               </Field>
               <Field label="Horizonte">
                 <input
-                  value=""
+                  value={rawRow.enriched?.investment_horizon ?? ""}
                   aria-label="Horizonte"
                   readOnly
-                  disabled
-                  title="Disponible en una próxima etapa"
-                  className={inputClass + " opacity-60"}
+                  className={inputClass + " bg-sabbi-neutral-50"}
                 />
               </Field>
             </div>

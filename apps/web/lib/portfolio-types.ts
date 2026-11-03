@@ -143,6 +143,17 @@ export interface SearchResult {
    * the series/admin options the reviewer picks from. Absent for chat/V1. */
   catalog_product_code?: string;
   series_options?: CatalogSeriesOption[];
+  /** Ficha V2 Slice-2 signals (catalog-sourced). Absent for chat/V1. */
+  ticker_isin?: string;
+  investment_horizon?: string;
+  /** Fuzzy-match score 0..1 of the L1 catalog match (0 when not catalog-matched). */
+  similarity?: number;
+  /** Data-as-of ISO date for the catalog match (proxy: catalog row created_at). */
+  data_asof?: string;
+  /** Backend-derived confidence level: "alta" | "media" | "baja" | "sin_datos". */
+  confidence?: string;
+  /** True when the product is an accepted catalog match ("ya estaba en la BD"). */
+  catalog_matched?: boolean;
   primary_source: FieldSource;
   provenance: ProvenanceMap;
 }

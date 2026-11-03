@@ -64,11 +64,20 @@ confidence on the match similarity.
   `catalog_matched: bool` to `SearchResult`. TDD: RED (no `_classify_match`, no
   fields) → GREEN. `test_search_v2` 6/6 incl. the full threshold table (the 0.136
   false positive now classifies "baja"/not-matched, NOT "alta"). Backend suite 327
-  passed / 140 skipped / 0 new. Commit: `__T2__`.
-- [ ] **T-3 — Frontend consumes the signals.** TS mirror of the new fields; show
-  similitud % (declared rail), "dato al" (status line), Ticker/ISIN + Horizonte
-  values (enable the Slice-1 disabled fields), "Producto nuevo/existente", and
-  confidence from the backend value. TDD (vitest).
+  passed / 140 skipped / 0 new. Commit: `a4c39f0`.
+- [x] **T-3 — Frontend consumes the signals.** DONE. Route: INLINE. TS mirror:
+  added optional `ticker_isin`/`investment_horizon`/`similarity`/`data_asof`/
+  `confidence`/`catalog_matched` to `SearchResult` (`portfolio-types.ts`).
+  Refactored confidence to a level→badge map (`confidenceBadge`, `SOURCE_TO_LEVEL`);
+  `deriveConfidence` kept as the source fallback; new `resolveConfidence(row)`
+  prefers the backend `confidence`; new `formatSimilarityPercent`. `ProductCard`:
+  confidence badge from `resolveConfidence`, **similitud %** on the declared rail,
+  status line "Producto existente/nuevo · dato al <fecha>" from
+  `catalog_matched`/`data_asof`, and Ticker/ISIN + Horizonte now show the catalog
+  values read-only (replacing the Slice-1 disabled placeholders). TDD: RED → GREEN.
+  New tests: 5 shared (resolveConfidence 3, formatSimilarityPercent 2) + 2 component
+  (signals + ticker/horizon). tsc + eslint clean. Full web suite 120 passed / 8
+  pre-existing / 0 new. Commit: `__T3__`.
 - [ ] **T-4 — Header counts.** Summary bar fills `ya estaban en la BD`,
   `investigados`, `por decidir` from the per-row classification + line status.
 

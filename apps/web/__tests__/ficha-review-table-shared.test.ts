@@ -7,6 +7,8 @@ import {
   formatFractionAsPercent,
   formatFractionValue,
   formatPlainNumber,
+  formatSimilarityPercent,
+  resolveConfidence,
   hasUnmappedRow,
   resolveRowSource,
   selectApprovedRows,
@@ -331,6 +333,39 @@ describe("deriveConfidence", () => {
   test("reports no data when the cascade found nothing", () => {
     expect(deriveConfidence("not_found").level).toBe("sin_datos");
     expect(deriveConfidence("not_found").label).toBe("Sin datos");
+  });
+});
+
+describe("resolveConfidence", () => {
+  test("prefers the backend confidence level when present", () => {
+    const row = baseRow({
+      enriched: { ...v2Enriched(), confidence: "media", primary_source: "catalog" },
+    });
+    expect(resolveConfidence(row).level).toBe("media");
+    expect(resolveConfidence(row).label).toBe("Confianza media");
+  });
+
+  test("falls back to the source-derived confidence when the backend omits it", () => {
+    const row = baseRow({ enriched: { ...v2Enriched(), primary_source: "catalog" } });
+    expect(resolveConfidence(row).level).toBe("alta"); // catalog -> alta (Slice-1 fallback)
+  });
+
+  test("reports sin_datos when there is no enrichment", () => {
+    expect(
+      resolveConfidence(baseRow({ enriched: null, enrichment_failed: true })).level,
+    ).toBe("sin_datos");
+  });
+});
+
+describe("formatSimilarityPercent", () => {
+  test("formats a 0..1 similarity as a rounded percent", () => {
+    expect(formatSimilarityPercent(0.1827)).toBe("18%");
+    expect(formatSimilarityPercent(0.73)).toBe("73%");
+  });
+
+  test("returns empty for a non-positive or missing similarity", () => {
+    expect(formatSimilarityPercent(0)).toBe("");
+    expect(formatSimilarityPercent(undefined)).toBe("");
   });
 });
 

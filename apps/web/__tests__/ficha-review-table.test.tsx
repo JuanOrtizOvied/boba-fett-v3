@@ -74,6 +74,12 @@ const V2_ROW: FichaEnrichedRow = {
     underlying: [],
     catalog_product_id: null,
     catalog_product_code: "BD-00001",
+    ticker_isin: "US0001",
+    investment_horizon: "Largo plazo",
+    similarity: 0.71,
+    data_asof: "2026-01-19",
+    confidence: "alta",
+    catalog_matched: true,
     series_options: [
       {
         series: "A",
@@ -203,10 +209,18 @@ describe("ReviewTable rendering", () => {
     expect(screen.getByLabelText("Gestor")).toHaveValue("Nuevo Gestor");
   });
 
-  test("renders Ticker/ISIN and Horizonte as deferred disabled fields", () => {
+  test("fills Ticker/ISIN and Horizonte from the catalog signals (read-only)", () => {
     render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
-    expect(screen.getByLabelText("Ticker / ISIN")).toBeDisabled();
-    expect(screen.getByLabelText("Horizonte")).toBeDisabled();
+    expect(screen.getByLabelText("Ticker / ISIN")).toHaveValue("US0001");
+    expect(screen.getByLabelText("Horizonte")).toHaveValue("Largo plazo");
+  });
+
+  test("shows backend confidence, similitud %, and catalog-match status", () => {
+    render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+    expect(screen.getByText("Confianza alta")).toBeInTheDocument();
+    expect(screen.getByText(/similitud 71%/i)).toBeInTheDocument();
+    expect(screen.getByText(/Producto existente/)).toBeInTheDocument();
+    expect(screen.getByText(/dato al 2026-01-19/)).toBeInTheDocument();
   });
 
   test("flags the unmapped row with a warning", () => {

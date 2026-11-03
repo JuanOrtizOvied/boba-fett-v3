@@ -173,37 +173,68 @@ export interface ConfidenceBadge {
   className: string;
 }
 
-/**
- * Derives the Slice-1 confidence badge from the enrichment source: a catalog
- * match is the most trustworthy, Claude knowledge is medium, a web search is
- * low, and no match means no data. This is a frontend derivation — Slice 2 may
- * later replace it with a backend-computed confidence score.
- */
-const CONFIDENCE_BY_SOURCE: Record<RowSource, ConfidenceBadge> = {
-  catalog: {
-    level: "alta",
+const CONFIDENCE_BADGES: Record<ConfidenceLevel, { label: string; className: string }> = {
+  alta: {
     label: "Confianza alta",
     className: "border-green-200 bg-green-50 text-green-700",
   },
-  claude_knowledge: {
-    level: "media",
+  media: {
     label: "Confianza media",
     className: "border-blue-200 bg-blue-50 text-blue-700",
   },
-  web_search: {
-    level: "baja",
+  baja: {
     label: "Confianza baja",
     className: "border-orange-200 bg-orange-50 text-orange-700",
   },
-  not_found: {
-    level: "sin_datos",
+  sin_datos: {
     label: "Sin datos",
     className: "border-sabbi-neutral-200 bg-sabbi-neutral-100 text-sabbi-neutral-600",
   },
 };
 
+const SOURCE_TO_LEVEL: Record<RowSource, ConfidenceLevel> = {
+  catalog: "alta",
+  claude_knowledge: "media",
+  web_search: "baja",
+  not_found: "sin_datos",
+};
+
+export function confidenceBadge(level: ConfidenceLevel): ConfidenceBadge {
+  return { level, ...CONFIDENCE_BADGES[level] };
+}
+
+function isConfidenceLevel(value: string): value is ConfidenceLevel {
+  return (
+    value === "alta" ||
+    value === "media" ||
+    value === "baja" ||
+    value === "sin_datos"
+  );
+}
+
+/**
+ * Source-derived confidence badge (catalog→alta, Claude→media, web→baja, none→
+ * sin_datos). This is the Slice-1 fallback used when the backend omits a
+ * confidence level; `resolveConfidence` prefers the backend value.
+ */
 export function deriveConfidence(source: RowSource): ConfidenceBadge {
-  return CONFIDENCE_BY_SOURCE[source];
+  return confidenceBadge(SOURCE_TO_LEVEL[source]);
+}
+
+/**
+ * Confidence badge for a row — prefers the backend-computed confidence level
+ * (Slice 2, gated by match similarity) and falls back to the source-derived one.
+ */
+export function resolveConfidence(row: FichaEnrichedRow): ConfidenceBadge {
+  const backend = row.enriched?.confidence;
+  if (backend && isConfidenceLevel(backend)) return confidenceBadge(backend);
+  return deriveConfidence(resolveRowSource(row));
+}
+
+/** Formats a 0..1 similarity as a rounded percent ("18%"); "" when not positive. */
+export function formatSimilarityPercent(value: number | null | undefined): string {
+  if (!value || value <= 0) return "";
+  return `${Math.round(value * 100)}%`;
 }
 
 /**
