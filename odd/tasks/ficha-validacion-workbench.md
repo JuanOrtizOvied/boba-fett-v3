@@ -140,7 +140,7 @@ emits plus frontend-derivable values.
   and deferred-fields tests. `ficha-review-table.test` 13/13,
   `ficha-review-table-shared` 31/31. tsc + eslint clean. Full web suite 114 passed
   / 8 pre-existing / 0 new (`ficha-patrimonial-page` still 2 failed / 5 passed).
-  Commit: `__T6__`.
+  Commit: `c34914c`.
 
 ### Known Slice-1 limitation (from live run)
 
