@@ -76,7 +76,7 @@ Fichas auto-save on parse (every upload appears in the sidebar).
   `api/routes.py` lifespan. TDD: RED (7 failing) → GREEN. `test_ficha_patrimonial_routes`
   17/17 (incl. auto-save, list/filter, get/404, line-status/invalid, confirm).
   Backend suite 346 passed / 143 skipped / 0 new. ruff clean; `api.routes` imports
-  clean. Commit: `__T3__`.
+  clean. Commit: `070e6c6`.
 - [ ] **(Slice 3b)** sidebar UI + filters — separate doc.
 
 ## Acceptance criteria / checks
