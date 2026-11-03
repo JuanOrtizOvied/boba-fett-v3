@@ -194,6 +194,14 @@ class FichaParseResponse(BaseModel):
 
     client: FichaClientInfo
     rows: list[FichaEnrichedRow]
+    # Slice 3a: the id of the auto-saved ficha (None if persistence is off).
+    ficha_id: int | None = None
+
+
+class LineStatusUpdate(BaseModel):
+    """Request body for `PATCH /admin/ficha-patrimonial/lines/{line_id}`."""
+
+    status: str
 
 
 class FichaConfirmRow(BaseModel):

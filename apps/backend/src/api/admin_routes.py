@@ -52,8 +52,10 @@ from db.ficha_patrimonial import (
     FichaParseError,
     FichaParseRequest,
     FichaParseResponse,
+    LineStatusUpdate,
     parse_ficha_excel,
 )
+from db.ficha_repository import Ficha, FichaListItem, FichaRepository
 from db.models import (
     AdministratorCreate,
     CatalogExportRequest,
@@ -86,6 +88,10 @@ def _catalog_repo(request: Request) -> CatalogRepository:
 
 def _normalized_catalog_repo(request: Request) -> NormalizedCatalogRepository:
     return request.app.state.normalized_catalog_repo
+
+
+def _ficha_repo(request: Request) -> FichaRepository:
+    return request.app.state.ficha_repo
 
 
 def _versioning_repo(request: Request) -> VersioningRepository:
@@ -585,12 +591,13 @@ async def parse_ficha_patrimonial(
     data: FichaParseRequest,
     user_repo: UserRepository = Depends(_user_repo),
     product_repo: ProductRepository = Depends(_product_repo),
+    ficha_repo: FichaRepository = Depends(_ficha_repo),
 ) -> FichaParseResponse:
     """Parse and enrich an uploaded "Ficha Patrimonial" workbook for admin
     review (`sdd/admin-ficha-patrimonial/spec` — "Ficha Parse Endpoint",
     "Excel Parsing — Sabbi Sheet", "Batch Enrichment via cascade_search",
-    "Target User Resolution by Email"). Persists nothing — rows are only
-    written to the database via `/ficha-patrimonial/confirm`."""
+    "Target User Resolution by Email"). Auto-saves the parsed ficha (Slice 3a)
+    and returns its id so the review state survives a reload."""
     try:
         file_bytes = base64.b64decode(data.file_data, validate=True)
     except Exception as exc:
@@ -606,11 +613,61 @@ async def parse_ficha_patrimonial(
         parsed.client.user_id = str(user_row["id"])
 
     semaphore = asyncio.Semaphore(_FICHA_ENRICHMENT_CONCURRENCY)
-    enriched_rows = await asyncio.gather(
-        *[_enrich_ficha_row(row, product_repo.pool, semaphore) for row in parsed.rows]
+    enriched_rows = list(
+        await asyncio.gather(
+            *[_enrich_ficha_row(row, product_repo.pool, semaphore) for row in parsed.rows]
+        )
     )
 
-    return FichaParseResponse(client=parsed.client, rows=list(enriched_rows))
+    ficha_id = await ficha_repo.create(parsed.client, enriched_rows)
+    return FichaParseResponse(client=parsed.client, rows=enriched_rows, ficha_id=ficha_id)
+
+
+@router.get("/ficha-patrimonial/fichas")
+async def list_fichas(
+    status: str | None = Query(default=None),
+    ficha_repo: FichaRepository = Depends(_ficha_repo),
+) -> list[FichaListItem]:
+    """List saved fichas (newest first), optionally filtered by derived status
+    (Slice 3a; consumed by the Slice 3b sidebar)."""
+    return await ficha_repo.list(status)
+
+
+@router.get("/ficha-patrimonial/fichas/{ficha_id}")
+async def get_ficha(
+    ficha_id: int,
+    ficha_repo: FichaRepository = Depends(_ficha_repo),
+) -> Ficha:
+    """Load one saved ficha with its lines and derived status (for reload)."""
+    ficha = await ficha_repo.get(ficha_id)
+    if ficha is None:
+        raise HTTPException(status_code=404, detail=f"Ficha '{ficha_id}' no encontrada")
+    return ficha
+
+
+@router.patch("/ficha-patrimonial/lines/{line_id}")
+async def update_ficha_line_status(
+    line_id: int,
+    data: LineStatusUpdate,
+    ficha_repo: FichaRepository = Depends(_ficha_repo),
+) -> dict:
+    """Persist a per-line review decision (pending/approved/discarded)."""
+    try:
+        await ficha_repo.update_line_status(line_id, data.status)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@router.post("/ficha-patrimonial/fichas/{ficha_id}/confirm")
+async def confirm_ficha(
+    ficha_id: int,
+    ficha_repo: FichaRepository = Depends(_ficha_repo),
+) -> dict:
+    """Mark a ficha confirmed; combined with all lines decided it becomes
+    `validada` (Slice 3a lifecycle)."""
+    await ficha_repo.mark_confirmed(ficha_id)
+    return {"ok": True}
 
 
 @router.post("/ficha-patrimonial/confirm", status_code=201)

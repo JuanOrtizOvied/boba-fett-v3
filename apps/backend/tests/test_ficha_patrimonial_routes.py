@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 
 import api.admin_routes as admin_routes
 from auth.tokens import create_access_token
+from db.ficha_repository import Ficha, FichaListItem
 from db.models import SearchResult
 
 
@@ -46,6 +47,8 @@ def app_client():
     app.state.user_repo = AsyncMock()
     app.state.repo = AsyncMock()
     app.state.repo.pool = object()
+    app.state.ficha_repo = AsyncMock()
+    app.state.ficha_repo.create.return_value = 1
     return app, TestClient(app)
 
 
@@ -260,3 +263,102 @@ def test_per_row_enrichment_failure_is_isolated(
     assert failed_row["enriched"] is None
     assert ok_row["enrichment_failed"] is False
     assert ok_row["enriched"]["name"] == "Fondo OK - OK"
+
+
+# ---------------------------------------------------------------------------
+# Slice 3a T-3 — persistence endpoints
+# ---------------------------------------------------------------------------
+
+
+def test_parse_autosaves_the_ficha(app_client, build_ficha_workbook, monkeypatch):
+    app, client = _admin_client(app_client)
+    app.state.user_repo.get_by_email.return_value = {"id": "usr_123"}
+    app.state.ficha_repo.create.return_value = 77
+
+    async def fake_cascade(name, pool):
+        return SearchResult(name=name)
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+    workbook_bytes = build_ficha_workbook([{"name": "Fondo A", "amount": 1000}])
+
+    response = client.post(
+        "/admin/ficha-patrimonial/parse", json={"file_data": _b64(workbook_bytes)}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ficha_id"] == 77
+    app.state.ficha_repo.create.assert_awaited_once()
+
+
+def test_list_fichas(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.list.return_value = [
+        FichaListItem(id=1, client_name="Ana", status="por_validar")
+    ]
+
+    response = client.get("/admin/ficha-patrimonial/fichas")
+
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == 1
+    assert response.json()[0]["status"] == "por_validar"
+    app.state.ficha_repo.list.assert_awaited_once_with(None)
+
+
+def test_list_fichas_filters_by_status(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.list.return_value = []
+
+    client.get("/admin/ficha-patrimonial/fichas?status=validada")
+
+    app.state.ficha_repo.list.assert_awaited_once_with("validada")
+
+
+def test_get_ficha_returns_404_when_missing(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.get.return_value = None
+
+    response = client.get("/admin/ficha-patrimonial/fichas/123")
+
+    assert response.status_code == 404
+
+
+def test_get_ficha_returns_the_ficha(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.get.return_value = Ficha(id=5, client_name="Ana", status="en_proceso")
+
+    response = client.get("/admin/ficha-patrimonial/fichas/5")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == 5
+    assert response.json()["status"] == "en_proceso"
+
+
+def test_update_line_status(app_client):
+    app, client = _admin_client(app_client)
+
+    response = client.patch(
+        "/admin/ficha-patrimonial/lines/5", json={"status": "approved"}
+    )
+
+    assert response.status_code == 200
+    app.state.ficha_repo.update_line_status.assert_awaited_once_with(5, "approved")
+
+
+def test_update_line_status_rejects_invalid(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.update_line_status.side_effect = ValueError("invalid")
+
+    response = client.patch(
+        "/admin/ficha-patrimonial/lines/5", json={"status": "bogus"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_mark_ficha_confirmed(app_client):
+    app, client = _admin_client(app_client)
+
+    response = client.post("/admin/ficha-patrimonial/fichas/9/confirm")
+
+    assert response.status_code == 200
+    app.state.ficha_repo.mark_confirmed.assert_awaited_once_with(9)

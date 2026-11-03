@@ -64,9 +64,19 @@ Fichas auto-save on parse (every upload appears in the sidebar).
   3/3 (lifecycle por_validar→en_proceso→validada, parse-failure→con_error,
   list filter) against `boba-fett-backend` (savepoint-isolated; conftest creates
   the new tables via idempotent schema.sql). Backend unit suite 334 passed / 143
-  skipped / 0 new. ruff clean. Commit: `__T2__`.
-- [ ] **T-3 — Wire endpoints (backend).** Parse auto-saves the ficha; new
-  endpoints to update a line's status and to mark confirmed; list endpoint.
+  skipped / 0 new. ruff clean. Commit: `150b453`.
+- [x] **T-3 — Wire endpoints (backend).** DONE. Route: INLINE. `parse` now
+  auto-saves via `ficha_repo.create` and returns `ficha_id` (added to
+  `FichaParseResponse`). New endpoints on the admin router: `GET
+  /ficha-patrimonial/fichas` (list, `?status=` filter), `GET
+  /ficha-patrimonial/fichas/{id}` (get one, 404 when missing), `PATCH
+  /ficha-patrimonial/lines/{line_id}` (`LineStatusUpdate`; ValueError→422),
+  `POST /ficha-patrimonial/fichas/{id}/confirm` (mark_confirmed). `_ficha_repo`
+  DI helper + `app.state.ficha_repo = FichaRepository(pool)` wired in
+  `api/routes.py` lifespan. TDD: RED (7 failing) → GREEN. `test_ficha_patrimonial_routes`
+  17/17 (incl. auto-save, list/filter, get/404, line-status/invalid, confirm).
+  Backend suite 346 passed / 143 skipped / 0 new. ruff clean; `api.routes` imports
+  clean. Commit: `__T3__`.
 - [ ] **(Slice 3b)** sidebar UI + filters — separate doc.
 
 ## Acceptance criteria / checks
@@ -76,4 +86,8 @@ Fichas auto-save on parse (every upload appears in the sidebar).
 - Chat path untouched; backend `pytest -q` + web suite: 0 new failures vs. base.
 
 ## Next step
-Implement T-1 (RED → GREEN).
+**Slice 3a COMPLETE** (T-1 status derivation, T-2 tables+repo, T-3 endpoints).
+Fichas auto-save on parse; per-line status + confirm drive the derived lifecycle;
+list/get endpoints are ready for the **Slice 3b** sidebar UI (list + filters,
+reload, wire per-line actions to the PATCH endpoint). Deferred edit-state
+persistence and Slice 2b (flujos/comentarios/Fuentes) remain.
