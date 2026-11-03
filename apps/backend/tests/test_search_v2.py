@@ -185,6 +185,65 @@ async def test_v2_returns_none_when_no_data(monkeypatch):
     assert result is None
 
 
+async def test_v2_l3_uses_claude_web_not_tavily(monkeypatch):
+    """The ficha cascade's L3 must use Claude web tools, never Tavily."""
+
+    async def no_catalog(self, query):
+        return None
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return {"name": "Researched Fund", "manager": "Web Manager"}
+
+    async def tavily_must_not_run(query):
+        raise AssertionError("ficha L3 must not call Tavily")
+
+    monkeypatch.setattr(
+        search_mod.NormalizedCatalogRepository, "search_for_enrichment", no_catalog
+    )
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+    monkeypatch.setattr(search_mod, "_search_tavily", tavily_must_not_run)
+
+    result = await search_mod.cascade_search_v2("some unknown fund", object())
+
+    assert result is not None
+    assert result.name == "Researched Fund"
+    assert result.manager == "Web Manager"
+
+
+async def test_search_claude_web_degrades_without_api_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert await search_mod._search_claude_web("anything") == {}
+
+
+async def test_search_claude_web_extracts_from_research_text(monkeypatch):
+    async def fake_research(query):
+        return "Acme Fund is a USD fixed-income fund managed by Acme."
+
+    async def fake_extract(prompt):
+        assert "Acme Fund" in prompt
+        return {"name": "Acme Fund", "currency": "USD"}
+
+    monkeypatch.setattr(search_mod, "_research_with_claude_web", fake_research)
+    monkeypatch.setattr(search_mod, "_run_extraction", fake_extract)
+
+    assert await search_mod._search_claude_web("acme fund") == {
+        "name": "Acme Fund",
+        "currency": "USD",
+    }
+
+
+async def test_search_claude_web_empty_when_no_research(monkeypatch):
+    async def no_research(query):
+        return ""
+
+    monkeypatch.setattr(search_mod, "_research_with_claude_web", no_research)
+    assert await search_mod._search_claude_web("acme fund") == {}
+
+
 async def test_v1_cascade_still_fills_commercial_fields(monkeypatch):
     """Regression guard: the flat-catalog chat cascade (`cascade_search`) must
     STILL merge commercial fields from Claude (unchanged by the V2 work)."""

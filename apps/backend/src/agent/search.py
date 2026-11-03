@@ -284,6 +284,72 @@ async def _search_tavily(query: str) -> dict[str, str]:
     )
 
 
+# Ficha L3 (Slice: ficha-web-tools-enrichment) — Claude's own web_search +
+# web_fetch server tools replace Tavily for the ficha cascade only. The chat
+# cascade keeps `_search_tavily`.
+_WEB_TOOLS = [
+    {"type": "web_search_20250305", "name": "web_search", "max_uses": 5},
+    {"type": "web_fetch_20250910", "name": "web_fetch", "max_uses": 5},
+]
+_WEB_FETCH_BETA = "web-fetch-2025-09-10"
+
+
+def _blocks_to_text(response: object) -> str:
+    """Concatenate the text blocks of a chat response, robust to the content
+    shape (standard content_blocks, a list of dict blocks, or a plain string)."""
+    blocks = getattr(response, "content_blocks", None)
+    if blocks:
+        text = "\n".join(
+            b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text"
+        )
+        if text.strip():
+            return text.strip()
+    content = getattr(response, "content", "")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        return "\n".join(
+            c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"
+        ).strip()
+    return ""
+
+
+async def _research_with_claude_web(query: str) -> str:
+    """Research a financial product with Claude's server-side web_search +
+    web_fetch tools; return the grounded assistant text. Returns "" when
+    `ANTHROPIC_API_KEY` is unset or the call fails — never raises."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return ""
+    try:
+        llm = ChatAnthropic(
+            model=EXTRACTION_MODEL_NAME,
+            temperature=0,
+            betas=[_WEB_FETCH_BETA],
+        ).bind_tools(_WEB_TOOLS)
+        response = await llm.ainvoke(
+            "Research this financial product and summarize its factual "
+            "attributes (manager, currency, asset class, geographic focus, "
+            f"underlying). Use web search and fetch sources as needed.\n\nProduct: {query}"
+        )
+        return _blocks_to_text(response)
+    except Exception:
+        return ""
+
+
+async def _search_claude_web(query: str) -> dict[str, str]:
+    """L3 for the ficha cascade — Claude web_search + web_fetch research,
+    grounded-extracted into the shared field set (replaces Tavily for ficha).
+    Returns {} on failure / no data; never raises."""
+    context = await _research_with_claude_web(query)
+    if not context:
+        return {}
+    return await _run_extraction(
+        f"Product to research: {query}\n\nWeb research:\n{context}\n\n"
+        "Extract fields ONLY from the web research above — do not use outside "
+        "knowledge."
+    )
+
+
 _LEGACY_ASSET_CLASS_LABELS: set[str] = {
     "real estate directo",
     "mercados privados",
@@ -474,9 +540,9 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
             _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
 
     if not _is_product_complete(result):
-        tavily_data = await _search_tavily(query)
-        if tavily_data:
-            _merge_fields(result, tavily_data, "web_search", fields=PRODUCT_FIELD_NAMES)
+        web_data = await _search_claude_web(query)
+        if web_data:
+            _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
 
     _sanitize_taxonomy(result)
     _classify(result)
