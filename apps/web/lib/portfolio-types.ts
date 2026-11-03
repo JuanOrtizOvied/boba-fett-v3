@@ -196,6 +196,56 @@ export interface FichaEnrichedRow extends FichaParsedRow {
   enrichment_failed: boolean;
 }
 
+/** Ficha lifecycle status (Slice 3a), derived from the per-line decisions. */
+export type FichaStatus =
+  | "por_validar"
+  | "en_proceso"
+  | "validada"
+  | "con_error";
+
+/** Per-line decision state (Slice 3a). */
+export type LineStatus = "pending" | "approved" | "discarded";
+
+/** Mirrors `db.ficha_repository.FichaLine` — one persisted ficha product line. */
+export interface FichaLine {
+  id: number;
+  excel_row: number;
+  raw_name: string;
+  raw_tipo_activo: string;
+  raw_amount: number;
+  raw_currency: string;
+  raw_return_rate: string;
+  raw_pertenencia: string;
+  mapped_asset_class: string | null;
+  normalized_return_rate: string;
+  enriched: SearchResult | null;
+  line_status: LineStatus;
+}
+
+/** Mirrors `db.ficha_repository.Ficha` — a persisted ficha with its lines. */
+export interface Ficha {
+  id: number;
+  user_id: string | null;
+  client_name: string;
+  client_email: string;
+  client_phone: string;
+  parse_failed: boolean;
+  confirmed: boolean;
+  created_at: string | null;
+  lines: FichaLine[];
+  status: FichaStatus;
+}
+
+/** Mirrors `db.ficha_repository.FichaListItem` — a sidebar list row. */
+export interface FichaListItem {
+  id: number;
+  client_name: string;
+  client_email: string;
+  created_at: string | null;
+  line_count: number;
+  status: FichaStatus;
+}
+
 /**
  * Mirrors `db.ficha_patrimonial.FichaParseResponse` — the response body of
  * `POST /admin/ficha-patrimonial/parse` (`sdd/admin-ficha-patrimonial/spec`
