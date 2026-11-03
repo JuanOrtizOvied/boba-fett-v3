@@ -77,9 +77,16 @@ confidence on the match similarity.
   values read-only (replacing the Slice-1 disabled placeholders). TDD: RED → GREEN.
   New tests: 5 shared (resolveConfidence 3, formatSimilarityPercent 2) + 2 component
   (signals + ticker/horizon). tsc + eslint clean. Full web suite 120 passed / 8
-  pre-existing / 0 new. Commit: `__T3__`.
-- [ ] **T-4 — Header counts.** Summary bar fills `ya estaban en la BD`,
-  `investigados`, `por decidir` from the per-row classification + line status.
+  pre-existing / 0 new. Commit: `283fe57`.
+- [x] **T-4 — Header counts.** DONE. Route: INLINE. `computeFichaSummary` extended
+  with `alreadyInDb` (rows with `catalog_matched`), `investigated` (primary_source
+  web/Claude), `toDecide` (NOT catalog_matched → needs an admin decision);
+  `FichaSummaryBar` renders them (flujos stays "—", deferred). NOTE: `toDecide` is
+  the STATIC "not a confident catalog match" count, derivable from the enriched
+  rows; a live pending-count tied to approve/discard would need lifting `lineStatus`
+  from `ReviewTable` to the page (future refinement). TDD: RED → GREEN. Tests:
+  computeFichaSummary 5/5, FichaSummaryBar 2/2. tsc + eslint clean. Full web suite
+  121 passed / 8 pre-existing / 0 new. Commit: `__T4__`.
 
 ## Acceptance criteria / checks
 - A catalog-matched ficha row carries ticker/horizonte/similarity/data_asof and a
@@ -90,4 +97,10 @@ confidence on the match similarity.
 - Backend `pytest -q` and web suite: 0 new failures vs. the branch base.
 
 ## Next step
-Implement T-1 (RED → GREEN).
+**Slice 2 COMPLETE** (T-1..T-4). The workbench now shows real catalog signals:
+ticker/ISIN, horizonte, similitud %, "dato al", backend confidence (gated by
+similarity — the 0.136 false positive now reads "baja"/Nuevo, not "alta"),
+"Producto existente/nuevo", and the header counts (ya estaban en la BD /
+investigados / por decidir). Deferred to a Slice 2b: flujos + comentarios (need
+the real ficha Excel columns) and Fuentes URLs. Slice 3 = persistence + sidebar.
+Push / PR are the user's call; branch stacks on the v2 PR.

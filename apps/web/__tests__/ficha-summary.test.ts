@@ -66,5 +66,26 @@ describe("computeFichaSummary", () => {
     const summary = computeFichaSummary([]);
     expect(summary.declaredCount).toBe(0);
     expect(summary.declaredValueByCurrency).toEqual([]);
+    expect(summary.alreadyInDb).toBe(0);
+    expect(summary.investigated).toBe(0);
+    expect(summary.toDecide).toBe(0);
+  });
+
+  test("classifies rows into already-in-db, investigated, and to-decide", () => {
+    const enriched = (
+      partial: Partial<NonNullable<FichaEnrichedRow["enriched"]>>,
+    ): FichaEnrichedRow["enriched"] =>
+      partial as FichaEnrichedRow["enriched"];
+
+    const summary = computeFichaSummary([
+      row({ enriched: enriched({ catalog_matched: true, primary_source: "catalog" }) }),
+      row({ enriched: enriched({ catalog_matched: false, primary_source: "web_search" }) }),
+      row({ enriched: enriched({ catalog_matched: false, primary_source: "claude_knowledge" }) }),
+      row({ enriched: null, enrichment_failed: true }),
+    ]);
+
+    expect(summary.alreadyInDb).toBe(1); // catalog_matched
+    expect(summary.investigated).toBe(2); // web_search + claude_knowledge
+    expect(summary.toDecide).toBe(3); // every row that is NOT catalog_matched
   });
 });

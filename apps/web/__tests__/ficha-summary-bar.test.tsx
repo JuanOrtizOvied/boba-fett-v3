@@ -39,15 +39,13 @@ describe("FichaSummaryBar", () => {
     expect(statValue(/valor declarado/i)).toContain("USD 138,694");
   });
 
-  test("renders the deferred stats with their labels but a placeholder value", () => {
+  test("renders the classification counts and leaves flujos as a placeholder", () => {
     render(<FichaSummaryBar rows={rows} />);
-    for (const label of [
-      /ya estaban en la BD/i,
-      /investigados/i,
-      /por decidir/i,
-      /flujos que necesita/i,
-    ]) {
-      expect(statValue(label)).toBe("—");
-    }
+    // Both fixture rows have no enrichment → none matched, both to-decide.
+    expect(statValue(/ya estaban en la BD/i)).toBe("0");
+    expect(statValue(/investigados/i)).toBe("0");
+    expect(statValue(/por decidir/i)).toBe("2");
+    // Flujos still needs a data source (deferred).
+    expect(statValue(/flujos que necesita/i)).toBe("—");
   });
 });

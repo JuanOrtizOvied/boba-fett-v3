@@ -40,9 +40,9 @@ export default function FichaSummaryBar({ rows }: { rows: FichaEnrichedRow[] }) 
         label="valor declarado"
         value={formatDeclaredValue(summary.declaredValueByCurrency)}
       />
-      <Stat label="ya estaban en la BD" value={PENDING} />
-      <Stat label="investigados" value={PENDING} />
-      <Stat label="por decidir" value={PENDING} />
+      <Stat label="ya estaban en la BD" value={String(summary.alreadyInDb)} />
+      <Stat label="investigados" value={String(summary.investigated)} />
+      <Stat label="por decidir" value={String(summary.toDecide)} />
       <Stat label="flujos que necesita (USD/mes)" value={PENDING} />
     </div>
   );

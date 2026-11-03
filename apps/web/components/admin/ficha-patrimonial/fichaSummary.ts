@@ -20,6 +20,12 @@ export interface DeclaredValue {
 export interface FichaSummary {
   declaredCount: number;
   declaredValueByCurrency: DeclaredValue[];
+  /** Rows that are an accepted catalog match ("ya estaban en la BD"). */
+  alreadyInDb: number;
+  /** Rows enriched by web/Claude investigation (not a catalog match). */
+  investigated: number;
+  /** Rows that are NOT a confident catalog match — the admin must decide. */
+  toDecide: number;
 }
 
 /**
@@ -30,12 +36,30 @@ export interface FichaSummary {
  */
 export function computeFichaSummary(rows: FichaEnrichedRow[]): FichaSummary {
   const totals = new Map<string, number>();
+  let alreadyInDb = 0;
+  let investigated = 0;
+  let toDecide = 0;
 
   for (const row of rows) {
     const amount = row.raw_amount;
-    if (!Number.isFinite(amount) || amount === 0) continue;
-    const currency = row.raw_currency?.trim() || NEUTRAL_CURRENCY;
-    totals.set(currency, (totals.get(currency) ?? 0) + amount);
+    if (Number.isFinite(amount) && amount !== 0) {
+      const currency = row.raw_currency?.trim() || NEUTRAL_CURRENCY;
+      totals.set(currency, (totals.get(currency) ?? 0) + amount);
+    }
+
+    const enriched = row.enriched;
+    if (enriched?.catalog_matched) {
+      alreadyInDb += 1;
+    } else {
+      toDecide += 1;
+    }
+    if (
+      enriched &&
+      (enriched.primary_source === "web_search" ||
+        enriched.primary_source === "claude_knowledge")
+    ) {
+      investigated += 1;
+    }
   }
 
   const declaredValueByCurrency = [...totals.entries()]
@@ -45,5 +69,8 @@ export function computeFichaSummary(rows: FichaEnrichedRow[]): FichaSummary {
   return {
     declaredCount: rows.length,
     declaredValueByCurrency,
+    alreadyInDb,
+    investigated,
+    toDecide,
   };
 }
