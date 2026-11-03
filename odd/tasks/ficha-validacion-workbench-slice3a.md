@@ -53,9 +53,18 @@ Fichas auto-save on parse (every upload appears in the sidebar).
   en_proceso; all decided & confirmed→validada; confirmed-but-not-all-decided→
   en_proceso. TDD: RED (ImportError) → GREEN. `test_ficha_status` 7/7. Backend
   suite 334 passed / 140 skipped / 0 new. Commit: `88c6045`.
-- [ ] **T-2 — Tables + repository (backend).** `ficha` + `ficha_line` in
-  `schema.sql`; `FichaRepository` (create with lines, update line status, mark
-  confirmed, get, list-by-status). Integration PG tests.
+- [x] **T-2 — Tables + repository (backend).** DONE. Route: INLINE. Added `ficha`
+  (user_id UUID FK nullable, client_*, parse_failed, confirmed, timestamps) +
+  `ficha_line` (raw_* fields, `enriched` JSONB, `line_status` CHECK pending/
+  approved/discarded, FK + index) to `schema.sql`. New `db/ficha_repository.py`:
+  models `Ficha`/`FichaLine`/`FichaListItem` + `FichaRepository` (create-with-lines
+  in a txn, get with enriched JSONB round-trip + derived status, update_line_status,
+  mark_confirmed, list-by-status). Status computed via `derive_ficha_status`.
+  TDD: RED (ModuleNotFoundError) → GREEN. Integration PG `test_ficha_repository_pg`
+  3/3 (lifecycle por_validar→en_proceso→validada, parse-failure→con_error,
+  list filter) against `boba-fett-backend` (savepoint-isolated; conftest creates
+  the new tables via idempotent schema.sql). Backend unit suite 334 passed / 143
+  skipped / 0 new. ruff clean. Commit: `__T2__`.
 - [ ] **T-3 — Wire endpoints (backend).** Parse auto-saves the ficha; new
   endpoints to update a line's status and to mark confirmed; list endpoint.
 - [ ] **(Slice 3b)** sidebar UI + filters — separate doc.

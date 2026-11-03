@@ -681,3 +681,35 @@ CREATE TABLE IF NOT EXISTS catalog_product_series_admin (
         REFERENCES catalog_product_series(product_code, series) ON DELETE CASCADE,
     UNIQUE (product_code, administrator, series)
 );
+
+-- Ficha patrimonial validation workbench (Slice 3a persistence).
+CREATE TABLE IF NOT EXISTS ficha (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id),
+    client_name TEXT NOT NULL DEFAULT '',
+    client_email TEXT NOT NULL DEFAULT '',
+    client_phone TEXT NOT NULL DEFAULT '',
+    parse_failed BOOLEAN NOT NULL DEFAULT false,
+    confirmed BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ficha_line (
+    id SERIAL PRIMARY KEY,
+    ficha_id INTEGER NOT NULL REFERENCES ficha(id) ON DELETE CASCADE,
+    excel_row INTEGER NOT NULL,
+    raw_name TEXT NOT NULL DEFAULT '',
+    raw_tipo_activo TEXT NOT NULL DEFAULT '',
+    raw_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+    raw_currency TEXT NOT NULL DEFAULT '',
+    raw_return_rate TEXT NOT NULL DEFAULT '',
+    raw_pertenencia TEXT NOT NULL DEFAULT '',
+    mapped_asset_class TEXT,
+    normalized_return_rate TEXT NOT NULL DEFAULT '',
+    enriched JSONB,
+    line_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (line_status IN ('pending', 'approved', 'discarded'))
+);
+
+CREATE INDEX IF NOT EXISTS ficha_line_ficha_id_idx ON ficha_line (ficha_id);
