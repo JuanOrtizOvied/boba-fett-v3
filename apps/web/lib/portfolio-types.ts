@@ -254,6 +254,8 @@ export interface FichaListItem {
 export interface FichaParseResponse {
   client: FichaClientInfo;
   rows: FichaEnrichedRow[];
+  /** Id of the auto-saved ficha (Slice 3a); absent if persistence is off. */
+  ficha_id?: number | null;
 }
 
 /**

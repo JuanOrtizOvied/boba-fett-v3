@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   confirmFicha,
+  fichaToEnrichedRows,
   getFicha,
   listFichas,
   updateLineStatus,
 } from "@/lib/fichaApi";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import type { Ficha } from "@/lib/portfolio-types";
 
 vi.mock("@/lib/fetchWithAuth", () => ({ fetchWithAuth: vi.fn() }));
 
@@ -63,6 +65,56 @@ describe("fichaApi", () => {
     const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
     expect(url).toBe("/api/admin/ficha-patrimonial/fichas/7/confirm");
     expect((init as RequestInit).method).toBe("POST");
+  });
+
+  test("fichaToEnrichedRows maps lines to review rows (enrichment_failed from enriched)", () => {
+    const ficha = {
+      id: 1,
+      user_id: null,
+      client_name: "Ana",
+      client_email: "a@x.com",
+      client_phone: "",
+      parse_failed: false,
+      confirmed: false,
+      created_at: null,
+      status: "por_validar",
+      lines: [
+        {
+          id: 10,
+          excel_row: 8,
+          raw_name: "Fondo A",
+          raw_tipo_activo: "Fondos",
+          raw_amount: 1000,
+          raw_currency: "USD",
+          raw_return_rate: "5%",
+          raw_pertenencia: "Titular",
+          mapped_asset_class: null,
+          normalized_return_rate: "",
+          enriched: { name: "Fondo A" },
+          line_status: "approved",
+        },
+        {
+          id: 11,
+          excel_row: 9,
+          raw_name: "Fondo B",
+          raw_tipo_activo: "",
+          raw_amount: 0,
+          raw_currency: "",
+          raw_return_rate: "",
+          raw_pertenencia: "",
+          mapped_asset_class: null,
+          normalized_return_rate: "",
+          enriched: null,
+          line_status: "pending",
+        },
+      ],
+    } as unknown as Ficha;
+
+    const rows = fichaToEnrichedRows(ficha);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].raw_name).toBe("Fondo A");
+    expect(rows[0].enrichment_failed).toBe(false);
+    expect(rows[1].enrichment_failed).toBe(true);
   });
 
   test("throws on a non-ok response", async () => {

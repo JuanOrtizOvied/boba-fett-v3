@@ -39,9 +39,19 @@ endpoints, so the workbench matches the full mockup.
   on the active row). Pure component (data + callbacks: fichas, activeFilter,
   selectedId, onFilterChange, onSelect, onUpload). `FichaFilter` type exported.
   TDD: RED → GREEN. `ficha-sidebar.test` 5/5. tsc + eslint clean. Full web suite
-  132 passed / 8 pre-existing / 0 new. Commit: `__T2__`.
-- [ ] **T-3 — Page wiring.** Two-pane layout; fetch the list; selecting a ficha
-  loads it (GET) into the review pane; refresh the list after an upload.
+  132 passed / 8 pre-existing / 0 new. Commit: `d201e98`.
+- [x] **T-3 — Page wiring.** DONE. Route: INLINE. Restructured
+  `app/admin/ficha-patrimonial/page.tsx` into a two-pane layout (FichaSidebar |
+  main). Fetches `listFichas(activeFilter)` on mount + filter change (resilient:
+  non-array/error → []); selecting a ficha calls `getFicha` + `fichaToEnrichedRows`
+  (new pure helper in `fichaApi.ts`) to load it into the review pane; parse
+  auto-save sets `ficha_id` (added to the TS `FichaParseResponse`) and refreshes
+  the list; the review state unified into a `review` object. TDD: converter
+  (`ficha-api` 7/7) + updated page test (mock `fichaApi`, fixed single-button
+  queries, mappable fixture, approve-before-confirm, new sidebar-load test).
+  **`ficha-patrimonial-page` now 8/8 — the 2 pre-existing stale failures are
+  FIXED** (web pre-existing failures 8 → 6). tsc clean on touched files; eslint
+  clean. Full web suite 136 passed / 6 pre-existing / 0 new. Commit: `__T3__`.
 - [ ] **T-4 — Persist per-line decisions.** Approve/Discard call PATCH; Confirmar
   calls POST confirm; optimistic update of the sidebar status.
 

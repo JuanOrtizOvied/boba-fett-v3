@@ -3,10 +3,19 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import FichaPatrimonialPage from "@/app/admin/ficha-patrimonial/page";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { FichaParseResponse } from "@/lib/portfolio-types";
+import { getFicha, listFichas } from "@/lib/fichaApi";
+import type { Ficha, FichaParseResponse } from "@/lib/portfolio-types";
 
 vi.mock("@/lib/fetchWithAuth", () => ({
   fetchWithAuth: vi.fn(),
+}));
+
+// Keep the pure helper real; stub the network calls so the mount list fetch
+// (and ficha selection) don't go through `fetchWithAuth`.
+vi.mock("@/lib/fichaApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/fichaApi")>()),
+  listFichas: vi.fn().mockResolvedValue([]),
+  getFicha: vi.fn(),
 }));
 
 function makeFile(name: string, sizeBytes: number): File {
@@ -31,7 +40,7 @@ const PARSE_RESPONSE: FichaParseResponse = {
       raw_currency: "USD",
       raw_return_rate: "5%",
       raw_pertenencia: "Titular",
-      mapped_asset_class: "mercados_publicos",
+      mapped_asset_class: "Mercados Publicos - Fijo",
       normalized_return_rate: "5.0",
       enriched: null,
       enrichment_failed: false,
@@ -48,10 +57,10 @@ async function selectFile(file: File) {
 }
 
 describe("FichaPatrimonialPage idle state", () => {
-  test("renders the upload zone with .xlsx instructions", () => {
+  test("renders the sidebar and the upload zone", () => {
     render(<FichaPatrimonialPage />);
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByText(/\.xlsx/)).toBeInTheDocument();
+    expect(screen.getByText("Fichas patrimoniales")).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeTruthy();
   });
 });
 
@@ -120,7 +129,7 @@ describe("FichaPatrimonialPage upload flow", () => {
       await screen.findByText("No se encontró la hoja 'Sabbi'"),
     ).toBeInTheDocument();
     // The upload zone is usable again — no stuck loading/partial table.
-    expect(screen.getByRole("button")).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeTruthy();
   });
 
   test("on a network exception shows a generic error and returns to the upload zone", async () => {
@@ -130,7 +139,7 @@ describe("FichaPatrimonialPage upload flow", () => {
     await selectFile(makeFile("ficha.xlsx", 1024));
 
     expect(await screen.findByText("Failed to fetch")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeTruthy();
   });
 });
 
@@ -157,6 +166,9 @@ describe("FichaPatrimonialPage confirm wiring", () => {
     await selectFile(makeFile("ficha.xlsx", 1024));
     await screen.findByText(/cliente@sabbi\.com/);
 
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
     await user.click(screen.getByRole("button", { name: /confirmar/i }));
 
     expect(
@@ -184,12 +196,65 @@ describe("FichaPatrimonialPage confirm wiring", () => {
     render(<FichaPatrimonialPage />);
     await selectFile(makeFile("ficha.xlsx", 1024));
     await screen.findByText(/cliente@sabbi\.com/);
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
     await user.click(screen.getByRole("button", { name: /confirmar/i }));
     await screen.findByText(/se import(ó|aron) 1 producto/i);
 
     await user.click(screen.getByRole("button", { name: /cargar otra ficha/i }));
 
     expect(screen.queryByText(/cliente@sabbi\.com/)).not.toBeInTheDocument();
-    expect(screen.getByText(/\.xlsx/)).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeTruthy();
+  });
+});
+
+describe("FichaPatrimonialPage sidebar", () => {
+  test("selecting a saved ficha loads it into the review pane", async () => {
+    vi.mocked(listFichas).mockResolvedValue([
+      {
+        id: 42,
+        client_name: "Saved Client",
+        client_email: "saved@x.com",
+        created_at: null,
+        line_count: 1,
+        status: "en_proceso",
+      },
+    ]);
+    vi.mocked(getFicha).mockResolvedValue({
+      id: 42,
+      user_id: null,
+      client_name: "Saved Client",
+      client_email: "saved@x.com",
+      client_phone: "",
+      parse_failed: false,
+      confirmed: false,
+      created_at: null,
+      status: "en_proceso",
+      lines: [
+        {
+          id: 1,
+          excel_row: 8,
+          raw_name: "Loaded Fund",
+          raw_tipo_activo: "",
+          raw_amount: 100,
+          raw_currency: "USD",
+          raw_return_rate: "",
+          raw_pertenencia: "",
+          mapped_asset_class: "Mercados Publicos - Fijo",
+          normalized_return_rate: "",
+          enriched: null,
+          line_status: "pending",
+        },
+      ],
+    } as Ficha);
+
+    const user = userEvent.setup();
+    render(<FichaPatrimonialPage />);
+
+    await user.click(await screen.findByTestId("ficha-row-42"));
+
+    expect(await screen.findByText(/saved@x\.com/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Loaded Fund")).toBeInTheDocument();
   });
 });

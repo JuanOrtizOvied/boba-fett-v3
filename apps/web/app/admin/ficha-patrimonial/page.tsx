@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import FichaSidebar, {
+  type FichaFilter,
+} from "@/components/admin/ficha-patrimonial/FichaSidebar";
 import FichaSummaryBar from "@/components/admin/ficha-patrimonial/FichaSummaryBar";
 import ReviewTable from "@/components/admin/ficha-patrimonial/ReviewTable";
 import UploadZone from "@/components/admin/ficha-patrimonial/UploadZone";
@@ -9,25 +12,49 @@ import {
   extractErrorDetail,
   readFileAsBase64,
 } from "@/components/admin/ficha-patrimonial/fichaUploadShared";
+import { fichaToEnrichedRows, getFicha, listFichas } from "@/lib/fichaApi";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { FichaParseResponse } from "@/lib/portfolio-types";
+import type {
+  FichaEnrichedRow,
+  FichaListItem,
+  FichaParseResponse,
+} from "@/lib/portfolio-types";
 
 type PageState = "idle" | "loading" | "review" | "success";
 
+interface ReviewData {
+  clientName: string;
+  clientEmail: string;
+  userId: string;
+  rows: FichaEnrichedRow[];
+}
+
 /**
- * Admin page for bulk-importing a "Ficha Patrimonial" Excel workbook
- * (`sdd/admin-ficha-patrimonial/spec` -> "Ficha Upload Page"). Four states:
- * `idle` (upload zone), `loading` (parse+enrich in flight, ~60s), `review`
- * (parsed rows in `ReviewTable` for admin editing + confirm), `success`
- * (post-confirm summary — spec: "Bulk Confirm and Success Summary").
+ * Admin "Ficha Patrimonial" validation workbench. Left sidebar lists the saved
+ * fichas (by status); the main pane uploads/parses a new ficha or loads a saved
+ * one for review and confirm.
  */
 export default function FichaPatrimonialPage() {
   const [state, setState] = useState<PageState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [parseResult, setParseResult] = useState<FichaParseResponse | null>(
-    null,
-  );
+  const [review, setReview] = useState<ReviewData | null>(null);
   const [importedCount, setImportedCount] = useState(0);
+  const [fichas, setFichas] = useState<FichaListItem[]>([]);
+  const [activeFilter, setActiveFilter] = useState<FichaFilter>("todas");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  const refreshList = useCallback(async (filter: FichaFilter) => {
+    try {
+      const data = await listFichas(filter === "todas" ? undefined : filter);
+      setFichas(Array.isArray(data) ? data : []);
+    } catch {
+      setFichas([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshList(activeFilter);
+  }, [activeFilter, refreshList]);
 
   const handleFileSelected = async (file: File) => {
     setError(null);
@@ -59,94 +86,130 @@ export default function FichaPatrimonialPage() {
       }
 
       const data: FichaParseResponse = await res.json();
-      setParseResult(data);
+      setReview({
+        clientName: data.client.name,
+        clientEmail: data.client.email,
+        userId: data.client.user_id,
+        rows: data.rows,
+      });
+      setSelectedId(data.ficha_id ?? null);
       setState("review");
+      void refreshList(activeFilter);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
-      setParseResult(null);
+      setReview(null);
       setState("idle");
     }
   };
 
+  const handleSelectFicha = async (id: number) => {
+    setError(null);
+    try {
+      const ficha = await getFicha(id);
+      setReview({
+        clientName: ficha.client_name,
+        clientEmail: ficha.client_email,
+        userId: ficha.user_id ?? "",
+        rows: fichaToEnrichedRows(ficha),
+      });
+      setSelectedId(id);
+      setState("review");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar la ficha");
+    }
+  };
+
   const handleReset = () => {
-    setParseResult(null);
+    setReview(null);
     setError(null);
     setImportedCount(0);
+    setSelectedId(null);
     setState("idle");
   };
 
   const handleConfirmed = (createdCount: number) => {
     setImportedCount(createdCount);
-    setParseResult(null);
+    setReview(null);
     setState("success");
+    void refreshList(activeFilter);
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-sabbi-neutral-900">
-        Ficha Patrimonial
-      </h1>
+    <div className="flex gap-4">
+      <FichaSidebar
+        fichas={fichas}
+        activeFilter={activeFilter}
+        selectedId={selectedId}
+        onFilterChange={setActiveFilter}
+        onSelect={(id) => void handleSelectFicha(id)}
+        onUpload={handleReset}
+      />
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      <main className="flex min-w-0 flex-1 flex-col gap-4">
+        <h1 className="text-lg font-semibold text-sabbi-neutral-900">
+          Ficha Patrimonial
+        </h1>
 
-      {(state === "idle" || state === "loading") && (
-        <UploadZone
-          onFileSelected={(file) => void handleFileSelected(file)}
-          disabled={state === "loading"}
-        />
-      )}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {state === "loading" && (
-        <div className="flex items-center gap-2 text-sm text-sabbi-neutral-600">
-          <div className="size-4 animate-spin rounded-full border-2 border-sabbi-neutral-200 border-t-sabbi-primary" />
-          Analizando ficha patrimonial… esto puede tardar hasta un minuto.
-        </div>
-      )}
-
-      {state === "review" && parseResult && (
-        <div className="flex flex-col gap-3">
-          <div className="rounded-xl border border-sabbi-neutral-200 p-4">
-            <p className="text-sm text-sabbi-neutral-900">
-              Cliente: {parseResult.client.name || "—"} (
-              {parseResult.client.email})
-            </p>
-            <p className="text-sm text-sabbi-neutral-600">
-              {parseResult.rows.length} fila
-              {parseResult.rows.length === 1 ? "" : "s"} lista
-              {parseResult.rows.length === 1 ? "" : "s"} para revisar.
-            </p>
-          </div>
-          <FichaSummaryBar rows={parseResult.rows} />
-          <ReviewTable
-            rows={parseResult.rows}
-            userId={parseResult.client.user_id}
-            onConfirmed={handleConfirmed}
+        {(state === "idle" || state === "loading") && (
+          <UploadZone
+            onFileSelected={(file) => void handleFileSelected(file)}
+            disabled={state === "loading"}
           />
-          <button
-            type="button"
-            onClick={handleReset}
-            className="self-start rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 hover:bg-sabbi-neutral-50"
-          >
-            Cargar otra ficha
-          </button>
-        </div>
-      )}
+        )}
 
-      {state === "success" && (
-        <div className="flex flex-col gap-3 rounded-xl border border-sabbi-neutral-200 p-4">
-          <p className="text-sm text-sabbi-neutral-900">
-            Se importaron {importedCount} producto
-            {importedCount === 1 ? "" : "s"} correctamente.
-          </p>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="self-start rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover"
-          >
-            Cargar otra ficha
-          </button>
-        </div>
-      )}
+        {state === "loading" && (
+          <div className="flex items-center gap-2 text-sm text-sabbi-neutral-600">
+            <div className="size-4 animate-spin rounded-full border-2 border-sabbi-neutral-200 border-t-sabbi-primary" />
+            Analizando ficha patrimonial… esto puede tardar hasta un minuto.
+          </div>
+        )}
+
+        {state === "review" && review && (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-xl border border-sabbi-neutral-200 p-4">
+              <p className="text-sm text-sabbi-neutral-900">
+                Cliente: {review.clientName || "—"} ({review.clientEmail})
+              </p>
+              <p className="text-sm text-sabbi-neutral-600">
+                {review.rows.length} fila
+                {review.rows.length === 1 ? "" : "s"} lista
+                {review.rows.length === 1 ? "" : "s"} para revisar.
+              </p>
+            </div>
+            <FichaSummaryBar rows={review.rows} />
+            <ReviewTable
+              rows={review.rows}
+              userId={review.userId}
+              onConfirmed={handleConfirmed}
+            />
+            <button
+              type="button"
+              onClick={handleReset}
+              className="self-start rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm font-medium text-sabbi-neutral-700 hover:bg-sabbi-neutral-50"
+            >
+              Cargar otra ficha
+            </button>
+          </div>
+        )}
+
+        {state === "success" && (
+          <div className="flex flex-col gap-3 rounded-xl border border-sabbi-neutral-200 p-4">
+            <p className="text-sm text-sabbi-neutral-900">
+              Se importaron {importedCount} producto
+              {importedCount === 1 ? "" : "s"} correctamente.
+            </p>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="self-start rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover"
+            >
+              Cargar otra ficha
+            </button>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

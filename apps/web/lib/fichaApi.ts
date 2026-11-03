@@ -4,7 +4,12 @@
  */
 
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { Ficha, FichaListItem, LineStatus } from "@/lib/portfolio-types";
+import type {
+  Ficha,
+  FichaEnrichedRow,
+  FichaListItem,
+  LineStatus,
+} from "@/lib/portfolio-types";
 
 const BASE = "/api/admin/ficha-patrimonial";
 
@@ -47,4 +52,21 @@ export async function confirmFicha(id: number): Promise<void> {
     method: "POST",
   });
   await asJson(res);
+}
+
+/** Maps a persisted ficha's lines into the review table's row shape. */
+export function fichaToEnrichedRows(ficha: Ficha): FichaEnrichedRow[] {
+  return ficha.lines.map((line) => ({
+    excel_row: line.excel_row,
+    raw_name: line.raw_name,
+    raw_tipo_activo: line.raw_tipo_activo,
+    raw_amount: line.raw_amount,
+    raw_currency: line.raw_currency,
+    raw_return_rate: line.raw_return_rate,
+    raw_pertenencia: line.raw_pertenencia,
+    mapped_asset_class: line.mapped_asset_class,
+    normalized_return_rate: line.normalized_return_rate,
+    enriched: line.enriched,
+    enrichment_failed: line.enriched === null,
+  }));
 }
