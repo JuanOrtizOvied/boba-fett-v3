@@ -443,5 +443,9 @@ class SearchResult(BaseModel):
     # Data-as-of date for the catalog match (proxy: the catalog row's created_at),
     # ISO date string or "".
     data_asof: str = ""
+    # Confidence level derived from the match (alta/media/baja/sin_datos), and
+    # whether the product is an accepted catalog match ("ya estaba en la BD").
+    confidence: str = ""
+    catalog_matched: bool = False
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)

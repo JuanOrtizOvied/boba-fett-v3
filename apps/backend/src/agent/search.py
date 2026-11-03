@@ -448,6 +448,20 @@ async def _search_catalog_v2(query: str, pool: asyncpg.Pool) -> SearchResult:
     return _merge_fields(result, product_data, "catalog", fields=PRODUCT_FIELD_NAMES)
 
 
+def _classify_match(similarity: float, has_data: bool) -> tuple[str, bool]:
+    """Derive ``(confidence_level, catalog_matched)`` for a ficha enrichment
+    result. Confidence is gated by the catalog match similarity so a weak fuzzy
+    hit is never reported as high confidence; ``catalog_matched`` ("ya estaba en
+    la BD") is True only for a real catalog hit (sim >= 0.4)."""
+    if similarity >= 0.6:
+        return ("alta", True)
+    if similarity >= 0.4:
+        return ("media", True)
+    if similarity > 0.0 or has_data:
+        return ("baja", False)
+    return ("sin_datos", False)
+
+
 async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | None:
     """Ficha-patrimonial enrichment cascade on the V2 normalized catalog.
     L1 = normalized catalog; L2/L3 fill PRODUCT-level gaps only. Returns None
@@ -467,7 +481,9 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
     _sanitize_taxonomy(result)
     _classify(result)
 
-    if not _has_any_data(result):
+    has_data = _has_any_data(result)
+    if not has_data:
         return None
 
+    result.confidence, result.catalog_matched = _classify_match(result.similarity, has_data)
     return result

@@ -114,6 +114,23 @@ async def test_v2_carries_catalog_signals(monkeypatch):
     assert result.investment_horizon == "Largo plazo"
     assert result.similarity == pytest.approx(0.73)
     assert result.data_asof == "2026-01-19"
+    # Slice 2: a strong catalog match (0.73) is high confidence and "ya estaba en la BD".
+    assert result.confidence == "alta"
+    assert result.catalog_matched is True
+
+
+async def test_classify_match_threshold_table():
+    """Pure classification: confidence gated by similarity, catalog_matched only
+    for a real catalog hit (sim >= 0.4). A weak match is NOT 'alta'."""
+    classify = search_mod._classify_match
+    assert classify(0.73, True) == ("alta", True)
+    assert classify(0.60, True) == ("alta", True)
+    assert classify(0.59, True) == ("media", True)
+    assert classify(0.40, True) == ("media", True)
+    assert classify(0.39, True) == ("baja", False)
+    assert classify(0.136, True) == ("baja", False)  # the live-probe false positive
+    assert classify(0.0, True) == ("baja", False)  # no catalog hit, but web/claude data
+    assert classify(0.0, False) == ("sin_datos", False)
 
 
 async def test_v2_never_fills_commercial_fields_from_claude(monkeypatch):

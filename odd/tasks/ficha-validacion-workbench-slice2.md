@@ -55,10 +55,16 @@ confidence on the match similarity.
   `created_at` field) → GREEN. `test_search_v2` 5/5. Backend suite 326 passed /
   140 skipped (integration, no DB) / 0 new. Real-DB probe (boba-fett-backend):
   "edifica global" → horizon "Largo plazo", data_asof "2026-10-07", similarity
-  0.714. Commit: `__T1__`.
-- [ ] **T-2 — Confidence + catalog-match classification (backend).** Pure helper
-  deriving `confidence` level + `catalog_matched` from similarity+source with the
-  thresholds above; set on `SearchResult`. Unit tests over the threshold table.
+  0.714. Commit: `daa8968`.
+- [x] **T-2 — Confidence + catalog-match classification (backend).** DONE. Route:
+  INLINE. Pure `_classify_match(similarity, has_data) -> (confidence, catalog_matched)`
+  in `agent/search.py`, called at the end of `cascade_search_v2`. Thresholds:
+  sim≥0.6→("alta",True); 0.4≤sim<0.6→("media",True); 0<sim<0.4 or no-catalog-but-data
+  →("baja",False); no data→("sin_datos",False). Added `confidence: str` +
+  `catalog_matched: bool` to `SearchResult`. TDD: RED (no `_classify_match`, no
+  fields) → GREEN. `test_search_v2` 6/6 incl. the full threshold table (the 0.136
+  false positive now classifies "baja"/not-matched, NOT "alta"). Backend suite 327
+  passed / 140 skipped / 0 new. Commit: `__T2__`.
 - [ ] **T-3 — Frontend consumes the signals.** TS mirror of the new fields; show
   similitud % (declared rail), "dato al" (status line), Ticker/ISIN + Horizonte
   values (enable the Slice-1 disabled fields), "Producto nuevo/existente", and
