@@ -102,25 +102,39 @@ const V2_ROW: FichaEnrichedRow = {
 };
 
 describe("ReviewTable V2 series/admin picker", () => {
-  test("picking a series fills commission and return range; picking an admin fills its name", async () => {
+  test("picking series+admin feeds the confirm payload's commercial fields", async () => {
+    vi.mocked(fetchWithAuth).mockReset();
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ created_count: 1, product_ids: ["p1"] }),
+    } as Response);
+
     const user = userEvent.setup();
     render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
 
-    // Commercial fields start blank — nothing is guessed.
     const seriesSelect = screen.getByRole("combobox", { name: "Serie" });
-    const adminSelect = screen.getByRole("combobox", { name: "Administrador del catálogo" });
+    const adminSelect = screen.getByRole("combobox", {
+      name: "Administrador del catálogo",
+    });
+    // Admin picker is gated until a series is chosen.
     expect(adminSelect).toBeDisabled();
 
     await user.selectOptions(seriesSelect, "A");
-
-    expect(screen.getByDisplayValue("3.84%")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("5%")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("8%")).toBeInTheDocument();
     expect(adminSelect).toBeEnabled();
-
     await user.selectOptions(adminSelect, "Admin Co");
-    // The free-text Administrador field is filled from the pick.
-    expect(screen.getByRole("textbox", { name: "Administrador" })).toHaveValue("Admin Co");
+
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+    await user.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    // The picked series/admin become the client product's commercial fields.
+    const [, init] = vi.mocked(fetchWithAuth).mock.calls[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.products[0].commission).toBe("3.84%");
+    expect(body.products[0].administrator).toBe("Admin Co");
+    expect(body.products[0].return_rate).toBe("5% - 8%");
   });
 });
 
@@ -163,7 +177,8 @@ describe("ReviewTable rendering", () => {
     );
     expect(screen.getByDisplayValue("Fondo Renta Fija")).toBeInTheDocument();
     expect(screen.getByDisplayValue("USD")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("5.0")).toBeInTheDocument();
+    // Gestor and Clase de activo are part of the enriched field grid.
+    expect(screen.getByLabelText("Gestor")).toBeInTheDocument();
   });
 
   test("shows a confidence badge derived from the source and the declared summary", () => {
@@ -176,6 +191,22 @@ describe("ReviewTable rendering", () => {
     expect(
       screen.getByText("USD · 5,000 · declara 5%"),
     ).toBeInTheDocument();
+  });
+
+  test("renders an editable Gestor field from the enrichment", async () => {
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+    const gestor = screen.getByLabelText("Gestor");
+    expect(gestor).toHaveValue("Acme Manager");
+    await user.clear(gestor);
+    await user.type(gestor, "Nuevo Gestor");
+    expect(screen.getByLabelText("Gestor")).toHaveValue("Nuevo Gestor");
+  });
+
+  test("renders Ticker/ISIN and Horizonte as deferred disabled fields", () => {
+    render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+    expect(screen.getByLabelText("Ticker / ISIN")).toBeDisabled();
+    expect(screen.getByLabelText("Horizonte")).toBeDisabled();
   });
 
   test("flags the unmapped row with a warning", () => {

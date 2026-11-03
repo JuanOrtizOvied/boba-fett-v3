@@ -140,6 +140,7 @@ export interface EditableFichaRow {
   underlying: AssetAllocation[];
   commission: string;
   administrator: string;
+  manager: string;
   liquidity: string;
   returnRateMin: string;
   returnRateMax: string;
@@ -294,6 +295,7 @@ export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
     underlying: row.enriched?.underlying ?? [],
     commission: row.enriched?.commission ?? "",
     administrator: row.enriched?.administrator ?? "",
+    manager: row.enriched?.manager ?? "",
     liquidity: row.enriched?.liquidity ?? "",
     returnRateMin: row.normalized_return_rate || row.enriched?.return_rate || "",
     returnRateMax: "",
@@ -426,7 +428,7 @@ export function buildConfirmProducts(
       commission: row.commission,
       currency: row.currency,
       administrator: row.administrator,
-      manager: row.enriched?.manager ?? "",
+      manager: row.manager,
       liquidity: row.liquidity,
       return_rate: returnRate,
       catalog_product_id: row.enriched?.catalog_product_id ?? null,

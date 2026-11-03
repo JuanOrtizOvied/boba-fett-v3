@@ -123,7 +123,32 @@ emits plus frontend-derivable values.
   component (gating/deferred/discard) → `ficha-review-table.test` 11/11,
   `ficha-review-table-shared` 31/31. tsc + eslint clean. Full web suite 112
   passed / 8 pre-existing / 0 new (`ficha-patrimonial-page` still 2 failed / 5
-  passed — confirm-semantics change added no regression). Commit: `__T5__`.
+  passed — confirm-semantics change added no regression). Commit: `6f8132e`.
+- [x] **T-6 — Enriched field grid to match the mockup.** DONE (added after live-run
+  review). Route: INLINE. Restructured the enriched panel to the mockup's labeled
+  layout: confidence badge + "Producto nuevo · dato al —" line, then **Nombre del
+  producto · Gestor · Ticker/ISIN · Moneda · Horizonte · Clase de activo · Foco
+  geográfico · Subyacente**. Added editable `manager` (Gestor) to `EditableFichaRow`
+  (buildConfirmProducts now reads `row.manager`). `Ticker/ISIN` and `Horizonte`
+  render with correct labels but DISABLED (Slice 2). **Removed** the standalone
+  Comisión / Administrador-free-text / Liquidez / Rent. Min/Max inputs — those
+  commercial values now flow ONLY from the `Serie/Administrador del cliente`
+  picker (relabeled, moved BELOW the Series/Administradores tables as in the
+  mockup); liquidity stays "". TDD: RED → GREEN. Updated the picker test to assert
+  via the confirm payload (commission "3.84%", administrator "Admin Co",
+  return_rate "5% - 8%"); updated the editable-fields test; added Gestor-editable
+  and deferred-fields tests. `ficha-review-table.test` 13/13,
+  `ficha-review-table-shared` 31/31. tsc + eslint clean. Full web suite 114 passed
+  / 8 pre-existing / 0 new (`ficha-patrimonial-page` still 2 failed / 5 passed).
+  Commit: `__T6__`.
+
+### Known Slice-1 limitation (from live run)
+
+The confidence badge derives purely from match source (catalog→alta). The live
+probe showed the ficha fuzzy match (`similarity > 0.1`) yields weak false
+positives (~0.136) that still render "Confianza alta". Surfacing `similitud %`
+and gating confidence by it is a **Slice 2** item (see Engram:
+"Ficha V2 fuzzy match: 0.1 threshold yields false positives").
 
 ## Acceptance criteria / checks
 
@@ -143,5 +168,10 @@ emits plus frontend-derivable values.
 
 ## Next step
 
-Implement T-1 (RED → GREEN). Push / PR are the user's call; this branch stacks
-on the v2 PR.
+**Slice 1 COMPLETE** (T-1..T-6 all done, committed on `feat/ficha-validacion-workbench`).
+The review screen now matches the mockup's structure (summary bar, declared rail +
+confidence, editable Series & Administradores tables, client serie/admin picker,
+per-line actions, enriched field grid) using only existing V2 data + frontend
+derivation. Next: **Slice 2** (backend — confidence/similitud/Fuentes/Horizonte/
+ISIN/flujos, "ya estaba en la BD") and **Slice 3** (persistence + sidebar).
+Push / PR are the user's call; this branch stacks on the v2 PR.

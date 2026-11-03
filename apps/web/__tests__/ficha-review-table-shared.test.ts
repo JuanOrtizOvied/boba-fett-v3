@@ -154,6 +154,7 @@ describe("toEditableRow", () => {
     expect(editable.amount).toBe("5000");
     // Excel currency wins over the enriched suggestion.
     expect(editable.currency).toBe("USD");
+    expect(editable.manager).toBe("Gestor Y");
     expect(editable.assetClass).toBe("mercados_publicos_fijo");
     expect(editable.returnRateMin).toBe("5.0");
     expect(editable.returnRateMax).toBe("");
@@ -411,18 +412,19 @@ describe("buildConfirmProducts", () => {
       },
     });
     const editable = toEditableRow(row);
+    editable.manager = "Gestor Editado"; // Gestor is now an editable field.
     const [product] = buildConfirmProducts([editable]);
 
     expect(product.name).toBe("Fondo Renta Fija");
     expect(product.amount).toBe(5000);
     expect(product.currency).toBe("USD");
+    expect(product.manager).toBe("Gestor Editado");
     expect(product.asset_class).toEqual([
       { name: "mercados_publicos_fijo", percentage: 100 },
     ]);
     expect(product.underlying).toEqual([{ name: "Bonos", percentage: 100 }]);
     expect(product.geographic_focus).toEqual([{ name: "Perú", percentage: 100 }]);
     expect(product.administrator).toBe("Administradora X");
-    expect(product.manager).toBe("Gestor Y");
     expect(product.liquidity).toBe("Diaria");
     expect(product.commission).toBe("0.5%");
     expect(product.catalog_product_id).toBe(7);

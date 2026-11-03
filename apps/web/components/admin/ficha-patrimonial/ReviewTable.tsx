@@ -304,27 +304,124 @@ function ProductCard({
 
         {/* Right panel: enriched (editable) product */}
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          {/* Confidence + enriched name */}
-          <div className="flex items-start gap-3">
-            <input
-              value={row.name}
-              onChange={(e) => onUpdate({ name: e.target.value })}
-              className="flex-1 rounded-lg border border-sabbi-neutral-200 px-3 py-2 text-sm font-medium text-sabbi-neutral-900 outline-none focus:border-sabbi-primary"
-            />
+          {/* Confidence + status line */}
+          <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`mt-1 shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${confidence.className}`}
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${confidence.className}`}
             >
               {confidence.label}
             </span>
+            <span className="text-xs text-sabbi-neutral-500">
+              Producto nuevo · dato al —
+            </span>
           </div>
 
-          {/* Body: two-column grid */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-        {/* Left column: simple fields */}
-        <div className="flex flex-col gap-3">
+          {/* Enriched fields */}
+          <div className="flex flex-col gap-3">
+            <Field label="Nombre del producto">
+              <input
+                value={row.name}
+                aria-label="Nombre del producto"
+                onChange={(e) => onUpdate({ name: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Gestor">
+                <input
+                  value={row.manager}
+                  aria-label="Gestor"
+                  onChange={(e) => onUpdate({ manager: e.target.value })}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Ticker / ISIN">
+                <input
+                  value=""
+                  aria-label="Ticker / ISIN"
+                  readOnly
+                  disabled
+                  title="Disponible en una próxima etapa"
+                  className={inputClass + " opacity-60"}
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Moneda">
+                <input
+                  value={row.currency}
+                  aria-label="Moneda"
+                  onChange={(e) => onUpdate({ currency: e.target.value })}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Horizonte">
+                <input
+                  value=""
+                  aria-label="Horizonte"
+                  readOnly
+                  disabled
+                  title="Disponible en una próxima etapa"
+                  className={inputClass + " opacity-60"}
+                />
+              </Field>
+            </div>
+
+            <Field label="Clase de activo">
+              <select
+                value={row.assetClass}
+                onChange={(e) =>
+                  onUpdate({ assetClass: e.target.value as FichaAssetClassKey | "" })
+                }
+                className={inputClass + (isUnmapped ? " border-amber-400" : "")}
+              >
+                <option value="">Seleccionar…</option>
+                {(Object.keys(ASSET_CLASS_LABELS) as FichaAssetClassKey[]).map((key) => (
+                  <option key={key} value={key}>
+                    {ASSET_CLASS_LABELS[key]}
+                  </option>
+                ))}
+              </select>
+              {isUnmapped && (
+                <p className="text-[11px] text-amber-700">
+                  Sin mapear — seleccioná una clase de activo
+                </p>
+              )}
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <AllocationEditor
+                label="Foco geográfico"
+                allocations={row.geographicFocus}
+                onChange={(next) => onUpdate({ geographicFocus: next })}
+              />
+              <AllocationEditor
+                label="Subyacente"
+                allocations={row.underlying}
+                onChange={(next) => onUpdate({ underlying: next })}
+              />
+            </div>
+          </div>
+
+          {row.editableSeries.length > 0 && (
+            <SeriesTable
+              series={row.editableSeries}
+              onChange={(next) => onUpdate({ editableSeries: next })}
+            />
+          )}
+
+          {row.editableAdmins.length > 0 && (
+            <AdminTable
+              admins={row.editableAdmins}
+              onChange={(next) => onUpdate({ editableAdmins: next })}
+            />
+          )}
+
           {row.seriesOptions.length > 0 && (
             <div className="grid grid-cols-2 gap-3 rounded-lg bg-sabbi-neutral-50 p-2">
-              <Field label="Serie (catálogo)">
+              <Field label="Serie del cliente">
                 <select
                   value={row.selectedSeries}
                   aria-label="Serie"
@@ -341,7 +438,7 @@ function ProductCard({
                   ))}
                 </select>
               </Field>
-              <Field label="Administrador (catálogo)">
+              <Field label="Administrador del cliente">
                 <select
                   value={row.selectedAdministrator}
                   aria-label="Administrador del catálogo"
@@ -365,111 +462,6 @@ function ProductCard({
                 </select>
               </Field>
             </div>
-          )}
-
-          <Field label="Clase de activo">
-            <select
-              value={row.assetClass}
-              onChange={(e) =>
-                onUpdate({ assetClass: e.target.value as FichaAssetClassKey | "" })
-              }
-              className={inputClass + (isUnmapped ? " border-amber-400" : "")}
-            >
-              <option value="">Seleccionar…</option>
-              {(Object.keys(ASSET_CLASS_LABELS) as FichaAssetClassKey[]).map((key) => (
-                <option key={key} value={key}>
-                  {ASSET_CLASS_LABELS[key]}
-                </option>
-              ))}
-            </select>
-            {isUnmapped && (
-              <p className="text-[11px] text-amber-700">
-                Sin mapear — seleccioná una clase de activo
-              </p>
-            )}
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Comisión">
-              <input
-                value={row.commission}
-                onChange={(e) => onUpdate({ commission: e.target.value })}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Moneda">
-              <input
-                value={row.currency}
-                onChange={(e) => onUpdate({ currency: e.target.value })}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <Field label="Administrador">
-            <input
-              value={row.administrator}
-              aria-label="Administrador"
-              onChange={(e) => onUpdate({ administrator: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
-
-          <Field label="Liquidez">
-            <input
-              value={row.liquidity}
-              onChange={(e) => onUpdate({ liquidity: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Rent. Min">
-              <input
-                value={row.returnRateMin}
-                onChange={(e) => onUpdate({ returnRateMin: e.target.value })}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Rent. Max">
-              <input
-                value={row.returnRateMax}
-                onChange={(e) => onUpdate({ returnRateMax: e.target.value })}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-        </div>
-
-        {/* Right column: allocation editors */}
-        <div className="flex flex-col gap-4">
-          <AllocationEditor
-            label="Foco geográfico"
-            allocations={row.geographicFocus}
-            onChange={(next) => onUpdate({ geographicFocus: next })}
-          />
-          <div className="border-t border-sabbi-neutral-100 pt-4">
-            <AllocationEditor
-              label="Subyacente"
-              allocations={row.underlying}
-              onChange={(next) => onUpdate({ underlying: next })}
-            />
-          </div>
-        </div>
-          </div>
-
-          {row.editableSeries.length > 0 && (
-            <SeriesTable
-              series={row.editableSeries}
-              onChange={(next) => onUpdate({ editableSeries: next })}
-            />
-          )}
-
-          {row.editableAdmins.length > 0 && (
-            <AdminTable
-              admins={row.editableAdmins}
-              onChange={(next) => onUpdate({ editableAdmins: next })}
-            />
           )}
 
           {/* Per-line actions */}
