@@ -86,7 +86,7 @@ confidence on the match similarity.
   rows; a live pending-count tied to approve/discard would need lifting `lineStatus`
   from `ReviewTable` to the page (future refinement). TDD: RED → GREEN. Tests:
   computeFichaSummary 5/5, FichaSummaryBar 2/2. tsc + eslint clean. Full web suite
-  121 passed / 8 pre-existing / 0 new. Commit: `__T4__`.
+  121 passed / 8 pre-existing / 0 new. Commit: `b27c97c`.
 
 ## Acceptance criteria / checks
 - A catalog-matched ficha row carries ticker/horizonte/similarity/data_asof and a
