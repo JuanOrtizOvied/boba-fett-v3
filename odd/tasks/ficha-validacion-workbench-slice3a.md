@@ -52,7 +52,7 @@ Fichas auto-save on parse (every upload appears in the sidebar).
   parse_failed→con_error; []→por_validar; all pending→por_validar; some decided→
   en_proceso; all decided & confirmed→validada; confirmed-but-not-all-decided→
   en_proceso. TDD: RED (ImportError) → GREEN. `test_ficha_status` 7/7. Backend
-  suite 334 passed / 140 skipped / 0 new. Commit: `__T1__`.
+  suite 334 passed / 140 skipped / 0 new. Commit: `88c6045`.
 - [ ] **T-2 — Tables + repository (backend).** `ficha` + `ficha_line` in
   `schema.sql`; `FichaRepository` (create with lines, update line status, mark
   confirmed, get, list-by-status). Integration PG tests.
