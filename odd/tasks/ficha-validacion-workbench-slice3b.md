@@ -31,9 +31,15 @@ endpoints, so the workbench matches the full mockup.
   `listFichas(status?)`, `getFicha(id)`, `updateLineStatus(lineId, status)`,
   `confirmFicha(id)` — thin `fetchWithAuth` wrappers, throw on non-ok. TDD: RED
   (module missing) → GREEN. `ficha-api.test` 6/6. tsc + eslint clean. Full web
-  suite 127 passed / 8 pre-existing / 0 new. Commit: `__T1__`.
-- [ ] **T-2 — FichaSidebar component.** List + status filter tabs + upload button;
-  selection + active highlight. Component tests.
+  suite 127 passed / 8 pre-existing / 0 new. Commit: `e924771`.
+- [x] **T-2 — FichaSidebar component.** DONE. Route: INLINE. `FichaSidebar.tsx`:
+  header + "Subir ficha (.xlsx)" button, filter tabs (Por validar / En proceso /
+  Validadas / Con error / Todas) with active highlight, and a row per ficha
+  (name, "N productos · fecha", status badge) that is selectable (`aria-current`
+  on the active row). Pure component (data + callbacks: fichas, activeFilter,
+  selectedId, onFilterChange, onSelect, onUpload). `FichaFilter` type exported.
+  TDD: RED → GREEN. `ficha-sidebar.test` 5/5. tsc + eslint clean. Full web suite
+  132 passed / 8 pre-existing / 0 new. Commit: `__T2__`.
 - [ ] **T-3 — Page wiring.** Two-pane layout; fetch the list; selecting a ficha
   loads it (GET) into the review pane; refresh the list after an upload.
 - [ ] **T-4 — Persist per-line decisions.** Approve/Discard call PATCH; Confirmar
