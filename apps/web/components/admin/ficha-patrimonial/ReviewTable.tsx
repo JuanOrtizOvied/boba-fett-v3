@@ -12,6 +12,7 @@ import {
   hasUnmappedRow,
   resolveRowSource,
   toEditableRow,
+  type EditableAdminRow,
   type EditableFichaRow,
   type EditableSeriesRow,
   type FichaAssetClassKey,
@@ -180,6 +181,72 @@ function SeriesTable({
                     <input
                       value={s[c.key]}
                       aria-label={`${c.label} serie ${s.series}`}
+                      onChange={(e) => update(i, { [c.key]: e.target.value })}
+                      className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// -- Administradores table (editable catalog admins) --------------------------
+
+const ADMIN_COLUMNS: { key: keyof EditableAdminRow; label: string }[] = [
+  { key: "custody", label: "Custodia %" },
+  { key: "buy", label: "Compra %" },
+  { key: "sell", label: "Venta %" },
+  { key: "minimumUsd", label: "Mínimo USD" },
+];
+
+function AdminTable({
+  admins,
+  onChange,
+}: {
+  admins: EditableAdminRow[];
+  onChange: (next: EditableAdminRow[]) => void;
+}) {
+  const update = (index: number, patch: Partial<EditableAdminRow>) => {
+    onChange(admins.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium text-sabbi-neutral-500">
+        Administradores
+      </span>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="text-left text-sabbi-neutral-500">
+              <th className="px-1 py-1 font-medium">Administrador</th>
+              <th className="px-1 py-1 font-medium">Serie</th>
+              {ADMIN_COLUMNS.map((c) => (
+                <th key={c.key} className="px-1 py-1 font-medium">
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {admins.map((a, i) => (
+              <tr key={`${a.administrator}-${a.series}-${i}`}>
+                <td className="px-1 py-1 font-medium text-sabbi-neutral-700">
+                  {a.administrator || "—"}
+                </td>
+                <td className="px-1 py-1 text-sabbi-neutral-700">
+                  {a.series || "—"}
+                </td>
+                {ADMIN_COLUMNS.map((c) => (
+                  <td key={c.key} className="px-1 py-1">
+                    <input
+                      value={a[c.key]}
+                      aria-label={`${c.label} ${a.administrator} serie ${a.series}`}
                       onChange={(e) => update(i, { [c.key]: e.target.value })}
                       className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
                     />
@@ -395,6 +462,13 @@ function ProductCard({
             <SeriesTable
               series={row.editableSeries}
               onChange={(next) => onUpdate({ editableSeries: next })}
+            />
+          )}
+
+          {row.editableAdmins.length > 0 && (
+            <AdminTable
+              admins={row.editableAdmins}
+              onChange={(next) => onUpdate({ editableAdmins: next })}
             />
           )}
         </div>

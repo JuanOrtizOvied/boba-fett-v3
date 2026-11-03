@@ -99,9 +99,16 @@ emits plus frontend-derivable values.
   refactored onto a shared `fractionToPercentNumber` (behaviour unchanged). TDD:
   RED (missing fns / no table) → GREEN. New tests: 4 shared + 1 component
   (`ficha-review-table` 33/33). tsc + eslint clean. Full web suite 103 passed /
-  8 pre-existing / 0 new. Commit: `__T3__`.
-- [ ] **T-4 — Editable Administradores table.** Admins of the selected series,
-  editable. Render + edit tests.
+  8 pre-existing / 0 new. Commit: `4adf441`.
+- [x] **T-4 — Editable Administradores table.** DONE. Route: INLINE. New
+  `AdminTable` component flattens every series' administrators into editable rows
+  — columns `Administrador`/`Serie` (read-only) + `Custodia %`/`Compra %`/`Venta
+  %` (fractions ×100) + `Mínimo USD` (absolute, new `formatPlainNumber`, no ×100).
+  `EditableFichaRow` gains `editableAdmins: EditableAdminRow[]` (via
+  `toEditableAdminRows` in `toEditableRow`); inputs carry
+  `aria-label="<col> <admin> serie <series>"`. TDD: RED → GREEN. New tests: 4
+  shared + 1 component (`ficha-review-table` 38/38). tsc + eslint clean. Full web
+  suite 108 passed / 8 pre-existing / 0 new. Commit: `__T4__`.
 - [ ] **T-5 — Per-line actions + confirm gating.** Aprobar/Descartar line state;
   deferred buttons disabled; confirm posts only approved lines. Update the
   existing confirm tests.

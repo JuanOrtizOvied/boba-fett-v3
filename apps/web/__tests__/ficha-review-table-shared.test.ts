@@ -6,8 +6,10 @@ import {
   formatDeclaredSummary,
   formatFractionAsPercent,
   formatFractionValue,
+  formatPlainNumber,
   hasUnmappedRow,
   resolveRowSource,
+  toEditableAdminRows,
   toEditableRow,
   toEditableSeriesRows,
 } from "@/components/admin/ficha-patrimonial/reviewTableShared";
@@ -228,6 +230,38 @@ describe("toEditableSeriesRows", () => {
   });
 });
 
+describe("formatPlainNumber", () => {
+  test("renders an absolute number as-is (not scaled like a fraction)", () => {
+    expect(formatPlainNumber(29.41)).toBe("29.41");
+    expect(formatPlainNumber(100)).toBe("100");
+    expect(formatPlainNumber(0)).toBe("0");
+  });
+
+  test("returns an empty string for a null/undefined value", () => {
+    expect(formatPlainNumber(null)).toBe("");
+    expect(formatPlainNumber(undefined)).toBe("");
+  });
+});
+
+describe("toEditableAdminRows", () => {
+  test("flattens every series' administrators into editable rows", () => {
+    const rows = toEditableAdminRows(v2Enriched().series_options ?? []);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({
+      administrator: "Admin Co",
+      series: "A",
+      custody: "0.1", // custody_fee 0.001 -> 0.1%
+      buy: "",
+      sell: "",
+      minimumUsd: "",
+    });
+  });
+
+  test("returns an empty array when there are no series options", () => {
+    expect(toEditableAdminRows([])).toEqual([]);
+  });
+});
+
 describe("toEditableRow with V2 series options", () => {
   test("carries series options, starts unselected, commercial fields blank", () => {
     const editable = toEditableRow(
@@ -237,6 +271,9 @@ describe("toEditableRow with V2 series options", () => {
     expect(editable.seriesOptions.map((s) => s.series)).toEqual(["A"]);
     expect(editable.editableSeries.map((s) => s.series)).toEqual(["A"]);
     expect(editable.editableSeries[0].ter).toBe("3.84");
+    expect(editable.editableAdmins.map((a) => a.administrator)).toEqual([
+      "Admin Co",
+    ]);
     expect(editable.selectedSeries).toBe("");
     expect(editable.selectedAdministrator).toBe("");
     // Commercial fields are not auto-filled — the admin picks a series/admin.

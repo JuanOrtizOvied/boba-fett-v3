@@ -140,6 +140,22 @@ describe("ReviewTable V2 editable Series table", () => {
   });
 });
 
+describe("ReviewTable V2 editable Administradores table", () => {
+  test("renders the series administrators as editable rows and keeps edits", async () => {
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    const custody = screen.getByLabelText("Custodia % Admin Co serie A");
+    expect(custody).toHaveValue("0.1"); // custody_fee 0.001 -> 0.1%
+    expect(screen.getByLabelText("Mínimo USD Admin Co serie A")).toHaveValue("");
+
+    await user.type(custody, "5");
+    expect(screen.getByLabelText("Custodia % Admin Co serie A")).toHaveValue(
+      "0.15",
+    );
+  });
+});
+
 describe("ReviewTable rendering", () => {
   test("renders one card per parsed product with editable fields", () => {
     render(

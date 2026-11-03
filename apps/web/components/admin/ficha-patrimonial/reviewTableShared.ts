@@ -109,6 +109,20 @@ export interface EditableSeriesRow {
   howCalculated: string;
 }
 
+/**
+ * One editable row of the card's Administradores table — a series administrator
+ * the admin can review/correct. `custody`/`buy`/`sell` are plain percent-value
+ * strings (fractions ×100); `minimumUsd` is an absolute amount.
+ */
+export interface EditableAdminRow {
+  administrator: string;
+  series: string;
+  custody: string;
+  buy: string;
+  sell: string;
+  minimumUsd: string;
+}
+
 /** One row's editable review state. */
 export interface EditableFichaRow {
   excelRow: number;
@@ -132,6 +146,8 @@ export interface EditableFichaRow {
   selectedAdministrator: string;
   // Editable copy of the catalog series values (the Series table).
   editableSeries: EditableSeriesRow[];
+  // Editable copy of the catalog administrators (the Administradores table).
+  editableAdmins: EditableAdminRow[];
 }
 
 export function resolveRowSource(row: FichaEnrichedRow): RowSource {
@@ -237,6 +253,26 @@ export function toEditableSeriesRows(
 }
 
 /**
+ * Flattens every series' administrators into editable Administradores-table
+ * rows, carrying the parent series. `custody`/`buy`/`sell` are formatted as
+ * plain percent values; `minimumUsd` is an absolute amount.
+ */
+export function toEditableAdminRows(
+  options: CatalogSeriesOption[],
+): EditableAdminRow[] {
+  return options.flatMap((s) =>
+    s.administrators.map((a) => ({
+      administrator: a.administrator,
+      series: s.series,
+      custody: formatFractionValue(a.custody_fee),
+      buy: formatFractionValue(a.buy_commission),
+      sell: formatFractionValue(a.sell_commission),
+      minimumUsd: formatPlainNumber(a.minimum_usd),
+    })),
+  );
+}
+
+/**
  * Maps a parsed+enriched row into its initial editable review state.
  */
 export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
@@ -259,6 +295,7 @@ export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
     selectedSeries: "",
     selectedAdministrator: "",
     editableSeries: toEditableSeriesRows(row.enriched?.series_options ?? []),
+    editableAdmins: toEditableAdminRows(row.enriched?.series_options ?? []),
   };
 }
 
@@ -291,6 +328,15 @@ export function formatFractionAsPercent(value: number | null | undefined): strin
  */
 export function formatFractionValue(value: number | null | undefined): string {
   return fractionToPercentNumber(value) ?? "";
+}
+
+/**
+ * Formats an absolute number (e.g. a `minimum_usd` amount) as-is, WITHOUT the
+ * ×100 scaling the fraction helpers apply. Returns "" for an unknown value.
+ */
+export function formatPlainNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  return `${value}`;
 }
 
 /**
