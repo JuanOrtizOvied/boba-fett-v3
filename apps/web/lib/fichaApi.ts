@@ -5,6 +5,7 @@
 
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type {
+  CatalogHistoryEntry,
   Ficha,
   FichaApproveRequest,
   FichaEnrichedRow,
@@ -72,6 +73,17 @@ export async function approveFichaLine(
 export async function deleteFicha(id: number): Promise<void> {
   const res = await fetchWithAuth(`${BASE}/fichas/${id}`, { method: "DELETE" });
   await asJson(res);
+}
+
+/** The change history for one V2 catalog product (newest first). */
+export async function getCatalogHistory(
+  code: string,
+): Promise<CatalogHistoryEntry[]> {
+  return asJson<CatalogHistoryEntry[]>(
+    await fetchWithAuth(
+      `/api/admin/catalog/products/${encodeURIComponent(code)}/history`,
+    ),
+  );
 }
 
 /** Maps a persisted ficha's lines into the review table's row shape. */

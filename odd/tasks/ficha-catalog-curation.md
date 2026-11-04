@@ -103,6 +103,13 @@ writer to the V2 catalog.
 (update existing with history, or create new web-searched products with a
 generated code) AND creates the linked client holding, end-to-end.
 
+- [x] **Follow-up — History read (backend + API client).** DONE.
+  `GET /admin/catalog/products/{code}/history` → `list_for_product` (route test);
+  TS `CatalogHistoryEntry` + `fichaApi.getCatalogHistory(code)` (api test). The
+  change history is now READABLE (UI display of it is the remaining piece).
+  Backend 362 passed / 0 new; web 10/10 ficha-api; tsc + eslint clean.
+  Commit: `__hist__`.
+
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and
   writes a history row; a new product is created in the catalog; both create the

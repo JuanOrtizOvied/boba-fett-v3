@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   approveFichaLine,
   confirmFicha,
+  getCatalogHistory,
   deleteFicha,
   fichaToEnrichedRows,
   getFicha,
@@ -67,6 +68,17 @@ describe("fichaApi", () => {
     const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
     expect(url).toBe("/api/admin/ficha-patrimonial/fichas/7/confirm");
     expect((init as RequestInit).method).toBe("POST");
+  });
+
+  test("getCatalogHistory fetches a product's change history", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(
+      okJson([{ id: 1, product_code: "BD-1", action: "update" }]),
+    );
+    const history = await getCatalogHistory("BD-1");
+    expect(fetchWithAuth).toHaveBeenCalledWith(
+      "/api/admin/catalog/products/BD-1/history",
+    );
+    expect(history[0].action).toBe("update");
   });
 
   test("approveFichaLine POSTs the approve payload", async () => {

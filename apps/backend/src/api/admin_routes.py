@@ -38,7 +38,7 @@ from db.catalog_curation import (
 from db.catalog_excel import build_catalog_workbook, build_sync_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
 from db.catalog_excel import export_filename_for_sync as catalog_sync_export_filename
-from db.catalog_history import CatalogHistoryRepository
+from db.catalog_history import CatalogHistoryEntry, CatalogHistoryRepository
 from db.catalog_normalized import CatalogProductCreate as NormalizedProductCreate
 from db.catalog_normalized import (
     CatalogProductRow,
@@ -740,6 +740,15 @@ async def approve_ficha_line(
 
     product = await product_repo.create(data.user_id, data.product, source="admin_ficha_import")
     return {"product_id": product.id, "catalog_changes": catalog_changes}
+
+
+@router.get("/catalog/products/{code}/history")
+async def get_catalog_product_history(
+    code: str,
+    history_repo: CatalogHistoryRepository = Depends(_history_repo),
+) -> list[CatalogHistoryEntry]:
+    """Change history for one V2 catalog product (newest first)."""
+    return await history_repo.list_for_product(code)
 
 
 @router.post("/ficha-patrimonial/confirm", status_code=201)

@@ -160,6 +160,17 @@ export interface FichaApproveRequest {
   admins: CatalogAdminUpdate[];
 }
 
+/** Mirrors `db.catalog_history.CatalogHistoryEntry` — one V2 catalog change. */
+export interface CatalogHistoryEntry {
+  id: number;
+  product_code: string;
+  action: string;
+  changed_by: string | null;
+  source: string;
+  changes: Record<string, { old: unknown; new: unknown }>;
+  created_at: string | null;
+}
+
 /** Mirrors `db.models.Source` — a web source (link + title) cited by L3. */
 export interface Source {
   url: string;

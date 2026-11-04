@@ -420,6 +420,29 @@ def test_approve_updates_catalog_and_creates_client_product(app_client, monkeypa
     app.state.repo.create.assert_awaited_once()
 
 
+def test_get_catalog_product_history(app_client):
+    from db.catalog_history import CatalogHistoryEntry
+
+    app, client = _admin_client(app_client)
+    app.state.history_repo.list_for_product.return_value = [
+        CatalogHistoryEntry(
+            id=1,
+            product_code="BD-1",
+            action="update",
+            source="ficha",
+            changes={"name": {"old": "A", "new": "B"}},
+        )
+    ]
+
+    response = client.get("/admin/catalog/products/BD-1/history")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["action"] == "update"
+    assert body[0]["changes"]["name"]["new"] == "B"
+    app.state.history_repo.list_for_product.assert_awaited_once_with("BD-1")
+
+
 def test_approve_without_catalog_code_creates_new_catalog_product(app_client, monkeypatch):
     from types import SimpleNamespace
 
