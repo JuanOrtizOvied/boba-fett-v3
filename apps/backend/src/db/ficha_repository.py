@@ -98,7 +98,7 @@ class FichaRepository:
                     enriched_json = (
                         json.dumps(row.enriched.model_dump()) if row.enriched is not None else None
                     )
-                    await conn.execute(
+                    line_id = await conn.fetchval(
                         """
                         INSERT INTO ficha_line (
                             ficha_id, excel_row, raw_name, raw_tipo_activo,
@@ -106,6 +106,7 @@ class FichaRepository:
                             raw_pertenencia, mapped_asset_class,
                             normalized_return_rate, enriched)
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        RETURNING id
                         """,
                         ficha_id,
                         row.excel_row,
@@ -119,6 +120,8 @@ class FichaRepository:
                         row.normalized_return_rate,
                         enriched_json,
                     )
+                    # Expose the new id so the parse response rows can be PATCHed.
+                    row.line_id = line_id
         return ficha_id
 
     async def get(self, ficha_id: int) -> Ficha | None:

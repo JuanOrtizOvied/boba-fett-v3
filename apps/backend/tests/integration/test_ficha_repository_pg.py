@@ -57,6 +57,17 @@ async def test_create_get_and_status_lifecycle(test_pool, test_user_id):
     assert (await repo.get(fid)).status == "validada"
 
 
+async def test_create_sets_line_ids_on_the_input_rows(test_pool, test_user_id):
+    repo = FichaRepository(test_pool)
+    client = FichaClientInfo(name="Ana", email="a@x.com", phone="", user_id=test_user_id)
+    rows = [_row(8, "Fondo A"), _row(9, "Fondo B")]
+
+    await repo.create(client, rows)
+
+    assert all(r.line_id is not None for r in rows)
+    assert rows[0].line_id != rows[1].line_id
+
+
 async def test_parse_failure_persists_as_con_error(test_pool, test_user_id):
     repo = FichaRepository(test_pool)
     client = FichaClientInfo(name="X", email="x@x.com", phone="", user_id=test_user_id)

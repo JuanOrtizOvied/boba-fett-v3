@@ -187,6 +187,9 @@ class FichaEnrichedRow(FichaParsedRow):
 
     enriched: SearchResult | None = None
     enrichment_failed: bool = False
+    # Persisted ficha_line id, set by `FichaRepository.create` so the review
+    # table can PATCH per-line decisions without a reload (Slice 3b follow-up).
+    line_id: int | None = None
 
 
 class FichaParseResponse(BaseModel):

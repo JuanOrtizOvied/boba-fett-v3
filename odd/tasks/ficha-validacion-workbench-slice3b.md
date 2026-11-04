@@ -62,10 +62,12 @@ endpoints, so the workbench matches the full mockup.
   onLineDecision fires-with/skips-without line_id, api converter line_id, page
   confirm→confirmFicha(7) + loaded-line approve→updateLineStatus(1,"approved").
   Full web suite 139 passed / 6 pre-existing / 0 new. tsc + eslint clean.
-  LIMITATION (documented follow-up): a freshly-PARSED ficha's response rows have
-  no `line_id` yet (backend parse doesn't return them), so per-line decisions
-  persist only after a reload; confirm→POST works for both flows via `ficha_id`.
-  Commit: `021c13a`.
+  Commit: `021c13a`. FOLLOW-UP RESOLVED (commit below): `FichaRepository.create`
+  now inserts with `RETURNING id` and sets `line_id` on each input row, so the
+  parse response rows carry `line_id` and per-line decisions persist on a FRESH
+  parse too (no reload needed). Backend `FichaEnrichedRow` gained `line_id`.
+  Integration `test_ficha_repository_pg` 4/4 (incl. create-sets-line-ids);
+  backend 346 passed / 144 skipped / 0 new; ruff clean.
 
 ## Acceptance criteria / checks
 - The sidebar lists saved fichas, filters by status, and loads a ficha on click.
