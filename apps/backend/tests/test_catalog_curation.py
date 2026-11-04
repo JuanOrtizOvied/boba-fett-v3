@@ -8,8 +8,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from db.catalog_curation import apply_catalog_product_update
-from db.catalog_normalized import CatalogProductRow, CatalogProductUpdate
+from db.catalog_curation import (
+    AdminUpdateInput,
+    SeriesUpdateInput,
+    apply_catalog_curation,
+    apply_catalog_product_update,
+)
+from db.catalog_normalized import (
+    CatalogProductRow,
+    CatalogProductSeries,
+    CatalogProductSeriesAdmin,
+    CatalogProductUpdate,
+)
 from db.models import AssetAllocation
 
 pytestmark = pytest.mark.asyncio
@@ -64,6 +74,60 @@ async def test_no_update_when_nothing_changed():
 
     assert changes == {}
     catalog.update_product.assert_not_awaited()
+    history.record.assert_not_awaited()
+
+
+def _product_with_series() -> CatalogProductRow:
+    admin = CatalogProductSeriesAdmin(
+        id=100, product_code="BD-1", series="A", administrator="Core", custody_fee=0.001
+    )
+    series = CatalogProductSeries(
+        id=10,
+        product_code="BD-1",
+        series="A",
+        management_fee_ter=0.0236,
+        return_min=0.12,
+        return_max=0.14,
+        administrators=[admin],
+    )
+    return _current(series=[series])
+
+
+async def test_updates_changed_series_and_admins():
+    catalog = AsyncMock()
+    catalog.get_product_detail.return_value = _product_with_series()
+    history = AsyncMock()
+
+    series_in = [
+        SeriesUpdateInput(series="A", management_fee_ter=0.03, return_min=0.12, return_max=0.14)
+    ]  # only TER changed
+    admin_in = [AdminUpdateInput(series="A", administrator="Core", custody_fee=0.002)]
+
+    changes = await apply_catalog_curation(
+        catalog, history, "BD-1", CatalogProductUpdate(), series_in, admin_in, "user-1"
+    )
+
+    assert "management_fee_ter" in changes["series"]["A"]
+    assert "return_min" not in changes["series"]["A"]  # unchanged
+    assert "administrators" in changes
+    catalog.update_series.assert_awaited_once()
+    catalog.update_admin.assert_awaited_once()
+    history.record.assert_awaited_once()
+
+
+async def test_series_unchanged_no_update():
+    catalog = AsyncMock()
+    catalog.get_product_detail.return_value = _product_with_series()
+    history = AsyncMock()
+
+    # Same values → no writes.
+    series_in = [SeriesUpdateInput(series="A", management_fee_ter=0.0236)]
+    changes = await apply_catalog_curation(
+        catalog, history, "BD-1", CatalogProductUpdate(), series_in, [], "user-1"
+    )
+
+    assert changes == {}
+    catalog.update_series.assert_not_awaited()
     history.record.assert_not_awaited()
 
 

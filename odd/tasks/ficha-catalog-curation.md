@@ -54,6 +54,13 @@ writer to the V2 catalog.
   (ModuleNotFound) → GREEN. Unit tests (mocked repos, no DB) 4/4. Backend 355
   passed / 0 new; ruff clean. Commit: `22e5ac5`. NOTE: series/admin updates and
   the approve ENDPOINT wiring are the next step (T-2b / T-3).
+- [x] **T-2b — Series + admins.** DONE. Route: INLINE. `apply_catalog_curation`
+  (product + series + admins, one combined history row); `_apply_series`/
+  `_apply_admins` match by series name / (series, administrator) using the ids
+  from `get_product_detail`, diff with a float tolerance, `update_series`/
+  `update_admin` only changed rows. `SeriesUpdateInput`/`AdminUpdateInput` models.
+  `apply_catalog_product_update` kept as a product-only wrapper. TDD → GREEN;
+  curation tests 6/6; backend 357 passed / 0 new; ruff clean. Commit: `__T2b__`.
 - [ ] **T-3 — Client holding linked.** Approve also creates the client `product`
   with `catalog_product_id`/code set.
 - [ ] **T-4 — Create new product in catalog.** Web-searched → `create_product`
