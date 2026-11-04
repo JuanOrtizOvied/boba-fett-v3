@@ -399,6 +399,15 @@ function ProductCard({
               similitud {similarity}
             </span>
           )}
+          <button
+            type="button"
+            onClick={onResearch}
+            disabled={researching}
+            title="Investiga el producto con la búsqueda web de Claude"
+            className="mt-1 self-start rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm text-sabbi-neutral-700 hover:border-sabbi-primary hover:text-sabbi-primary disabled:opacity-60"
+          >
+            {researching ? "Investigando…" : "Volver a investigar"}
+          </button>
         </div>
 
         {/* Right panel: enriched (editable) product */}
@@ -593,15 +602,6 @@ function ProductCard({
               {catalogMatched
                 ? "Es un producto existente"
                 : "Aprobar y crear producto"}
-            </button>
-            <button
-              type="button"
-              onClick={onResearch}
-              disabled={researching}
-              title="Investiga el producto con la búsqueda web de Claude"
-              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm text-sabbi-neutral-700 hover:border-sabbi-primary hover:text-sabbi-primary disabled:opacity-60"
-            >
-              {researching ? "Investigando…" : "Volver a investigar"}
             </button>
             <button
               type="button"
