@@ -713,3 +713,18 @@ CREATE TABLE IF NOT EXISTS ficha_line (
 );
 
 CREATE INDEX IF NOT EXISTS ficha_line_ficha_id_idx ON ficha_line (ficha_id);
+
+-- Change history for the normalized V2 catalog (ficha-catalog-curation).
+-- Kept independent of catalog_product (no FK) so the audit survives deletes.
+CREATE TABLE IF NOT EXISTS catalog_product_history (
+    id SERIAL PRIMARY KEY,
+    product_code TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('create', 'update')),
+    changed_by UUID REFERENCES users(id),
+    source TEXT NOT NULL DEFAULT 'ficha',
+    changes JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS catalog_product_history_code_idx
+    ON catalog_product_history (product_code);
