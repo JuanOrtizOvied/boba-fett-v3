@@ -97,7 +97,7 @@ writer to the V2 catalog.
     `/approve` via `approveFichaLine`, then refreshes the list). Removed the old
     disabled "Es un producto existente" button. TDD → GREEN; updated the picker +
     deferred tests, added an onApprove test; page test mocks `approveFichaLine`.
-    Web 150 passed / 6 pre-existing / 0 new; tsc + eslint clean. Commit: `__T5b__`.
+    Web 150 passed / 6 pre-existing / 0 new; tsc + eslint clean. Commit: `5749e3b`.
 
 **FEATURE COMPLETE** (T-1..T-5): ficha approve now curates the V2 catalog
 (update existing with history, or create new web-searched products with a
