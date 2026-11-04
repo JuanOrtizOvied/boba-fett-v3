@@ -382,7 +382,7 @@ function ProductCard({
     >
       <div className="flex flex-col gap-4 md:flex-row">
         {/* Left rail: declared (raw) product — read-only */}
-        <div className="flex w-full flex-col gap-2 md:w-56 md:shrink-0">
+        <div className="flex w-full flex-col gap-2 md:w-80 md:shrink-0">
           <p className="text-sm font-medium italic text-sabbi-neutral-900">
             “{rawRow.raw_name}”
           </p>
@@ -409,6 +409,28 @@ function ProductCard({
             <span aria-hidden="true">✨</span>
             {researching ? "Buscando…" : "Buscar con Claude"}
           </button>
+
+          {(row.enriched?.sources?.length ?? 0) > 0 && (
+            <div className="mt-1 flex flex-col gap-1 rounded-lg border border-sabbi-neutral-200 bg-sabbi-neutral-50 p-2">
+              <span className="text-xs font-semibold text-sabbi-neutral-600">
+                Fuentes ({row.enriched?.sources?.length})
+              </span>
+              <ol className="list-decimal pl-4 text-xs text-sabbi-neutral-600">
+                {row.enriched?.sources?.map((source, i) => (
+                  <li key={`${source.url}-${i}`} className="break-words">
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sabbi-primary underline hover:no-underline"
+                    >
+                      {source.title || source.url}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
 
         {/* Right panel: enriched (editable) product */}
@@ -563,28 +585,6 @@ function ProductCard({
                   ))}
                 </select>
               </Field>
-            </div>
-          )}
-
-          {(row.enriched?.sources?.length ?? 0) > 0 && (
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-sabbi-neutral-500">
-                Fuentes
-              </span>
-              <ol className="list-decimal pl-5 text-xs text-sabbi-neutral-600">
-                {row.enriched?.sources?.map((source, i) => (
-                  <li key={`${source.url}-${i}`}>
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sabbi-primary underline hover:no-underline"
-                    >
-                      {source.title || source.url}
-                    </a>
-                  </li>
-                ))}
-              </ol>
             </div>
           )}
 

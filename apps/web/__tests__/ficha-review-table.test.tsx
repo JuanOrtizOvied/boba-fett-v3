@@ -269,7 +269,7 @@ describe("ReviewTable Fuentes section", () => {
     render(
       <ReviewTable rows={[rowWithSources]} userId="u" onConfirmed={vi.fn()} />,
     );
-    expect(screen.getByText("Fuentes")).toBeInTheDocument();
+    expect(screen.getByText(/Fuentes \(/)).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Prospecto X" });
     expect(link).toHaveAttribute("href", "https://x.com/doc");
     expect(
@@ -279,7 +279,7 @@ describe("ReviewTable Fuentes section", () => {
 
   test("renders no Fuentes section when there are no sources", () => {
     render(<ReviewTable rows={[MAPPED_ROW]} userId="u" onConfirmed={vi.fn()} />);
-    expect(screen.queryByText("Fuentes")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Fuentes \(/)).not.toBeInTheDocument();
   });
 });
 
