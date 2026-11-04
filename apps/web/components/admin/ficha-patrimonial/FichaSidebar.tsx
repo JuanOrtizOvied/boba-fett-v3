@@ -43,6 +43,7 @@ interface FichaSidebarProps {
   onFilterChange: (filter: FichaFilter) => void;
   onSelect: (id: number) => void;
   onUpload: () => void;
+  onDelete: (id: number) => void;
 }
 
 export default function FichaSidebar({
@@ -52,6 +53,7 @@ export default function FichaSidebar({
   onFilterChange,
   onSelect,
   onUpload,
+  onDelete,
 }: FichaSidebarProps) {
   return (
     <div className="flex w-72 shrink-0 flex-col gap-3 border-r border-sabbi-neutral-200 pr-3">
@@ -96,32 +98,44 @@ export default function FichaSidebar({
         {fichas.map((ficha) => {
           const badge = STATUS_BADGES[ficha.status];
           const isSelected = ficha.id === selectedId;
+          const label = ficha.client_name || ficha.client_email || `ficha ${ficha.id}`;
           return (
-            <button
-              key={ficha.id}
-              type="button"
-              data-testid={`ficha-row-${ficha.id}`}
-              aria-current={isSelected ? "true" : undefined}
-              onClick={() => onSelect(ficha.id)}
-              className={`flex flex-col gap-1 rounded-lg border p-2.5 text-left ${
-                isSelected
-                  ? "border-sabbi-primary bg-sabbi-primary/5"
-                  : "border-sabbi-neutral-200 hover:bg-sabbi-neutral-50"
-              }`}
-            >
-              <span className="text-sm font-medium text-sabbi-neutral-900">
-                {ficha.client_name || ficha.client_email || "—"}
-              </span>
-              <span className="text-xs text-sabbi-neutral-500">
-                {ficha.line_count} producto{ficha.line_count === 1 ? "" : "s"}
-                {ficha.created_at ? ` · ${formatDate(ficha.created_at)}` : ""}
-              </span>
-              <span
-                className={`self-start rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+            <div key={ficha.id} className="relative">
+              <button
+                type="button"
+                data-testid={`ficha-row-${ficha.id}`}
+                aria-current={isSelected ? "true" : undefined}
+                onClick={() => onSelect(ficha.id)}
+                className={`flex w-full flex-col gap-1 rounded-lg border p-2.5 pr-8 text-left ${
+                  isSelected
+                    ? "border-sabbi-primary bg-sabbi-primary/5"
+                    : "border-sabbi-neutral-200 hover:bg-sabbi-neutral-50"
+                }`}
               >
-                {badge.label}
-              </span>
-            </button>
+                <span className="text-sm font-medium text-sabbi-neutral-900">
+                  {ficha.client_name || ficha.client_email || "—"}
+                </span>
+                <span className="text-xs text-sabbi-neutral-500">
+                  {ficha.line_count} producto{ficha.line_count === 1 ? "" : "s"}
+                  {ficha.created_at ? ` · ${formatDate(ficha.created_at)}` : ""}
+                </span>
+                <span
+                  className={`self-start rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+                >
+                  {badge.label}
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Eliminar ${label}`}
+                onClick={() => onDelete(ficha.id)}
+                className="absolute right-2 top-2 rounded p-1 text-sabbi-neutral-400 hover:bg-red-50 hover:text-red-500"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           );
         })}
       </div>

@@ -14,6 +14,7 @@ import {
 } from "@/components/admin/ficha-patrimonial/fichaUploadShared";
 import {
   confirmFicha,
+  deleteFicha,
   fichaToEnrichedRows,
   getFicha,
   listFichas,
@@ -146,6 +147,15 @@ export default function FichaPatrimonialPage() {
     void updateLineStatus(lineId, status).catch(() => {});
   };
 
+  const handleDeleteFicha = (id: number) => {
+    void deleteFicha(id)
+      .then(() => {
+        if (selectedId === id) handleReset();
+        return refreshList(activeFilter);
+      })
+      .catch(() => {});
+  };
+
   return (
     <div className="flex gap-4">
       <FichaSidebar
@@ -155,6 +165,7 @@ export default function FichaPatrimonialPage() {
         onFilterChange={setActiveFilter}
         onSelect={(id) => void handleSelectFicha(id)}
         onUpload={handleReset}
+        onDelete={handleDeleteFicha}
       />
 
       <main className="flex min-w-0 flex-1 flex-col gap-4">

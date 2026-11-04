@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   confirmFicha,
+  deleteFicha,
   fichaToEnrichedRows,
   getFicha,
   listFichas,
@@ -65,6 +66,14 @@ describe("fichaApi", () => {
     const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
     expect(url).toBe("/api/admin/ficha-patrimonial/fichas/7/confirm");
     expect((init as RequestInit).method).toBe("POST");
+  });
+
+  test("deleteFicha DELETEs the ficha by id", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(okJson({ ok: true }));
+    await deleteFicha(9);
+    const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
+    expect(url).toBe("/api/admin/ficha-patrimonial/fichas/9");
+    expect((init as RequestInit).method).toBe("DELETE");
   });
 
   test("fichaToEnrichedRows maps lines to review rows (enrichment_failed from enriched)", () => {

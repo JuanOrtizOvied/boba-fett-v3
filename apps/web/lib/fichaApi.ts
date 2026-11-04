@@ -54,6 +54,12 @@ export async function confirmFicha(id: number): Promise<void> {
   await asJson(res);
 }
 
+/** Delete a saved ficha (and its lines). */
+export async function deleteFicha(id: number): Promise<void> {
+  const res = await fetchWithAuth(`${BASE}/fichas/${id}`, { method: "DELETE" });
+  await asJson(res);
+}
+
 /** Maps a persisted ficha's lines into the review table's row shape. */
 export function fichaToEnrichedRows(ficha: Ficha): FichaEnrichedRow[] {
   return ficha.lines.map((line) => ({

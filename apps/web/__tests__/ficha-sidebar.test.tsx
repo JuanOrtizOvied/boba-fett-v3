@@ -31,6 +31,7 @@ function renderSidebar(overrides = {}) {
     onFilterChange: vi.fn(),
     onSelect: vi.fn(),
     onUpload: vi.fn(),
+    onDelete: vi.fn(),
     ...overrides,
   };
   render(<FichaSidebar {...props} />);
@@ -68,6 +69,14 @@ describe("FichaSidebar", () => {
     const { onUpload } = renderSidebar();
     await user.click(screen.getByRole("button", { name: /subir ficha/i }));
     expect(onUpload).toHaveBeenCalled();
+  });
+
+  test("clicking the delete button calls onDelete, not onSelect", async () => {
+    const user = userEvent.setup();
+    const { onDelete, onSelect } = renderSidebar();
+    await user.click(screen.getByRole("button", { name: "Eliminar Ana Lopez" }));
+    expect(onDelete).toHaveBeenCalledWith(1);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   test("the selected ficha row is marked current", () => {

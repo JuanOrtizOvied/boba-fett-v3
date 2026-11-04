@@ -5,6 +5,7 @@ import FichaPatrimonialPage from "@/app/admin/ficha-patrimonial/page";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import {
   confirmFicha,
+  deleteFicha,
   getFicha,
   listFichas,
   updateLineStatus,
@@ -23,6 +24,7 @@ vi.mock("@/lib/fichaApi", async (importOriginal) => ({
   getFicha: vi.fn(),
   updateLineStatus: vi.fn().mockResolvedValue(undefined),
   confirmFicha: vi.fn().mockResolvedValue(undefined),
+  deleteFicha: vi.fn().mockResolvedValue(undefined),
 }));
 
 function makeFile(name: string, sizeBytes: number): File {
@@ -272,5 +274,27 @@ describe("FichaPatrimonialPage sidebar", () => {
       screen.getByRole("button", { name: "Aprobar y crear producto" }),
     );
     expect(updateLineStatus).toHaveBeenCalledWith(1, "approved");
+  });
+
+  test("deleting a ficha from the sidebar calls the delete API", async () => {
+    vi.mocked(listFichas).mockResolvedValue([
+      {
+        id: 42,
+        client_name: "Saved Client",
+        client_email: "saved@x.com",
+        created_at: null,
+        line_count: 1,
+        status: "en_proceso",
+      },
+    ]);
+
+    const user = userEvent.setup();
+    render(<FichaPatrimonialPage />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Eliminar Saved Client" }),
+    );
+
+    expect(deleteFicha).toHaveBeenCalledWith(42);
   });
 });
