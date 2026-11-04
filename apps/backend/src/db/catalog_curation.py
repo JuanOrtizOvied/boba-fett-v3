@@ -15,7 +15,9 @@ from db.catalog_history import CatalogHistoryRepository
 from db.catalog_normalized import (
     CatalogProductCreate,
     CatalogProductRow,
+    CatalogProductSeriesAdminCreate,
     CatalogProductSeriesAdminUpdate,
+    CatalogProductSeriesCreate,
     CatalogProductSeriesUpdate,
     CatalogProductUpdate,
     NormalizedCatalogRepository,
@@ -191,12 +193,14 @@ async def create_catalog_product_from_ficha(
     catalog_repo: NormalizedCatalogRepository,
     history_repo: CatalogHistoryRepository,
     fields: CatalogProductUpdate,
+    series: list[SeriesUpdateInput],
+    admins: list[AdminUpdateInput],
     name_fallback: str,
     changed_by: str | None,
 ) -> CatalogProductRow:
     """Create a NEW catalog product from a web-searched ficha line (product not
-    in the catalog), with an auto-generated code, recording a 'create' history
-    row. Series/admins are not created here (added later via the catalog CRUD)."""
+    in the catalog), with an auto-generated code and its admin-entered series and
+    administrators, recording a 'create' history row."""
     code = await catalog_repo.next_product_code()
     create = CatalogProductCreate(
         code=code,
@@ -210,11 +214,37 @@ async def create_catalog_product_from_ficha(
         underlying=fields.underlying or [],
     )
     created = await catalog_repo.create_product(create)
+
+    for s in series:
+        if not s.series.strip():
+            continue
+        await catalog_repo.create_series(
+            CatalogProductSeriesCreate(
+                product_code=code,
+                series=s.series,
+                **{f: getattr(s, f) for f in _SERIES_FIELDS},
+            )
+        )
+    for a in admins:
+        if not a.series.strip() or not a.administrator.strip():
+            continue
+        await catalog_repo.create_admin(
+            CatalogProductSeriesAdminCreate(
+                product_code=code,
+                series=a.series,
+                administrator=a.administrator,
+                **{f: getattr(a, f) for f in _ADMIN_FIELDS},
+            )
+        )
+
     await history_repo.record(
         code,
         "create",
         changed_by,
         "ficha",
-        {"created": create.model_dump(exclude={"code"})},
+        {
+            "created": create.model_dump(exclude={"code"}),
+            "series": [s.series for s in series if s.series.strip()],
+        },
     )
     return created

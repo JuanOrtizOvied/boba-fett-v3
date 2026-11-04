@@ -4,11 +4,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-
-from types import SimpleNamespace
 
 from db.catalog_curation import (
     AdminUpdateInput,
@@ -144,6 +143,8 @@ async def test_create_new_catalog_product_from_ficha():
         catalog,
         history,
         CatalogProductUpdate(name="New Fund", manager="Mgr"),
+        [],
+        [],
         "Fallback Name",
         "user-1",
     )
@@ -164,10 +165,53 @@ async def test_create_uses_name_fallback_when_missing():
     history = AsyncMock()
 
     await create_catalog_product_from_ficha(
-        catalog, history, CatalogProductUpdate(), "Fallback Name", None
+        catalog, history, CatalogProductUpdate(), [], [], "Fallback Name", None
     )
 
     assert catalog.create_product.await_args.args[0].name == "Fallback Name"
+
+
+async def test_create_also_creates_series_and_admins():
+    catalog = AsyncMock()
+    catalog.next_product_code.return_value = "BD-00044"
+    catalog.create_product.return_value = SimpleNamespace(id=7, code="BD-00044")
+    history = AsyncMock()
+
+    series_in = [SeriesUpdateInput(series="A", management_fee_ter=0.02)]
+    admin_in = [AdminUpdateInput(series="A", administrator="Core", custody_fee=0.001)]
+
+    await create_catalog_product_from_ficha(
+        catalog, history, CatalogProductUpdate(name="New Fund"), series_in, admin_in, "FB", "user-1"
+    )
+
+    catalog.create_series.assert_awaited_once()
+    series_arg = catalog.create_series.await_args.args[0]
+    assert series_arg.product_code == "BD-00044"
+    assert series_arg.series == "A"
+    assert series_arg.management_fee_ter == 0.02
+
+    catalog.create_admin.assert_awaited_once()
+    admin_arg = catalog.create_admin.await_args.args[0]
+    assert admin_arg.product_code == "BD-00044"
+    assert admin_arg.series == "A"
+    assert admin_arg.administrator == "Core"
+
+
+async def test_create_skips_blank_series_and_admins():
+    catalog = AsyncMock()
+    catalog.next_product_code.return_value = "BD-00045"
+    catalog.create_product.return_value = SimpleNamespace(id=8, code="BD-00045")
+    history = AsyncMock()
+
+    series_in = [SeriesUpdateInput(series="  ", management_fee_ter=0.02)]
+    admin_in = [AdminUpdateInput(series="A", administrator="", custody_fee=0.001)]
+
+    await create_catalog_product_from_ficha(
+        catalog, history, CatalogProductUpdate(name="New Fund"), series_in, admin_in, "FB", "user-1"
+    )
+
+    catalog.create_series.assert_not_awaited()
+    catalog.create_admin.assert_not_awaited()
 
 
 async def test_returns_empty_when_product_missing():

@@ -109,6 +109,19 @@ generated code) AND creates the linked client holding, end-to-end.
   change history is now READABLE (UI display of it is the remaining piece).
   Backend 362 passed / 0 new; web 10/10 ficha-api; tsc + eslint clean.
   Commit: `3a926df`.
+- [~] **A2 — Series/admins for brand-new catalog products.** Split backend/frontend.
+  - [x] **A2-backend — Create series + admins with the new product.** DONE.
+    Route: INLINE. `create_catalog_product_from_ficha` now takes `series` and
+    `admins` (`[SeriesUpdateInput]`/`[AdminUpdateInput]`) and, after
+    `create_product`, creates a `CatalogProductSeriesCreate` per non-blank series
+    and a `CatalogProductSeriesAdminCreate` per non-blank (series, administrator),
+    recording the created series names in the 'create' history row. Approve
+    endpoint's no-code branch passes `data.series, data.admins`. TDD: RED (2 new
+    tests + updated signatures) → GREEN. Curation tests 10/10; backend 364 passed
+    / 148 skipped / 0 new; ruff clean on edited files. Commit: `<pending>`.
+  - [ ] **A2-frontend — "+ agregar serie / administrador" buttons.** The review
+    card's series/admin tables need add-row controls so an admin can enter
+    series/admins for a brand-new (not-in-catalog) product before approving.
 
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and

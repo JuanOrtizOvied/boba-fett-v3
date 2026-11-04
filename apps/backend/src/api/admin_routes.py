@@ -732,6 +732,8 @@ async def approve_ficha_line(
             catalog_repo,
             history_repo,
             data.catalog_update,
+            data.series,
+            data.admins,
             data.product.name,
             admin["id"],
         )
