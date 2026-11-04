@@ -44,9 +44,16 @@ writer to the V2 catalog.
   `list_for_product(code)` (newest first, JSONB round-trip). TDD: RED
   (ModuleNotFound) → GREEN. Integration `test_catalog_history_pg` 2/2. Backend
   351 passed / 147 skipped / 0 new; ruff clean. Commit: `d485f2e`.
-- [ ] **T-2 — Update catalog on approve (existing).** Map the reviewed/edited
-  values → `update_product`/`update_series`/`update_admin`; record history.
-  (Needs series/admin id plumbing from the enrichment.)
+- [x] **T-2 — Update catalog on approve: product-level (backend service).** DONE.
+  Route: INLINE. `db/catalog_curation.py::apply_catalog_product_update(catalog_repo,
+  history_repo, code, CatalogProductUpdate, changed_by)` — fetches the current
+  product, diffs the product-level fields (name/manager/currency/ticker_isin/
+  investment_horizon + asset_class/geographic_focus/underlying), updates ONLY
+  when something changed, and records the diff ({field:{old,new}}) to history.
+  Returns the diff; empty + no writes when unchanged or missing. TDD: RED
+  (ModuleNotFound) → GREEN. Unit tests (mocked repos, no DB) 4/4. Backend 355
+  passed / 0 new; ruff clean. Commit: `__T2__`. NOTE: series/admin updates and
+  the approve ENDPOINT wiring are the next step (T-2b / T-3).
 - [ ] **T-3 — Client holding linked.** Approve also creates the client `product`
   with `catalog_product_id`/code set.
 - [ ] **T-4 — Create new product in catalog.** Web-searched → `create_product`
