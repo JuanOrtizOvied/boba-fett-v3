@@ -43,7 +43,7 @@ writer to the V2 catalog.
   `CatalogHistoryEntry` + `CatalogHistoryRepository.record(...)` /
   `list_for_product(code)` (newest first, JSONB round-trip). TDD: RED
   (ModuleNotFound) → GREEN. Integration `test_catalog_history_pg` 2/2. Backend
-  351 passed / 147 skipped / 0 new; ruff clean. Commit: `__T1__`.
+  351 passed / 147 skipped / 0 new; ruff clean. Commit: `d485f2e`.
 - [ ] **T-2 — Update catalog on approve (existing).** Map the reviewed/edited
   values → `update_product`/`update_series`/`update_admin`; record history.
   (Needs series/admin id plumbing from the enrichment.)
