@@ -236,15 +236,11 @@ class FichaConfirmRequest(BaseModel):
 # --- Excel parsing -----------------------------------------------------
 
 
-def _cell_str(ws: Any, row: int, col: str) -> str:
-    value = ws[f"{col}{row}"].value
-    if value is None:
-        return ""
-    return str(value).strip()
+def _text(value: Any) -> str:
+    return "" if value is None else str(value).strip()
 
 
-def _cell_float(ws: Any, row: int, col: str) -> float:
-    value = ws[f"{col}{row}"].value
+def _coerce_float(value: Any) -> float:
     if value is None:
         return 0.0
     if isinstance(value, (int, float)):
@@ -255,35 +251,129 @@ def _cell_float(ws: Any, row: int, col: str) -> float:
         return 0.0
 
 
+def _cell_str(ws: Any, row: int, col: str) -> str:
+    return _text(ws[f"{col}{row}"].value)
+
+
+def _cell_float(ws: Any, row: int, col: str) -> float:
+    return _coerce_float(ws[f"{col}{row}"].value)
+
+
+def _norm(value: Any) -> str:
+    """Lowercase, accent-stripped, whitespace-collapsed text for matching."""
+    if value is None:
+        return ""
+    text = unicodedata.normalize("NFD", str(value))
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    return " ".join(text.lower().split())
+
+
 def _is_total_row(name: str) -> bool:
     return "total" in name.strip().lower()
 
 
-def _extract_client_info(ws: Any) -> FichaClientInfo:
-    return FichaClientInfo(
-        name=_cell_str(ws, CLIENT_INFO_ROW, COL_CLIENT_NAME),
-        email=_cell_str(ws, CLIENT_INFO_ROW, COL_CLIENT_EMAIL),
-        phone=_cell_str(ws, CLIENT_INFO_ROW, COL_CLIENT_PHONE),
-    )
+# --- Dynamic (header-driven) product detection ------------------------------
+# A ficha's product table is located by its HEADER row keywords rather than
+# fixed cells, so column reordering / row shifts between templates still parse.
+
+_MAX_SCAN_ROWS = 40
+_HEADER_NAME_KW = ("nombre", "inversion", "cuenta", "producto")
+_HEADER_CURRENCY_KW = ("moneda",)
+_HEADER_AMOUNT_KW = ("valor", "monto")
+_HEADER_RETURN_KW = ("rendimiento", "rentabilidad")
+
+_CLIENT_NAME_LABEL_KW = ("nombres y apellidos", "nombre y apellido", "nombre del cliente")
+_CLIENT_LABEL_SKIP_KW = (
+    "perfil",
+    "capacidad",
+    "verificad",
+    "necesidad",
+    "flujo",
+    "riesgo",
+)
 
 
-def _extract_product_rows(ws: Any) -> list[FichaParsedRow]:
+def _find_products_header(ws: Any) -> tuple[int, dict[str, int]] | None:
+    """Scan for the products header row; return (row, {field: column}) mapping
+    name/amount and (currency and/or return) by keyword, or None if not found.
+    Requiring currency-or-return avoids matching the real-estate header."""
+    max_row = min(ws.max_row or 0, _MAX_SCAN_ROWS)
+    max_col = ws.max_column or 0
+    for r in range(1, max_row + 1):
+        col_map: dict[str, int] = {}
+        for c in range(1, max_col + 1):
+            t = _norm(ws.cell(row=r, column=c).value)
+            if not t:
+                continue
+            if "name" not in col_map and any(k in t for k in _HEADER_NAME_KW):
+                col_map["name"] = c
+            elif "return" not in col_map and any(k in t for k in _HEADER_RETURN_KW):
+                col_map["return"] = c
+            elif "amount" not in col_map and any(k in t for k in _HEADER_AMOUNT_KW):
+                col_map["amount"] = c
+            elif "currency" not in col_map and any(k in t for k in _HEADER_CURRENCY_KW):
+                col_map["currency"] = c
+        if (
+            "name" in col_map
+            and "amount" in col_map
+            and ("currency" in col_map or "return" in col_map)
+        ):
+            return r, col_map
+    return None
+
+
+def _parse_products_dynamic(
+    ws: Any, header_row: int, col_map: dict[str, int]
+) -> list[FichaParsedRow]:
+    name_c = col_map["name"]
+    amount_c = col_map["amount"]
+    currency_c = col_map.get("currency")
+    return_c = col_map.get("return")
+    rows: list[FichaParsedRow] = []
+    max_row = ws.max_row or 0
+    r = header_row + 1
+    while r <= max_row:
+        name = _text(ws.cell(row=r, column=name_c).value)
+        if not name or _is_total_row(name):
+            break
+        amount = _coerce_float(ws.cell(row=r, column=amount_c).value)
+        if not amount:
+            r += 1
+            continue
+        currency = _text(ws.cell(row=r, column=currency_c).value) if currency_c else ""
+        return_value = ws.cell(row=r, column=return_c).value if return_c else None
+        rows.append(
+            FichaParsedRow(
+                excel_row=r,
+                raw_name=name,
+                raw_tipo_activo="",
+                raw_amount=amount,
+                raw_currency=currency,
+                raw_return_rate="" if return_value is None else str(return_value),
+                raw_pertenencia="",
+                mapped_asset_class=map_asset_class(""),
+                normalized_return_rate=normalize_return_rate(return_value),
+            )
+        )
+        r += 1
+    return rows
+
+
+def _parse_products_legacy(ws: Any) -> list[FichaParsedRow]:
+    """Fixed-cell layout (name=C, tipo=J, currency=K, amount=M, return=N from
+    row 8) — the fallback when no header is detected."""
     rows: list[FichaParsedRow] = []
     row_idx = PRODUCTS_START_ROW
-
     while row_idx < REAL_ESTATE_START_ROW:
         name = _cell_str(ws, row_idx, COL_PRODUCT_NAME)
         if not name or _is_total_row(name):
             break
-
         amount = _cell_float(ws, row_idx, COL_AMOUNT)
         if not amount:
             row_idx += 1
             continue
-
         tipo_activo = _cell_str(ws, row_idx, COL_TIPO_ACTIVO)
         raw_return_rate_value = ws[f"{COL_RETURN_RATE}{row_idx}"].value
-
         rows.append(
             FichaParsedRow(
                 excel_row=row_idx,
@@ -300,8 +390,49 @@ def _extract_product_rows(ws: Any) -> list[FichaParsedRow]:
             )
         )
         row_idx += 1
-
     return rows
+
+
+def _extract_product_rows(ws: Any) -> list[FichaParsedRow]:
+    header = _find_products_header(ws)
+    if header is not None:
+        return _parse_products_dynamic(ws, header[0], header[1])
+    return _parse_products_legacy(ws)
+
+
+def _find_client_name(ws: Any) -> str:
+    """Best-effort client name: find a 'Nombres y Apellidos' label and take the
+    adjacent value, else the next non-label value below it."""
+    max_row = min(ws.max_row or 0, _MAX_SCAN_ROWS)
+    max_col = ws.max_column or 0
+    for r in range(1, max_row + 1):
+        for c in range(1, max_col + 1):
+            t = _norm(ws.cell(row=r, column=c).value)
+            if not any(k in t for k in _CLIENT_NAME_LABEL_KW):
+                continue
+            right = _text(ws.cell(row=r, column=c + 1).value)
+            if right:
+                return right
+            for rr in range(r + 1, min(r + 10, max_row) + 1):
+                val = _text(ws.cell(row=rr, column=c).value)
+                if not val:
+                    continue
+                if any(k in _norm(val) for k in _CLIENT_LABEL_SKIP_KW):
+                    continue
+                return val
+            return ""
+    return ""
+
+
+def _extract_client_info(ws: Any) -> FichaClientInfo:
+    name = _cell_str(ws, CLIENT_INFO_ROW, COL_CLIENT_NAME)
+    if not name:
+        name = _find_client_name(ws)
+    return FichaClientInfo(
+        name=name,
+        email=_cell_str(ws, CLIENT_INFO_ROW, COL_CLIENT_EMAIL),
+        phone=_cell_str(ws, CLIENT_INFO_ROW, COL_CLIENT_PHONE),
+    )
 
 
 def parse_ficha_excel(file_bytes: bytes) -> ParsedFicha:

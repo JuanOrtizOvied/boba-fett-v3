@@ -202,3 +202,60 @@ def wb_to_bytes(wb: Workbook) -> bytes:
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
+
+
+# --- Dynamic header detection (real ficha layout) ----------------------------
+
+
+def _real_format_ficha() -> bytes:
+    """A ficha matching a REAL upload: client labels stacked in column C, the
+    products header on row 11, products in columns C-F, and a later real-estate
+    section that must be excluded."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sabbi"
+    ws["C5"] = "Nombres y Apellidos"
+    ws["C6"] = "Perfil de Riesgo"
+    ws["C9"] = "Necesidad de flujos (USD mensual)"
+    ws["D9"] = "800 a 1000"
+    ws["C10"] = "EDUARDO PAUL"
+    ws["C11"] = "Cuenta bancaria y nombre exacto de la inversión"
+    ws["D11"] = "Moneda en la que has invertido"
+    ws["E11"] = "Valor estimado (en USD)"
+    ws["F11"] = "Rendimiento anual estimado (%)"
+    ws["C12"], ws["D12"], ws["E12"], ws["F12"] = (
+        "SCOTIAFONDO LIQUIDEZ SOLES",
+        "Soles",
+        10294.12,
+        4.13,
+    )
+    ws["C13"], ws["D13"], ws["E13"], ws["F13"] = "SANTANDER AHORROS", "Dólares", 105000, 2.5
+    ws["C14"], ws["D14"], ws["E14"] = "Préstamo a su madre", "Dólares", 15000
+    ws["D16"] = "Total"
+    # Real-estate section (must NOT be parsed as products).
+    ws["C21"] = "Inmuebles (u otras propiedades)"
+    ws["F21"] = "Valor estimado (USD)"
+    ws["C22"], ws["F22"] = "CASA RUSTICA", 75000
+    return wb_to_bytes(wb)
+
+
+def test_parses_real_format_by_header_detection():
+    from db.ficha_patrimonial import parse_ficha_excel
+
+    parsed = parse_ficha_excel(_real_format_ficha())
+
+    names = [r.raw_name for r in parsed.rows]
+    assert names == [
+        "SCOTIAFONDO LIQUIDEZ SOLES",
+        "SANTANDER AHORROS",
+        "Préstamo a su madre",
+    ]
+    first = parsed.rows[0]
+    assert first.raw_currency == "Soles"
+    assert round(first.raw_amount) == 10294
+    assert first.raw_return_rate == "4.13"
+    assert first.excel_row == 12
+    # Real-estate rows are excluded.
+    assert "CASA RUSTICA" not in names
+    # Client name is found even though it isn't in the legacy D5 cell.
+    assert parsed.client.name == "EDUARDO PAUL"
