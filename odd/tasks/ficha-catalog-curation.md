@@ -128,7 +128,7 @@ generated code) AND creates the linked client holding, end-to-end.
     product. `buildApproveRequest` already maps `editableSeries`/`editableAdmins`
     → the approve payload, so added rows reach the A2 backend. TDD: RED (3 shared
     + 1 component test) → GREEN. Web ficha suites 64/64; full web 155 passed / 6
-    pre-existing / 0 new; tsc + eslint clean on edited files. Commit: `<pending>`.
+    pre-existing / 0 new; tsc + eslint clean on edited files. Commit: `909d4a5`.
     NOTE: making existing catalog series/admin names editable means renaming one
     on an EXISTING product won't match in `_apply_series`/`_apply_admins` (which
     key by name) — acceptable for now; a rename-aware update is a later follow-up.
