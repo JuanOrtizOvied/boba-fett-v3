@@ -44,7 +44,7 @@ tools (L3) and the shared structured extractor pulls the fields.
   `test_search_v2` 10/10; backend suite 338 passed / 143 skipped / 0 new.
   De-risked without an API call: `ChatAnthropic(betas=...).bind_tools(_WEB_TOOLS)`
   constructs cleanly. LIVE web_search/web_fetch execution still PENDING a real-API
-  run. Commit: `__T1__`.
+  run. Commit: `901d927`.
 
 ## Acceptance criteria / checks
 - `cascade_search_v2` never calls `_search_tavily`; it calls `_search_claude_web`.
