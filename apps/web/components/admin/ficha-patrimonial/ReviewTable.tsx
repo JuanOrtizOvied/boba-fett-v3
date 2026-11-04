@@ -6,6 +6,7 @@ import { extractErrorDetail } from "./fichaUploadShared";
 import {
   ASSET_CLASS_LABELS,
   SOURCE_BADGES,
+  applyResearchToRow,
   applySeriesAdminSelection,
   blankEditableAdminRow,
   blankEditableSeriesRow,
@@ -14,7 +15,6 @@ import {
   formatDeclaredSummary,
   formatSimilarityPercent,
   resolveConfidence,
-  resolveRowSource,
   selectApprovedRows,
   toEditableRow,
   type EditableAdminRow,
@@ -24,6 +24,7 @@ import {
   type FichaLineStatus,
 } from "./reviewTableShared";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { researchFichaLine } from "@/lib/fichaApi";
 import type {
   AssetAllocation,
   FichaApproveRequest,
@@ -349,20 +350,27 @@ function ProductCard({
   rawRow,
   onUpdate,
   onApproveLine,
+  onResearch,
+  researching,
 }: {
   row: EditableFichaRow;
   rawRow: FichaEnrichedRow;
   onUpdate: (patch: Partial<EditableFichaRow>) => void;
   onApproveLine: () => void;
+  onResearch: () => void;
+  researching: boolean;
 }) {
   const isUnmapped = row.assetClass === "";
-  const source = resolveRowSource(rawRow);
-  const badge = SOURCE_BADGES[source];
-  const confidence = resolveConfidence(rawRow);
+  // Enriched-derived display reads the EDITABLE copy (`row.enriched`/`row.source`)
+  // so a web re-investigation updates the badge, confidence, and Fuentes live;
+  // the left rail (declared/raw values) stays on `rawRow`.
+  const effectiveRow: FichaEnrichedRow = { ...rawRow, enriched: row.enriched };
+  const badge = SOURCE_BADGES[row.source];
+  const confidence = resolveConfidence(effectiveRow);
   const declaredSummary = formatDeclaredSummary(rawRow);
-  const similarity = formatSimilarityPercent(rawRow.enriched?.similarity);
-  const catalogMatched = rawRow.enriched?.catalog_matched ?? false;
-  const dataAsof = rawRow.enriched?.data_asof || "—";
+  const similarity = formatSimilarityPercent(row.enriched?.similarity);
+  const catalogMatched = row.enriched?.catalog_matched ?? false;
+  const dataAsof = row.enriched?.data_asof || "—";
 
   return (
     <div
@@ -430,7 +438,7 @@ function ProductCard({
               </Field>
               <Field label="Ticker / ISIN">
                 <input
-                  value={rawRow.enriched?.ticker_isin ?? ""}
+                  value={row.enriched?.ticker_isin ?? ""}
                   aria-label="Ticker / ISIN"
                   readOnly
                   className={inputClass + " bg-sabbi-neutral-50"}
@@ -449,7 +457,7 @@ function ProductCard({
               </Field>
               <Field label="Horizonte">
                 <input
-                  value={rawRow.enriched?.investment_horizon ?? ""}
+                  value={row.enriched?.investment_horizon ?? ""}
                   aria-label="Horizonte"
                   readOnly
                   className={inputClass + " bg-sabbi-neutral-50"}
@@ -548,13 +556,13 @@ function ProductCard({
             </div>
           )}
 
-          {(rawRow.enriched?.sources?.length ?? 0) > 0 && (
+          {(row.enriched?.sources?.length ?? 0) > 0 && (
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-sabbi-neutral-500">
                 Fuentes
               </span>
               <ol className="list-decimal pl-5 text-xs text-sabbi-neutral-600">
-                {rawRow.enriched?.sources?.map((source, i) => (
+                {row.enriched?.sources?.map((source, i) => (
                   <li key={`${source.url}-${i}`}>
                     <a
                       href={source.url}
@@ -588,11 +596,12 @@ function ProductCard({
             </button>
             <button
               type="button"
-              disabled
-              title="Disponible en una próxima etapa"
-              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm text-sabbi-neutral-500 opacity-60"
+              onClick={onResearch}
+              disabled={researching}
+              title="Investiga el producto con la búsqueda web de Claude"
+              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm text-sabbi-neutral-700 hover:border-sabbi-primary hover:text-sabbi-primary disabled:opacity-60"
             >
-              Volver a investigar
+              {researching ? "Investigando…" : "Volver a investigar"}
             </button>
             <button
               type="button"
@@ -628,6 +637,7 @@ export default function ReviewTable({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [researchingIndex, setResearchingIndex] = useState<number | null>(null);
 
   const updateRow = (index: number, patch: Partial<EditableFichaRow>) => {
     setEditableRows((prev) =>
@@ -643,6 +653,21 @@ export default function ReviewTable({
   const approveRow = (index: number) => {
     updateRow(index, { lineStatus: "approved" });
     onApprove?.(buildApproveRequest(editableRows[index], userId));
+  };
+
+  const researchRow = async (index: number) => {
+    const current = editableRows[index];
+    if (!current) return;
+    setErrorMessage(null);
+    setResearchingIndex(index);
+    try {
+      const result = await researchFichaLine(current.name || rows[index].raw_name);
+      updateRow(index, applyResearchToRow(current, result));
+    } catch {
+      setErrorMessage("No se pudo investigar el producto con la búsqueda web.");
+    } finally {
+      setResearchingIndex(null);
+    }
   };
 
   const approvedRows = selectApprovedRows(editableRows);
@@ -693,6 +718,8 @@ export default function ReviewTable({
             rawRow={rows[index]}
             onUpdate={(patch) => updateRow(index, patch)}
             onApproveLine={() => approveRow(index)}
+            onResearch={() => researchRow(index)}
+            researching={researchingIndex === index}
           />
         ))}
       </div>

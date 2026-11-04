@@ -33,18 +33,29 @@ the card with the web-grounded fields + cited sources (Fuentes).
   `require_admin`. TDD: RED → GREEN. Unit (2, mock `_search_claude_web`) + route
   (2: returns web result, non-admin blocked). Backend 368 passed / 149 skipped /
   0 new; ruff clean. Commit: `<pending>`.
-- [ ] **T-2 — Frontend API + merge helper.** `fichaApi.researchFichaLine(name)`
-  → POST /research. Pure `applyResearchToRow(row, result): Partial<EditableFichaRow>`
-  in `reviewTableShared.ts` (fill empty name/manager/currency/assetClass/geo/
-  underlying/return/commission; always set `enriched` + `source`). TDD.
-- [ ] **T-3 — Button wiring.** Enable "Volver a investigar" in ReviewTable's
-  ProductCard → calls `onResearch`; ReviewTable fetches + updates the row with a
-  per-row loading state. TDD (component test mocks `researchFichaLine`).
+- [x] **T-2 — Frontend API + merge helper.** DONE. Route: INLINE.
+  `fichaApi.researchFichaLine(name)` → POST /research. Pure
+  `applyResearchToRow(row, result): Partial<EditableFichaRow>` in
+  `reviewTableShared.ts` (fills empty name/manager/currency/commission/return/
+  geo/underlying/assetClass via the in-file `normalizeAssetClass`; always sets
+  `enriched` + `source: "web_search"`). TDD: RED → GREEN. 2 helper tests + 1 api
+  test. Web 59/59 on the two files.
+- [x] **T-3 — Button wiring.** DONE. Route: INLINE. The card's "Volver a
+  investigar" button is enabled → `onResearch`; ReviewTable's `researchRow(index)`
+  calls `researchFichaLine(row.name)`, applies `applyResearchToRow` via
+  `updateRow`, with a per-row "Investigando…" loading state and an error line.
+  The card's enriched-derived display (source badge, confidence, Fuentes,
+  similarity, ticker/horizonte) now reads the editable `row.enriched`/`row.source`
+  so results show live; the declared left rail stays on `rawRow`. Updated the
+  obsolete "deferred disabled" test to assert it is enabled. TDD: RED → GREEN.
+  Web 169 passed / 0 new; tsc + eslint clean.
 
 ## Acceptance criteria / checks
 - Clicking "Volver a investigar" calls the research endpoint and fills empty card
-  fields + Fuentes without clobbering admin edits. 0 new test failures; tsc +
-  eslint clean.
+  fields + Fuentes without clobbering admin edits. MET: backend 368 passed,
+  web 169 passed, tsc + eslint clean, 0 new failures.
+
+**FEATURE COMPLETE** (T-1..T-3).
 
 ## Next step
-T-1 (RED → GREEN).
+Feature complete. (Live behavior needs a real `ANTHROPIC_API_KEY` + admin login.)

@@ -12,6 +12,7 @@ import {
   formatFractionValue,
   formatPlainNumber,
   formatSimilarityPercent,
+  applyResearchToRow,
   resolveConfidence,
   hasUnmappedRow,
   resolveRowSource,
@@ -525,6 +526,63 @@ describe("buildConfirmProducts", () => {
     const [product] = buildConfirmProducts([editable]);
     expect(product.asset_class).toEqual([]);
     expect(product.amount).toBe(1500.5);
+  });
+});
+
+describe("applyResearchToRow (re-investigate with web)", () => {
+  function webResult(overrides: Record<string, unknown> = {}) {
+    return {
+      name: "Credicorp Crecimiento VCS",
+      manager: "Credicorp Capital",
+      currency: "Dólares",
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "10%",
+      asset_class: [{ name: "mercados_publicos_variable", percentage: 100 }],
+      geographic_focus: [{ name: "Perú", percentage: 100 }],
+      underlying: [{ name: "Acciones Perú", percentage: 100 }],
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+      ...overrides,
+    } as unknown as NonNullable<FichaEnrichedRow["enriched"]>;
+  }
+
+  test("fills empty fields and always refreshes the enriched block + source", () => {
+    const row = toEditableRow(baseRow({ raw_name: "Algo", raw_currency: "" }));
+    row.name = "";
+    row.manager = "";
+    row.currency = "";
+    row.geographicFocus = [];
+    row.underlying = [];
+
+    const patch = applyResearchToRow(row, webResult());
+
+    expect(patch.name).toBe("Credicorp Crecimiento VCS");
+    expect(patch.manager).toBe("Credicorp Capital");
+    expect(patch.currency).toBe("Dólares");
+    expect(patch.geographicFocus).toEqual([{ name: "Perú", percentage: 100 }]);
+    expect(patch.underlying).toEqual([{ name: "Acciones Perú", percentage: 100 }]);
+    expect(patch.source).toBe("web_search");
+    expect(patch.enriched).toMatchObject({ confidence: "baja" });
+  });
+
+  test("never overwrites fields the admin already edited", () => {
+    const row = toEditableRow(baseRow({}));
+    row.name = "Nombre editado por el admin";
+    row.manager = "Gestor manual";
+
+    const patch = applyResearchToRow(row, webResult());
+
+    expect(patch.name).toBeUndefined();
+    expect(patch.manager).toBeUndefined();
+    // The enriched block (Fuentes/confianza) still refreshes.
+    expect(patch.enriched).toBeTruthy();
+    expect(patch.source).toBe("web_search");
   });
 });
 

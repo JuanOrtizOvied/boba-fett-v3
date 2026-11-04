@@ -11,6 +11,7 @@ import type {
   FichaEnrichedRow,
   FichaListItem,
   LineStatus,
+  SearchResult,
 } from "@/lib/portfolio-types";
 
 const BASE = "/api/admin/ficha-patrimonial";
@@ -67,6 +68,17 @@ export async function approveFichaLine(
     body: JSON.stringify(request),
   });
   return asJson(res);
+}
+
+/** Re-investigate one product with Claude's web search + fetch tools. Returns a
+ * web-grounded SearchResult (product fields + cited sources) for the card. */
+export async function researchFichaLine(name: string): Promise<SearchResult> {
+  const res = await fetchWithAuth(`${BASE}/research`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return asJson<SearchResult>(res);
 }
 
 /** Delete a saved ficha (and its lines). */

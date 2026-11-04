@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ReviewTable from "@/components/admin/ficha-patrimonial/ReviewTable";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { researchFichaLine } from "@/lib/fichaApi";
 import type { FichaEnrichedRow } from "@/lib/portfolio-types";
 
 vi.mock("@/lib/fetchWithAuth", () => ({
   fetchWithAuth: vi.fn(),
+}));
+
+vi.mock("@/lib/fichaApi", () => ({
+  researchFichaLine: vi.fn(),
+  getCatalogHistory: vi.fn(),
 }));
 
 const MAPPED_ROW: FichaEnrichedRow = {
@@ -201,6 +207,42 @@ describe("ReviewTable A2 — add series/admins for a brand-new product", () => {
   });
 });
 
+describe("ReviewTable re-investigate with web", () => {
+  test("'Volver a investigar' calls researchFichaLine and fills empty fields", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Fondo Renta Fija",
+      manager: "Gestor Investigado",
+      currency: "USD",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    // Gestor starts empty for MAPPED_ROW.
+    expect(screen.getByLabelText("Gestor")).toHaveValue("");
+
+    await user.click(screen.getByRole("button", { name: /volver a investigar/i }));
+
+    expect(researchFichaLine).toHaveBeenCalledWith("Fondo Renta Fija");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Gestor")).toHaveValue("Gestor Investigado"),
+    );
+  });
+});
+
 describe("ReviewTable Fuentes section", () => {
   test("renders a Fuentes list with links when the enrichment has sources", () => {
     const rowWithSources: FichaEnrichedRow = {
@@ -349,13 +391,13 @@ describe("ReviewTable confirm gating", () => {
     expect(confirmButton).toBeEnabled();
   });
 
-  test("'Volver a investigar' is still a deferred disabled action", () => {
+  test("'Volver a investigar' is an enabled web-research action", () => {
     render(
       <ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />,
     );
     expect(
       screen.getByRole("button", { name: "Volver a investigar" }),
-    ).toBeDisabled();
+    ).toBeEnabled();
   });
 
   test("approving calls onApprove with the catalog curation request", async () => {

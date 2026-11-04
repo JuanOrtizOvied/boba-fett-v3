@@ -421,6 +421,40 @@ export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
   };
 }
 
+/**
+ * Merges a web re-investigation result (`researchFichaLine`) into an edited row.
+ * FILLS ONLY EMPTY fields — never clobbers what the admin already typed — and
+ * ALWAYS refreshes the `enriched` block (Fuentes + confidence) and the source
+ * badge ("Búsqueda web"). Returns the patch to apply.
+ */
+export function applyResearchToRow(
+  row: EditableFichaRow,
+  result: NonNullable<FichaEnrichedRow["enriched"]>,
+): Partial<EditableFichaRow> {
+  const patch: Partial<EditableFichaRow> = {
+    enriched: result,
+    source: "web_search",
+  };
+  if (!row.name.trim() && result.name) patch.name = result.name;
+  if (!row.manager.trim() && result.manager) patch.manager = result.manager;
+  if (!row.currency.trim() && result.currency) patch.currency = result.currency;
+  if (!row.commission.trim() && result.commission) patch.commission = result.commission;
+  if (!row.returnRateMin.trim() && result.return_rate) {
+    patch.returnRateMin = result.return_rate;
+  }
+  if (!row.geographicFocus.length && result.geographic_focus?.length) {
+    patch.geographicFocus = result.geographic_focus;
+  }
+  if (!row.underlying.length && result.underlying?.length) {
+    patch.underlying = result.underlying;
+  }
+  if (!row.assetClass && result.asset_class?.length) {
+    const key = normalizeAssetClass(result.asset_class[0].name);
+    if (key) patch.assetClass = key;
+  }
+  return patch;
+}
+
 /** Returns only the rows the admin approved — the ones a confirm will create. */
 export function selectApprovedRows(rows: EditableFichaRow[]): EditableFichaRow[] {
   return rows.filter((row) => row.lineStatus === "approved");

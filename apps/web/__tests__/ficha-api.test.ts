@@ -7,6 +7,7 @@ import {
   fichaToEnrichedRows,
   getFicha,
   listFichas,
+  researchFichaLine,
   updateLineStatus,
 } from "@/lib/fichaApi";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
@@ -96,6 +97,20 @@ describe("fichaApi", () => {
     const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
     expect(url).toBe("/api/admin/ficha-patrimonial/approve");
     expect((init as RequestInit).method).toBe("POST");
+  });
+
+  test("researchFichaLine POSTs the product name to the research endpoint", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(
+      okJson({ name: "Credicorp VCS", manager: "Credicorp" }),
+    );
+    const result = await researchFichaLine("Credicorp Crecimiento");
+    const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
+    expect(url).toBe("/api/admin/ficha-patrimonial/research");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      name: "Credicorp Crecimiento",
+    });
+    expect(result.name).toBe("Credicorp VCS");
   });
 
   test("deleteFicha DELETEs the ficha by id", async () => {
