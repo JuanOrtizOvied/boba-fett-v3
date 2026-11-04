@@ -60,7 +60,7 @@ writer to the V2 catalog.
   from `get_product_detail`, diff with a float tolerance, `update_series`/
   `update_admin` only changed rows. `SeriesUpdateInput`/`AdminUpdateInput` models.
   `apply_catalog_product_update` kept as a product-only wrapper. TDD → GREEN;
-  curation tests 6/6; backend 357 passed / 0 new; ruff clean. Commit: `__T2b__`.
+  curation tests 6/6; backend 357 passed / 0 new; ruff clean. Commit: `eb4100e`.
 - [x] **T-3 — Approve endpoint + client holding.** DONE. Route: INLINE.
   `POST /admin/ficha-patrimonial/approve` (`FichaApproveRequest`: user_id,
   ProductCreate, catalog_product_code, catalog_update, series[], admins[]): when
@@ -71,7 +71,7 @@ writer to the V2 catalog.
   `app.state.history_repo = CatalogHistoryRepository(pool)` wired in
   `api/routes.py`. TDD: RED → GREEN. Route tests: approve updates catalog +
   creates product; no-code skips curation. Backend 359 passed / 147 skipped / 0
-  new; ruff clean; `api.routes` imports clean. Commit: `__T3__`.
+  new; ruff clean; `api.routes` imports clean. Commit: `9f8dc44`.
 - [ ] **T-4 — Create new product in catalog.** Web-searched → `create_product`
   (+ history) + code generation.
 - [ ] **T-5 — Frontend.** Button shows "Es un producto existente" (update) vs
