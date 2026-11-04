@@ -43,6 +43,9 @@ DO $$ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name='products' AND column_name='geographic_focus' AND data_type='text'
   ) THEN
+    -- Drop the TEXT default first: ALTER TYPE would otherwise try to cast the
+    -- existing DEFAULT '' to jsonb and fail on a fresh apply.
+    ALTER TABLE products ALTER COLUMN geographic_focus DROP DEFAULT;
     ALTER TABLE products ALTER COLUMN geographic_focus TYPE JSONB
       USING CASE WHEN geographic_focus IS NOT NULL AND geographic_focus != ''
         THEN jsonb_build_array(jsonb_build_object('name', geographic_focus, 'percentage', 100))
@@ -89,6 +92,9 @@ DO $$ BEGIN
       WHEN asset_class IS NOT NULL AND asset_class != ''
       THEN jsonb_build_array(jsonb_build_object('name', asset_class, 'percentage', 100))::text
       ELSE '[]' END;
+    -- Drop the TEXT default first (see geographic_focus above): the cast of
+    -- DEFAULT '' to jsonb would otherwise fail on a fresh apply.
+    ALTER TABLE products ALTER COLUMN asset_class DROP DEFAULT;
     ALTER TABLE products ALTER COLUMN asset_class TYPE JSONB USING asset_class::jsonb;
     ALTER TABLE products ALTER COLUMN asset_class SET DEFAULT '[]'::jsonb;
   END IF;
@@ -118,7 +124,13 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE product_catalog DROP COLUMN IF EXISTS subcategory;
+-- Legacy product_catalog clean-up (runs only when the table already exists;
+-- on a fresh apply product_catalog is created further below, so skip).
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='product_catalog') THEN
+    ALTER TABLE product_catalog DROP COLUMN IF EXISTS subcategory;
+  END IF;
+END $$;
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -129,14 +141,22 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Backfill: copy underlying from source products into catalog entries that have none
-UPDATE product_catalog pc
-SET underlying = p.underlying
-FROM products p
-WHERE pc.approved_from_product_id = p.id
-  AND (pc.underlying IS NULL OR pc.underlying = '[]'::jsonb)
-  AND p.underlying IS NOT NULL
-  AND p.underlying != '[]'::jsonb;
+-- Backfill: copy underlying from source products into catalog entries that have
+-- none (skipped on a fresh apply — product_catalog is created further below).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='product_catalog' AND column_name='approved_from_product_id'
+  ) THEN
+    UPDATE product_catalog pc
+    SET underlying = p.underlying
+    FROM products p
+    WHERE pc.approved_from_product_id = p.id
+      AND (pc.underlying IS NULL OR pc.underlying = '[]'::jsonb)
+      AND p.underlying IS NOT NULL
+      AND p.underlying != '[]'::jsonb;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_products_user ON products (user_id);
 CREATE INDEX IF NOT EXISTS idx_products_catalog_product_id ON products (catalog_product_id);
@@ -172,6 +192,8 @@ DO $$ BEGIN
       WHEN asset_class IS NOT NULL AND asset_class != ''
       THEN jsonb_build_array(jsonb_build_object('name', asset_class, 'percentage', 100))::text
       ELSE '[]' END;
+    -- Drop any TEXT default first (no-op when none): its '' cannot cast to jsonb.
+    ALTER TABLE product_catalog ALTER COLUMN asset_class DROP DEFAULT;
     ALTER TABLE product_catalog ALTER COLUMN asset_class TYPE JSONB USING asset_class::jsonb;
     ALTER TABLE product_catalog ALTER COLUMN asset_class SET DEFAULT '[]'::jsonb;
   END IF;
@@ -183,6 +205,8 @@ DO $$ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name='product_catalog' AND column_name='geographic_focus' AND data_type='text'
   ) THEN
+    -- Drop any TEXT default first (no-op when none): its '' cannot cast to jsonb.
+    ALTER TABLE product_catalog ALTER COLUMN geographic_focus DROP DEFAULT;
     ALTER TABLE product_catalog ALTER COLUMN geographic_focus TYPE JSONB
       USING CASE WHEN geographic_focus IS NOT NULL AND geographic_focus != ''
         THEN jsonb_build_array(jsonb_build_object('name', geographic_focus, 'percentage', 100))
@@ -572,8 +596,12 @@ DO $$ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name='products' AND column_name='amount' AND data_type='numeric'
   ) THEN
-    ALTER TABLE products ALTER COLUMN amount TYPE TEXT USING amount::text;
+    -- Drop the positivity CHECK first (both the explicit name and the inline
+    -- auto-generated one): it is `amount > 0`, which cannot be re-validated once
+    -- the column becomes TEXT (text > numeric).
     ALTER TABLE products DROP CONSTRAINT IF EXISTS products_amount_positive;
+    ALTER TABLE products DROP CONSTRAINT IF EXISTS products_amount_check;
+    ALTER TABLE products ALTER COLUMN amount TYPE TEXT USING amount::text;
   END IF;
 END $$;
 
