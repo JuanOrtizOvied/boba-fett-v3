@@ -90,9 +90,18 @@ writer to the V2 catalog.
     code, and series/admin values converted back to fractions). TDD → GREEN.
     Tests: percentToFraction (2), buildApproveRequest (2), approveFichaLine api
     (1). tsc + eslint clean. Web 149 passed / 6 pre-existing / 0 new.
-  - [ ] **T-5b — Button wiring.** Card shows "Es un producto existente" (update,
-    when `catalog_matched`) vs "Aprobar y crear producto" (create); approving a
-    line POSTs `/approve` via `buildApproveRequest`.
+  - [x] **T-5b — Button wiring.** DONE. The card's primary per-line button reads
+    "Es un producto existente" when `catalog_matched` else "Aprobar y crear
+    producto"; clicking it marks the line approved AND calls `onApprove`
+    (ReviewTable builds the request via `buildApproveRequest` and the page POSTs
+    `/approve` via `approveFichaLine`, then refreshes the list). Removed the old
+    disabled "Es un producto existente" button. TDD → GREEN; updated the picker +
+    deferred tests, added an onApprove test; page test mocks `approveFichaLine`.
+    Web 150 passed / 6 pre-existing / 0 new; tsc + eslint clean. Commit: `__T5b__`.
+
+**FEATURE COMPLETE** (T-1..T-5): ficha approve now curates the V2 catalog
+(update existing with history, or create new web-searched products with a
+generated code) AND creates the linked client holding, end-to-end.
 
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and

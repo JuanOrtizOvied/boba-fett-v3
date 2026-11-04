@@ -130,8 +130,9 @@ describe("ReviewTable V2 series/admin picker", () => {
     expect(adminSelect).toBeEnabled();
     await user.selectOptions(adminSelect, "Admin Co");
 
+    // V2_ROW is a catalog match → the primary button reads "Es un producto existente".
     await user.click(
-      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+      screen.getByRole("button", { name: "Es un producto existente" }),
     );
     await user.click(screen.getByRole("button", { name: /confirmar/i }));
 
@@ -324,16 +325,33 @@ describe("ReviewTable confirm gating", () => {
     expect(confirmButton).toBeEnabled();
   });
 
-  test("deferred per-line actions are rendered but disabled", () => {
+  test("'Volver a investigar' is still a deferred disabled action", () => {
     render(
       <ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />,
     );
     expect(
-      screen.getByRole("button", { name: "Es un producto existente" }),
-    ).toBeDisabled();
-    expect(
       screen.getByRole("button", { name: "Volver a investigar" }),
     ).toBeDisabled();
+  });
+
+  test("approving calls onApprove with the catalog curation request", async () => {
+    const onApprove = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReviewTable
+        rows={[V2_ROW]}
+        userId="user-9"
+        onConfirmed={vi.fn()}
+        onApprove={onApprove}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Es un producto existente" }),
+    );
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    const req = onApprove.mock.calls[0][0];
+    expect(req.user_id).toBe("user-9");
+    expect(req.catalog_product_code).toBe("BD-00001");
   });
 
   test("discarding a line excludes it from the confirm payload", async () => {

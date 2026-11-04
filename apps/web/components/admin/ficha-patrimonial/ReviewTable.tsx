@@ -6,6 +6,7 @@ import {
   ASSET_CLASS_LABELS,
   SOURCE_BADGES,
   applySeriesAdminSelection,
+  buildApproveRequest,
   buildConfirmProducts,
   formatDeclaredSummary,
   formatSimilarityPercent,
@@ -20,7 +21,11 @@ import {
   type FichaLineStatus,
 } from "./reviewTableShared";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import type { AssetAllocation, FichaEnrichedRow } from "@/lib/portfolio-types";
+import type {
+  AssetAllocation,
+  FichaApproveRequest,
+  FichaEnrichedRow,
+} from "@/lib/portfolio-types";
 
 interface ReviewTableProps {
   rows: FichaEnrichedRow[];
@@ -29,6 +34,9 @@ interface ReviewTableProps {
   /** Persist a per-line decision (Slice 3b) — only fired for rows with a
    * persisted `lineId` (i.e. a reloaded ficha). */
   onLineDecision?: (lineId: number, status: FichaLineStatus) => void;
+  /** Approve one line (Slice: catalog curation) — curate the catalog + create
+   * the client holding via the /approve endpoint. */
+  onApprove?: (request: FichaApproveRequest) => void;
 }
 
 const inputClass =
@@ -272,10 +280,12 @@ function ProductCard({
   row,
   rawRow,
   onUpdate,
+  onApproveLine,
 }: {
   row: EditableFichaRow;
   rawRow: FichaEnrichedRow;
   onUpdate: (patch: Partial<EditableFichaRow>) => void;
+  onApproveLine: () => void;
 }) {
   const isUnmapped = row.assetClass === "";
   const source = resolveRowSource(rawRow);
@@ -500,19 +510,13 @@ function ProductCard({
           <div className="flex flex-wrap items-center gap-2 border-t border-sabbi-neutral-100 pt-3">
             <button
               type="button"
-              onClick={() => onUpdate({ lineStatus: "approved" })}
+              onClick={onApproveLine}
               disabled={isUnmapped}
               className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
             >
-              Aprobar y crear producto
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Disponible en una próxima etapa"
-              className="rounded-lg border border-sabbi-neutral-200 px-3 py-1.5 text-sm text-sabbi-neutral-500 opacity-60"
-            >
-              Es un producto existente
+              {catalogMatched
+                ? "Es un producto existente"
+                : "Aprobar y crear producto"}
             </button>
             <button
               type="button"
@@ -549,6 +553,7 @@ export default function ReviewTable({
   userId,
   onConfirmed,
   onLineDecision,
+  onApprove,
 }: ReviewTableProps) {
   const [editableRows, setEditableRows] = useState<EditableFichaRow[]>(() =>
     rows.map(toEditableRow),
@@ -565,6 +570,11 @@ export default function ReviewTable({
       const lineId = editableRows[index]?.lineId;
       if (lineId != null) onLineDecision?.(lineId, patch.lineStatus);
     }
+  };
+
+  const approveRow = (index: number) => {
+    updateRow(index, { lineStatus: "approved" });
+    onApprove?.(buildApproveRequest(editableRows[index], userId));
   };
 
   const approvedRows = selectApprovedRows(editableRows);
@@ -614,6 +624,7 @@ export default function ReviewTable({
             row={row}
             rawRow={rows[index]}
             onUpdate={(patch) => updateRow(index, patch)}
+            onApproveLine={() => approveRow(index)}
           />
         ))}
       </div>

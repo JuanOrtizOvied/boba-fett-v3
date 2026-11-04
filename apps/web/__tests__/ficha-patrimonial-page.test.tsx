@@ -25,6 +25,9 @@ vi.mock("@/lib/fichaApi", async (importOriginal) => ({
   updateLineStatus: vi.fn().mockResolvedValue(undefined),
   confirmFicha: vi.fn().mockResolvedValue(undefined),
   deleteFicha: vi.fn().mockResolvedValue(undefined),
+  approveFichaLine: vi
+    .fn()
+    .mockResolvedValue({ product_id: "p", catalog_changes: {} }),
 }));
 
 function makeFile(name: string, sizeBytes: number): File {

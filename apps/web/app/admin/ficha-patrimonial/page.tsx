@@ -13,6 +13,7 @@ import {
   readFileAsBase64,
 } from "@/components/admin/ficha-patrimonial/fichaUploadShared";
 import {
+  approveFichaLine,
   confirmFicha,
   deleteFicha,
   fichaToEnrichedRows,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/fichaApi";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type {
+  FichaApproveRequest,
   FichaEnrichedRow,
   FichaListItem,
   FichaParseResponse,
@@ -147,6 +149,12 @@ export default function FichaPatrimonialPage() {
     void updateLineStatus(lineId, status).catch(() => {});
   };
 
+  const handleApprove = (request: FichaApproveRequest) => {
+    void approveFichaLine(request)
+      .then(() => refreshList(activeFilter))
+      .catch(() => {});
+  };
+
   const handleDeleteFicha = (id: number) => {
     void deleteFicha(id)
       .then(() => {
@@ -207,6 +215,7 @@ export default function FichaPatrimonialPage() {
               userId={review.userId}
               onConfirmed={handleConfirmed}
               onLineDecision={handleLineDecision}
+              onApprove={handleApprove}
             />
             <button
               type="button"
