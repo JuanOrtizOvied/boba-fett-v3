@@ -114,7 +114,9 @@ describe("fichaApi", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].raw_name).toBe("Fondo A");
     expect(rows[0].enrichment_failed).toBe(false);
+    expect(rows[0].line_id).toBe(10);
     expect(rows[1].enrichment_failed).toBe(true);
+    expect(rows[1].line_id).toBe(11);
   });
 
   test("throws on a non-ok response", async () => {

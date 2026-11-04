@@ -194,6 +194,9 @@ export interface FichaParsedRow {
 export interface FichaEnrichedRow extends FichaParsedRow {
   enriched: SearchResult | null;
   enrichment_failed: boolean;
+  /** Persisted ficha_line id (Slice 3b) — present when loaded from a saved
+   * ficha; absent for a freshly-parsed response. Enables per-line PATCH. */
+  line_id?: number;
 }
 
 /** Ficha lifecycle status (Slice 3a), derived from the per-line decisions. */

@@ -12,12 +12,19 @@ import {
   extractErrorDetail,
   readFileAsBase64,
 } from "@/components/admin/ficha-patrimonial/fichaUploadShared";
-import { fichaToEnrichedRows, getFicha, listFichas } from "@/lib/fichaApi";
+import {
+  confirmFicha,
+  fichaToEnrichedRows,
+  getFicha,
+  listFichas,
+  updateLineStatus,
+} from "@/lib/fichaApi";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type {
   FichaEnrichedRow,
   FichaListItem,
   FichaParseResponse,
+  LineStatus,
 } from "@/lib/portfolio-types";
 
 type PageState = "idle" | "loading" | "review" | "success";
@@ -131,7 +138,12 @@ export default function FichaPatrimonialPage() {
     setImportedCount(createdCount);
     setReview(null);
     setState("success");
+    if (selectedId != null) void confirmFicha(selectedId).catch(() => {});
     void refreshList(activeFilter);
+  };
+
+  const handleLineDecision = (lineId: number, status: LineStatus) => {
+    void updateLineStatus(lineId, status).catch(() => {});
   };
 
   return (
@@ -183,6 +195,7 @@ export default function FichaPatrimonialPage() {
               rows={review.rows}
               userId={review.userId}
               onConfirmed={handleConfirmed}
+              onLineDecision={handleLineDecision}
             />
             <button
               type="button"

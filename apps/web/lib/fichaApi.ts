@@ -68,5 +68,6 @@ export function fichaToEnrichedRows(ficha: Ficha): FichaEnrichedRow[] {
     normalized_return_rate: line.normalized_return_rate,
     enriched: line.enriched,
     enrichment_failed: line.enriched === null,
+    line_id: line.id,
   }));
 }

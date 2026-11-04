@@ -17,6 +17,7 @@ import {
   type EditableFichaRow,
   type EditableSeriesRow,
   type FichaAssetClassKey,
+  type FichaLineStatus,
 } from "./reviewTableShared";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type { AssetAllocation, FichaEnrichedRow } from "@/lib/portfolio-types";
@@ -25,6 +26,9 @@ interface ReviewTableProps {
   rows: FichaEnrichedRow[];
   userId: string;
   onConfirmed: (createdCount: number) => void;
+  /** Persist a per-line decision (Slice 3b) — only fired for rows with a
+   * persisted `lineId` (i.e. a reloaded ficha). */
+  onLineDecision?: (lineId: number, status: FichaLineStatus) => void;
 }
 
 const inputClass =
@@ -518,7 +522,12 @@ function ProductCard({
 
 // -- Main review component ----------------------------------------------------
 
-export default function ReviewTable({ rows, userId, onConfirmed }: ReviewTableProps) {
+export default function ReviewTable({
+  rows,
+  userId,
+  onConfirmed,
+  onLineDecision,
+}: ReviewTableProps) {
   const [editableRows, setEditableRows] = useState<EditableFichaRow[]>(() =>
     rows.map(toEditableRow),
   );
@@ -529,6 +538,11 @@ export default function ReviewTable({ rows, userId, onConfirmed }: ReviewTablePr
     setEditableRows((prev) =>
       prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
     );
+    // Persist an approve/discard decision for a reloaded (persisted) line.
+    if (patch.lineStatus && patch.lineStatus !== "pending") {
+      const lineId = editableRows[index]?.lineId;
+      if (lineId != null) onLineDecision?.(lineId, patch.lineStatus);
+    }
   };
 
   const approvedRows = selectApprovedRows(editableRows);

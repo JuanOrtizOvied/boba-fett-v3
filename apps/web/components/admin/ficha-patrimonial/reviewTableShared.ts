@@ -132,6 +132,8 @@ export type FichaLineStatus = "pending" | "approved" | "discarded";
 /** One row's editable review state. */
 export interface EditableFichaRow {
   excelRow: number;
+  // Persisted ficha_line id (Slice 3b) — null for a freshly-parsed row.
+  lineId: number | null;
   name: string;
   amount: string;
   currency: string;
@@ -318,6 +320,7 @@ export function toEditableAdminRows(
 export function toEditableRow(row: FichaEnrichedRow): EditableFichaRow {
   return {
     excelRow: row.excel_row,
+    lineId: row.line_id ?? null,
     name: row.enriched?.name || row.raw_name,
     amount: String(row.raw_amount ?? ""),
     currency: row.raw_currency || row.enriched?.currency || "",

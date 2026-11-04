@@ -398,6 +398,11 @@ describe("line status", () => {
     expect(toEditableRow(baseRow({})).lineStatus).toBe("pending");
   });
 
+  test("toEditableRow carries the persisted line_id (null when absent)", () => {
+    expect(toEditableRow(baseRow({})).lineId).toBeNull();
+    expect(toEditableRow(baseRow({ line_id: 42 })).lineId).toBe(42);
+  });
+
   test("selectApprovedRows keeps only approved rows (pending/discarded excluded)", () => {
     const a = toEditableRow(baseRow({ excel_row: 8 }));
     const b = toEditableRow(baseRow({ excel_row: 9 }));

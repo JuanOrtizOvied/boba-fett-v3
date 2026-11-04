@@ -3,7 +3,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import FichaPatrimonialPage from "@/app/admin/ficha-patrimonial/page";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import { getFicha, listFichas } from "@/lib/fichaApi";
+import {
+  confirmFicha,
+  getFicha,
+  listFichas,
+  updateLineStatus,
+} from "@/lib/fichaApi";
 import type { Ficha, FichaParseResponse } from "@/lib/portfolio-types";
 
 vi.mock("@/lib/fetchWithAuth", () => ({
@@ -16,6 +21,8 @@ vi.mock("@/lib/fichaApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/fichaApi")>()),
   listFichas: vi.fn().mockResolvedValue([]),
   getFicha: vi.fn(),
+  updateLineStatus: vi.fn().mockResolvedValue(undefined),
+  confirmFicha: vi.fn().mockResolvedValue(undefined),
 }));
 
 function makeFile(name: string, sizeBytes: number): File {
@@ -46,6 +53,7 @@ const PARSE_RESPONSE: FichaParseResponse = {
       enrichment_failed: false,
     },
   ],
+  ficha_id: 7,
 };
 
 async function selectFile(file: File) {
@@ -177,6 +185,8 @@ describe("FichaPatrimonialPage confirm wiring", () => {
     expect(
       screen.getByRole("button", { name: /cargar otra ficha/i }),
     ).toBeInTheDocument();
+    // The ficha is also marked confirmed (→ validada) via the persistence API.
+    expect(confirmFicha).toHaveBeenCalledWith(7);
   });
 
   test("returning to the upload zone from the success state clears the previous parse result", async () => {
@@ -256,5 +266,11 @@ describe("FichaPatrimonialPage sidebar", () => {
 
     expect(await screen.findByText(/saved@x\.com/)).toBeInTheDocument();
     expect(screen.getByDisplayValue("Loaded Fund")).toBeInTheDocument();
+
+    // Approving a loaded (persisted) line writes it back via the API.
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+    expect(updateLineStatus).toHaveBeenCalledWith(1, "approved");
   });
 });

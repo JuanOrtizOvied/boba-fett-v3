@@ -176,6 +176,42 @@ describe("ReviewTable V2 editable Administradores table", () => {
   });
 });
 
+describe("ReviewTable per-line persistence", () => {
+  test("approving a persisted line fires onLineDecision with its line_id", async () => {
+    const onLineDecision = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReviewTable
+        rows={[{ ...MAPPED_ROW, line_id: 55 }]}
+        userId="user-1"
+        onConfirmed={vi.fn()}
+        onLineDecision={onLineDecision}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+    expect(onLineDecision).toHaveBeenCalledWith(55, "approved");
+  });
+
+  test("a row without a line_id does not fire onLineDecision", async () => {
+    const onLineDecision = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReviewTable
+        rows={[MAPPED_ROW]}
+        userId="user-1"
+        onConfirmed={vi.fn()}
+        onLineDecision={onLineDecision}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Descartar línea" }),
+    );
+    expect(onLineDecision).not.toHaveBeenCalled();
+  });
+});
+
 describe("ReviewTable rendering", () => {
   test("renders one card per parsed product with editable fields", () => {
     render(

@@ -51,9 +51,21 @@ endpoints, so the workbench matches the full mockup.
   queries, mappable fixture, approve-before-confirm, new sidebar-load test).
   **`ficha-patrimonial-page` now 8/8 — the 2 pre-existing stale failures are
   FIXED** (web pre-existing failures 8 → 6). tsc clean on touched files; eslint
-  clean. Full web suite 136 passed / 6 pre-existing / 0 new. Commit: `__T3__`.
-- [ ] **T-4 — Persist per-line decisions.** Approve/Discard call PATCH; Confirmar
-  calls POST confirm; optimistic update of the sidebar status.
+  clean. Full web suite 136 passed / 6 pre-existing / 0 new. Commit: `6321d8f`.
+- [x] **T-4 — Persist per-line decisions.** DONE. Route: INLINE. Plumbed
+  `line_id` end-to-end: TS `FichaEnrichedRow.line_id?` + `fichaToEnrichedRows`
+  (from `FichaLine.id`) + `EditableFichaRow.lineId` (via `toEditableRow`).
+  `ReviewTable` gained an optional `onLineDecision(lineId, status)` prop fired on
+  approve/discard ONLY for rows with a persisted `lineId`. Page wires it to
+  `updateLineStatus` and calls `confirmFicha(selectedId)` on confirm (both
+  fire-and-forget). TDD: RED → GREEN. New/updated tests: shared lineId, component
+  onLineDecision fires-with/skips-without line_id, api converter line_id, page
+  confirm→confirmFicha(7) + loaded-line approve→updateLineStatus(1,"approved").
+  Full web suite 139 passed / 6 pre-existing / 0 new. tsc + eslint clean.
+  LIMITATION (documented follow-up): a freshly-PARSED ficha's response rows have
+  no `line_id` yet (backend parse doesn't return them), so per-line decisions
+  persist only after a reload; confirm→POST works for both flows via `ficha_id`.
+  Commit: `__T4__`.
 
 ## Acceptance criteria / checks
 - The sidebar lists saved fichas, filters by status, and loads a ficha on click.
@@ -61,4 +73,9 @@ endpoints, so the workbench matches the full mockup.
 - `yarn workspace web test`: 0 new failures vs. the branch base.
 
 ## Next step
-Implement T-1 (RED → GREEN).
+**Slice 3b COMPLETE** (T-1 API client, T-2 FichaSidebar, T-3 page wiring, T-4
+per-line persistence). The workbench now has the sidebar (list + status filters +
+upload), loads saved fichas, and persists per-line decisions + confirm.
+Follow-ups: backend parse response should return `line_id`s so freshly-parsed
+decisions persist without a reload; in-progress field-edit persistence; Slice 2b
+(flujos/comentarios/Fuentes); live web-tools validation.
