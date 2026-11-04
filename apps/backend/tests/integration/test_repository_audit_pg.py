@@ -13,12 +13,12 @@ conn.transaction(): ...` against a real `TEST_DATABASE_URL`.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import asyncpg
 import pytest
 
+from db.encryption import decrypt_json
 from db.models import ProductCreate, ProductUpdate
 from db.repository import ProductRepository
 
@@ -35,7 +35,9 @@ def _create_data(**overrides: Any) -> ProductCreate:
 
 
 def _jsonb(value: Any) -> Any:
-    return json.loads(value) if isinstance(value, str) else value
+    # before_state/after_state are Fernet-encrypted when ENCRYPTION_KEY is set;
+    # decrypt_json is bidirectional (plain JSONB, plaintext JSON, or ciphertext).
+    return decrypt_json(value)
 
 
 async def _fetch_changes(test_pool: Any, user_id: str) -> list[asyncpg.Record]:

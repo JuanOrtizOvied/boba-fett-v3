@@ -899,6 +899,7 @@ Images are built ONCE during staging and reused in production by tag — no rebu
 | Portfolio panel stuck loading / `fetch` to `/api/portfolio/*` fails | The FastAPI service isn't running — start it with `yarn dev:api` (`:3003`) or `yarn dev:backend` |
 | Proxy returns 502/404 for `/api/portfolio/*` or `/api/chat/*` | Check `PORTFOLIO_API_URL` in `apps/web/.env.local` (dev) or the deploy env var (prod). These paths require the backend FastAPI container serving `api.routes:app`. |
 | Agent doesn't call `add_product` after a document upload | Verify the uploaded file's content block `type` is one of `image_url`, `image`, `document`, `file` (`agent/nodes.py` → `_ATTACHMENT_CONTENT_TYPES`) so `has_file_attachment` routes to `process_document` |
+| Integration tests fail with `duplicate key ... catalog_product_code_key` / stale data | Run them against a **dedicated, clean** database, never a DB you seeded for manual testing (`seed_catalog_normalized.py`). Savepoint isolation (`tests/conftest.py`) rolls back each test's writes but does NOT remove pre-seeded rows, so tests inserting fixed codes (`BD-00001`…) collide. Create one once (`createdb boba-fett-test`) and run with `TEST_DATABASE_URL=postgresql://admin:pass@localhost:5432/boba-fett-test`; `conftest` auto-applies `schema.sql` on first connect. |
 
 ---
 

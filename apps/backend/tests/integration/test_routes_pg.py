@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 
 from auth.dependencies import get_current_user
+from db.encryption import decrypt_amount
 from tests.integration.conftest import fake_user
 
 
@@ -45,7 +46,7 @@ async def test_create_product_with_valid_payload_persists_in_postgres(api_client
     row = await test_pool.fetchrow("SELECT * FROM products WHERE id = $1", body["id"])
     assert row is not None
     assert row["name"] == "BlackRock Fund"
-    assert float(row["amount"]) == 1000
+    assert decrypt_amount(row["amount"]) == 1000
 
 
 async def test_create_product_with_invalid_amount_returns_422_and_no_insert(
@@ -108,7 +109,7 @@ async def test_update_rejects_non_owner(api_client, test_pool):
 
     assert response.status_code == 403
     row = await test_pool.fetchrow("SELECT amount FROM products WHERE id = $1", product_id)
-    assert float(row["amount"]) == 500
+    assert decrypt_amount(row["amount"]) == 500
 
 
 async def test_update_rejects_non_owner_admin(api_client, test_pool):
@@ -129,7 +130,7 @@ async def test_update_rejects_non_owner_admin(api_client, test_pool):
 
     assert response.status_code == 403
     row = await test_pool.fetchrow("SELECT amount FROM products WHERE id = $1", product_id)
-    assert float(row["amount"]) == 500
+    assert decrypt_amount(row["amount"]) == 500
 
 
 # ---------------------------------------------------------------------------

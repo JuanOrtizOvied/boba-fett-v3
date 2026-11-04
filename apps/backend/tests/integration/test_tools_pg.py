@@ -7,9 +7,6 @@ Spec: "Agent Tool CRUD Against Real Postgres" (`sdd/sabbi-test-suite/spec`).
 
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
-
 from agent.tools import (
     add_product,
     create_snapshot,
@@ -17,6 +14,7 @@ from agent.tools import (
     get_portfolio_summary,
     update_product,
 )
+from db.encryption import decrypt_amount
 
 # ---------------------------------------------------------------------------
 # add_product
@@ -34,7 +32,7 @@ async def test_add_product_persists_valid_product(patch_get_pool, tool_config, t
     row = await test_pool.fetchrow("SELECT * FROM products WHERE id = $1", product_id)
     assert row is not None
     assert row["name"] == "BlackRock Fund"
-    assert float(row["amount"]) == 1000
+    assert decrypt_amount(row["amount"]) == 1000
 
 
 async def test_add_product_persists_source_catalog_product_id(
@@ -84,14 +82,15 @@ async def test_add_product_logs_change_with_agent_source(
 
 
 async def test_add_product_rejects_non_positive_amount(patch_get_pool, tool_config, test_pool):
-    """`db/schema.sql` enforces `amount > 0` via a CHECK constraint; the
-    `ProductCreate` pydantic model (`Field(gt=0)`) rejects it even earlier,
-    before any SQL is issued — either way, no row is ever inserted."""
-    with pytest.raises(ValidationError):
-        await add_product.ainvoke(
-            {"name": "Bad Fund", "amount": 0, "asset_class": [{"name": "cash_y_equivalentes", "percentage": 100}]}, config=tool_config
-        )
+    """`ProductCreate` (`Field(gt=0)`) rejects a non-positive amount; `add_product`
+    catches that `ValidationError` and returns an error result instead of
+    propagating it, so no row is ever inserted."""
+    result = await add_product.ainvoke(
+        {"name": "Bad Fund", "amount": 0, "asset_class": [{"name": "cash_y_equivalentes", "percentage": 100}]},
+        config=tool_config,
+    )
 
+    assert result["status"] == "error"
     count = await test_pool.fetchval(
         "SELECT count(*) FROM products WHERE name = $1", "Bad Fund"
     )
@@ -116,7 +115,7 @@ async def test_update_product_updates_existing_product(patch_get_pool, tool_conf
     assert result["status"] == "updated"
     assert result["product"]["amount"] == 2500
     row = await test_pool.fetchrow("SELECT amount FROM products WHERE id = $1", product_id)
-    assert float(row["amount"]) == 2500
+    assert decrypt_amount(row["amount"]) == 2500
 
 
 async def test_update_product_on_nonexistent_id_returns_error(patch_get_pool, tool_config):
