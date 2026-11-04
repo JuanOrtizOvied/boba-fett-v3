@@ -208,7 +208,7 @@ describe("ReviewTable A2 — add series/admins for a brand-new product", () => {
 });
 
 describe("ReviewTable re-investigate with web", () => {
-  test("'Volver a investigar' calls researchFichaLine and fills empty fields", async () => {
+  test("'Buscar con Claude' calls researchFichaLine and fills empty fields", async () => {
     vi.mocked(researchFichaLine).mockResolvedValue({
       name: "Fondo Renta Fija",
       manager: "Gestor Investigado",
@@ -234,7 +234,7 @@ describe("ReviewTable re-investigate with web", () => {
     // Gestor starts empty for MAPPED_ROW.
     expect(screen.getByLabelText("Gestor")).toHaveValue("");
 
-    await user.click(screen.getByRole("button", { name: /volver a investigar/i }));
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
 
     expect(researchFichaLine).toHaveBeenCalledWith("Fondo Renta Fija");
     await waitFor(() =>
@@ -391,12 +391,12 @@ describe("ReviewTable confirm gating", () => {
     expect(confirmButton).toBeEnabled();
   });
 
-  test("'Volver a investigar' is an enabled web-research action", () => {
+  test("'Buscar con Claude' is an enabled web-research action", () => {
     render(
       <ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />,
     );
     expect(
-      screen.getByRole("button", { name: "Volver a investigar" }),
+      screen.getByRole("button", { name: "Buscar con Claude" }),
     ).toBeEnabled();
   });
 
