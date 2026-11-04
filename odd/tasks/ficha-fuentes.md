@@ -30,14 +30,14 @@ previously discarded.
   `cascade_search_v2` sets `result.sources` from the web research. TDD: RED →
   GREEN. `test_search_v2` 12/12 (incl. extract-dedupe, cascade-captures-sources,
   and the 4 web-tools tests updated for the tuple return). Backend suite 348
-  passed / 144 skipped / 0 new; ruff clean. Commit: `__T1__`.
+  passed / 144 skipped / 0 new; ruff clean. Commit: `1930eaf`.
 - [x] **T-2 — Fuentes section (frontend).** DONE. Route: INLINE. `Source` TS type
   + `SearchResult.sources?` (`portfolio-types.ts`); `ProductCard` renders a
   **Fuentes** numbered list of links (`title || url`, open in new tab) when
   `enriched.sources` is non-empty, below the client serie/admin picker. TDD:
   RED → GREEN. Tests: with-sources (links + href) and no-sources (no section).
   tsc + eslint clean. Full web suite 141 passed / 6 pre-existing / 0 new.
-  Commit: `__T2__`.
+  Commit: `711d6f2`.
 
 ## Acceptance criteria / checks
 - A web-enriched result carries `sources`; the card shows them as links. A
