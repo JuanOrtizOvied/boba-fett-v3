@@ -91,7 +91,11 @@ async def test_new_thread_returns_empty_messages(chat_client):
     response = await client.get(f"/chat/threads/{thread_id}/state")
 
     assert response.status_code == 200
-    assert response.json() == {"thread_id": thread_id, "messages": []}
+    assert response.json() == {
+        "thread_id": thread_id,
+        "messages": [],
+        "created_at": None,
+    }
 
 
 async def test_message_round_trips_through_postgres(chat_client):

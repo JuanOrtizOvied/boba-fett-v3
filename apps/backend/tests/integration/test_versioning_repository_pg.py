@@ -187,12 +187,18 @@ async def test_create_snapshot_on_empty_portfolio_succeeds(test_pool, test_user_
 
 
 async def test_list_snapshots_orders_newest_first(test_pool, test_user_id):
+    repo = ProductRepository(test_pool)
     versioning = VersioningRepository(test_pool)
     base = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    # A fresh product before each snapshot so the portfolio actually changes —
+    # create_snapshot rejects an unchanged portfolio (SnapshotUnchangedError).
+    await repo.create(test_user_id, _create_data(name="P-A"))
     snap_a = await versioning.create_snapshot(test_user_id, "A")
     await _backdate(test_pool, snap_a["id"], base)
+    await repo.create(test_user_id, _create_data(name="P-B"))
     snap_b = await versioning.create_snapshot(test_user_id, "B")
     await _backdate(test_pool, snap_b["id"], base + timedelta(minutes=1))
+    await repo.create(test_user_id, _create_data(name="P-C"))
     snap_c = await versioning.create_snapshot(test_user_id, "C")
     await _backdate(test_pool, snap_c["id"], base + timedelta(minutes=2))
 
@@ -221,9 +227,12 @@ async def test_list_snapshots_empty_for_new_user(test_pool, test_user_id):
 
 
 async def test_list_snapshots_respects_limit_and_offset(test_pool, test_user_id):
+    repo = ProductRepository(test_pool)
     versioning = VersioningRepository(test_pool)
     base = datetime(2024, 1, 1, tzinfo=timezone.utc)
     for i, name in enumerate(("A", "B", "C")):
+        # Change the portfolio before each snapshot (SnapshotUnchangedError).
+        await repo.create(test_user_id, _create_data(name=f"P-{name}"))
         snap = await versioning.create_snapshot(test_user_id, name)
         await _backdate(test_pool, snap["id"], base + timedelta(minutes=i))
 

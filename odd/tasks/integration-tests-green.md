@@ -45,13 +45,29 @@ masking real problems.
   now-unused imports. 33/33 across the three files; ruff: no new F-codes
   (pre-existing E501 in these long-dict test lines left as-is; the pre-commit
   hook only lints `src/**`).
-- [ ] **T-3 — Versioning isolation (2).** `test_list_snapshots_*` — nested
-  transaction isolation-level mismatch under the savepoint wrapper.
-- [ ] **T-4 — Chat thread shape (1).** `test_new_thread_returns_empty_messages`.
+- [x] **T-3 — Versioning isolation (2).** DONE. Route: INLINE. `db/versioning.py`
+  `_repeatable_read_transaction` now checks `conn.is_in_transaction()` UPFRONT:
+  inside an outer transaction (test harness) it opens a plain nested savepoint;
+  a freshly-acquired production pool conn is never in a transaction, so it still
+  gets real `REPEATABLE READ` — behavior preserved, and the fragile
+  try/except-on-`tx.start()` fallback is gone. Fixing the isolation error then
+  exposed a second, legitimate behavior: `create_snapshot` raises
+  `SnapshotUnchangedError` when the portfolio is unchanged since the last
+  snapshot. `test_list_snapshots_orders_newest_first` /
+  `_respects_limit_and_offset` snapshotted an unchanged (empty) portfolio
+  repeatedly; fixed by adding a distinct product before each snapshot. Versioning
+  29/29; ruff clean.
+- [x] **T-4 — Chat thread shape (1).** DONE. Route: INLINE.
+  `ThreadStateResponse` has an intentional `created_at: str | None = None` field;
+  `test_new_thread_returns_empty_messages` predated it. Updated the assertion to
+  `{"thread_id", "messages": [], "created_at": None}`.
 
 ## Checks / evidence
 - After T-1+T-2: integration **146 passed / 3 failed** (clean DB), down from 30.
-  Dev-flow suite (integration skipped) unaffected.
+- After T-3+T-4: integration **149 passed / 0 failed**; FULL backend suite (unit +
+  integration) **513 passed / 0 failed** against the clean DB. ruff clean on the
+  one `src/` change (`versioning.py`).
 
-## Next step
-T-3 (versioning isolation), then T-4 (chat).
+**FEATURE COMPLETE:** the integration suite is green again, with no real behavior
+masked (the one production-code change preserves production isolation; every
+other fix updates stale test expectations to the current, correct contract).

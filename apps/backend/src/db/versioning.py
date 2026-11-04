@@ -49,30 +49,24 @@ async def _repeatable_read_transaction(conn: asyncpg.Connection) -> AsyncIterato
 
     Test connections (`tests/conftest.py`'s `FakePool.acquire()`) are
     already inside the per-test SAVEPOINT-wrapped session transaction
-    (default `read committed` isolation). asyncpg raises `InterfaceError`
-    when a nested transaction requests a different isolation level than
-    its outer transaction, so in that case we fall back to a plain nested
-    transaction (savepoint, no explicit isolation override) — a
+    (default `read committed` isolation). asyncpg rejects a nested
+    transaction that requests a different isolation level than its outer
+    one, so when the connection is already in a transaction we open a plain
+    nested transaction (savepoint, no explicit isolation override) — a
     documented test-only divergence from the production isolation level
     (`tasks.md` T-001 / PR2 deviation note).
     """
-    tx = conn.transaction(isolation="repeatable_read")
-    try:
-        await tx.start()
-    except asyncpg.InterfaceError as exc:
-        if "isolation level" not in str(exc):
-            raise
+    if conn.is_in_transaction():
+        # Already inside an outer transaction (test harness): a nested
+        # transaction cannot change the isolation level, so use a plain
+        # savepoint. Production connections are freshly acquired from the
+        # pool and never hit this branch.
         async with conn.transaction():
             yield
         return
 
-    try:
+    async with conn.transaction(isolation="repeatable_read"):
         yield
-    except BaseException:
-        await tx.rollback()
-        raise
-    else:
-        await tx.commit()
 
 
 class VersioningRepository:
