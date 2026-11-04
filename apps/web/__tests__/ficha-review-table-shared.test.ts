@@ -16,11 +16,15 @@ import {
   hasUnmappedRow,
   resolveRowSource,
   selectApprovedRows,
+  summarizeCatalogHistoryEntry,
   toEditableAdminRows,
   toEditableRow,
   toEditableSeriesRows,
 } from "@/components/admin/ficha-patrimonial/reviewTableShared";
-import type { FichaEnrichedRow } from "@/lib/portfolio-types";
+import type {
+  CatalogHistoryEntry,
+  FichaEnrichedRow,
+} from "@/lib/portfolio-types";
 
 /** A V2-enriched row: product-level fields filled, commercial fields blank,
  * series/admin options attached for the review-table picker. */
@@ -547,6 +551,41 @@ describe("blank editable series/admin rows (A2 — brand-new products)", () => {
       sell: "",
       minimumUsd: "",
     });
+  });
+
+  test("summarizeCatalogHistoryEntry describes a create entry", () => {
+    const entry = {
+      id: 1,
+      product_code: "BD-00042",
+      action: "create",
+      changed_by: "admin-1",
+      source: "ficha",
+      changes: { created: { name: "New Fund" }, series: ["A"] },
+      created_at: "2026-01-20T10:00:00Z",
+    } as unknown as CatalogHistoryEntry;
+    const lines = summarizeCatalogHistoryEntry(entry);
+    expect(lines.join(" ")).toMatch(/creado/i);
+  });
+
+  test("summarizeCatalogHistoryEntry describes updated product + series + admin fields", () => {
+    const entry = {
+      id: 2,
+      product_code: "BD-00042",
+      action: "update",
+      changed_by: "admin-1",
+      source: "ficha",
+      changes: {
+        name: { old: "Old", new: "New" },
+        series: { A: { management_fee_ter: { old: 0.02, new: 0.03 } } },
+        administrators: { "Core / A": { custody_fee: { old: 0.001, new: 0.002 } } },
+      },
+      created_at: "2026-01-21T10:00:00Z",
+    } as unknown as CatalogHistoryEntry;
+    const lines = summarizeCatalogHistoryEntry(entry);
+    const joined = lines.join(" | ");
+    expect(joined).toMatch(/name/);
+    expect(joined).toMatch(/Serie A/);
+    expect(joined).toMatch(/Core \/ A/);
   });
 
   test("a manually added blank series row flows into the approve request", () => {

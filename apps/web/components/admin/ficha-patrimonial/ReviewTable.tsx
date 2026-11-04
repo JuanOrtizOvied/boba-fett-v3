@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import CatalogHistory from "./CatalogHistory";
 import { extractErrorDetail } from "./fichaUploadShared";
 import {
   ASSET_CLASS_LABELS,
@@ -567,6 +568,10 @@ function ProductCard({
                 ))}
               </ol>
             </div>
+          )}
+
+          {rawRow.enriched?.catalog_product_code && (
+            <CatalogHistory code={rawRow.enriched.catalog_product_code} />
           )}
 
           {/* Per-line actions */}

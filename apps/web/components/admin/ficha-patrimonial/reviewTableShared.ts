@@ -9,6 +9,7 @@
 import type {
   AssetAllocation,
   CatalogAdminUpdate,
+  CatalogHistoryEntry,
   CatalogSeriesOption,
   CatalogSeriesUpdate,
   FichaApproveRequest,
@@ -315,6 +316,51 @@ export function toEditableAdminRows(
       minimumUsd: formatPlainNumber(a.minimum_usd),
     })),
   );
+}
+
+/**
+ * Turns one V2-catalog change-history entry into human-readable lines for the
+ * card's "Historial de cambios" section. A `create` entry is a single
+ * "producto creado" line; an `update` entry lists each changed product-level
+ * field, plus nested series (`Serie <name>: <field>`) and administrator
+ * (`<admin / series>: <field>`) field changes.
+ */
+export function summarizeCatalogHistoryEntry(
+  entry: CatalogHistoryEntry,
+): string[] {
+  if (entry.action === "create") {
+    const seriesNames = Array.isArray(
+      (entry.changes as Record<string, unknown>).series,
+    )
+      ? ((entry.changes as Record<string, unknown>).series as string[])
+      : [];
+    const suffix = seriesNames.length ? ` (series: ${seriesNames.join(", ")})` : "";
+    return [`Producto creado en el catálogo${suffix}`];
+  }
+
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(entry.changes ?? {})) {
+    if (key === "series" && value && typeof value === "object") {
+      for (const [seriesName, fields] of Object.entries(
+        value as Record<string, Record<string, unknown>>,
+      )) {
+        for (const field of Object.keys(fields)) {
+          lines.push(`Serie ${seriesName}: ${field}`);
+        }
+      }
+    } else if (key === "administrators" && value && typeof value === "object") {
+      for (const [adminKey, fields] of Object.entries(
+        value as Record<string, Record<string, unknown>>,
+      )) {
+        for (const field of Object.keys(fields)) {
+          lines.push(`${adminKey}: ${field}`);
+        }
+      }
+    } else {
+      lines.push(key);
+    }
+  }
+  return lines;
 }
 
 /** An empty editable series row — the admin fills it in for a brand-new

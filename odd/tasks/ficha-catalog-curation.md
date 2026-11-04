@@ -133,6 +133,17 @@ generated code) AND creates the linked client holding, end-to-end.
     on an EXISTING product won't match in `_apply_series`/`_apply_admins` (which
     key by name) — acceptable for now; a rename-aware update is a later follow-up.
 
+- [x] **Follow-up — History UI display.** DONE. Route: INLINE. Pure
+  `summarizeCatalogHistoryEntry(entry)` in `reviewTableShared.ts` (create →
+  "Producto creado…"; update → changed product fields + `Serie <name>: <field>`
+  + `<admin / series>: <field>`). New `CatalogHistory.tsx` — a collapsible
+  "Historial de cambios" section that loads `getCatalogHistory(code)` on demand
+  and lists each entry (action badge + date + summarized changes), with
+  loading/error/empty states. Rendered in the card when the row has a
+  `catalog_product_code`. TDD: RED (2 helper + 2 component tests) → GREEN. Web
+  ficha suites 77/77; full web 159 passed / 6 pre-existing / 0 new; tsc + eslint
+  clean on edited files. Commit: `<pending>`.
+
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and
   writes a history row; a new product is created in the catalog; both create the
