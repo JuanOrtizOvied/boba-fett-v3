@@ -161,3 +161,8 @@ async def test_search_for_enrichment_picks_best_similarity(test_pool):
 async def test_search_for_enrichment_empty_query_returns_none(test_pool):
     await _product(test_pool, "BD-00001", "Global Equity Fund")
     assert await NormalizedCatalogRepository(test_pool).search_for_enrichment("") is None
+
+
+async def test_next_product_code_increments_max(test_pool):
+    await _product(test_pool, "BD-09999", "Some Fund")
+    assert await NormalizedCatalogRepository(test_pool).next_product_code() == "BD-10000"

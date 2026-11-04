@@ -33,6 +33,7 @@ from db.catalog_curation import (
     AdminUpdateInput,
     SeriesUpdateInput,
     apply_catalog_curation,
+    create_catalog_product_from_ficha,
 )
 from db.catalog_excel import build_catalog_workbook, build_sync_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
@@ -725,6 +726,18 @@ async def approve_ficha_line(
             data.admins,
             admin["id"],
         )
+    else:
+        # Product not in the catalog (web-searched) → create it, link the holding.
+        created = await create_catalog_product_from_ficha(
+            catalog_repo,
+            history_repo,
+            data.catalog_update,
+            data.product.name,
+            admin["id"],
+        )
+        data.product.catalog_product_id = created.id
+        catalog_changes = {"created": created.code}
+
     product = await product_repo.create(data.user_id, data.product, source="admin_ficha_import")
     return {"product_id": product.id, "catalog_changes": catalog_changes}
 

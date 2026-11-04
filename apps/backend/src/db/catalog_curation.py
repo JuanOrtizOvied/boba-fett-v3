@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from db.catalog_history import CatalogHistoryRepository
 from db.catalog_normalized import (
+    CatalogProductCreate,
     CatalogProductRow,
     CatalogProductSeriesAdminUpdate,
     CatalogProductSeriesUpdate,
@@ -184,3 +185,36 @@ async def apply_catalog_product_update(
     return await apply_catalog_curation(
         catalog_repo, history_repo, code, update, [], [], changed_by
     )
+
+
+async def create_catalog_product_from_ficha(
+    catalog_repo: NormalizedCatalogRepository,
+    history_repo: CatalogHistoryRepository,
+    fields: CatalogProductUpdate,
+    name_fallback: str,
+    changed_by: str | None,
+) -> CatalogProductRow:
+    """Create a NEW catalog product from a web-searched ficha line (product not
+    in the catalog), with an auto-generated code, recording a 'create' history
+    row. Series/admins are not created here (added later via the catalog CRUD)."""
+    code = await catalog_repo.next_product_code()
+    create = CatalogProductCreate(
+        code=code,
+        name=fields.name or name_fallback,
+        manager=fields.manager or "",
+        currency=fields.currency or "",
+        ticker_isin=fields.ticker_isin or "",
+        investment_horizon=fields.investment_horizon or "",
+        asset_class=fields.asset_class or [],
+        geographic_focus=fields.geographic_focus or [],
+        underlying=fields.underlying or [],
+    )
+    created = await catalog_repo.create_product(create)
+    await history_repo.record(
+        code,
+        "create",
+        changed_by,
+        "ficha",
+        {"created": create.model_dump(exclude={"code"})},
+    )
+    return created

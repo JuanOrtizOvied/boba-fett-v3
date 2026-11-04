@@ -320,6 +320,14 @@ class NormalizedCatalogRepository:
     async def create_product(self, data: CatalogProductCreate) -> CatalogProductRow:
         return _product_from_record(await self._insert("catalog_product", data))
 
+    async def next_product_code(self) -> str:
+        """Next free `BD-#####` code (max existing + 1, zero-padded to 5)."""
+        value = await self._pool.fetchval(
+            "SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 4) AS INTEGER)), 0) "
+            "FROM catalog_product WHERE code ~ '^BD-[0-9]+$'"
+        )
+        return f"BD-{int(value) + 1:05d}"
+
     async def update_product(
         self, code: str, data: CatalogProductUpdate
     ) -> CatalogProductRow | None:

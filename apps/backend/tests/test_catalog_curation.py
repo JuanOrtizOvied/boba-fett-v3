@@ -8,11 +8,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from types import SimpleNamespace
+
 from db.catalog_curation import (
     AdminUpdateInput,
     SeriesUpdateInput,
     apply_catalog_curation,
     apply_catalog_product_update,
+    create_catalog_product_from_ficha,
 )
 from db.catalog_normalized import (
     CatalogProductRow,
@@ -129,6 +132,42 @@ async def test_series_unchanged_no_update():
     assert changes == {}
     catalog.update_series.assert_not_awaited()
     history.record.assert_not_awaited()
+
+
+async def test_create_new_catalog_product_from_ficha():
+    catalog = AsyncMock()
+    catalog.next_product_code.return_value = "BD-00042"
+    catalog.create_product.return_value = SimpleNamespace(id=5, code="BD-00042")
+    history = AsyncMock()
+
+    created = await create_catalog_product_from_ficha(
+        catalog,
+        history,
+        CatalogProductUpdate(name="New Fund", manager="Mgr"),
+        "Fallback Name",
+        "user-1",
+    )
+
+    assert created.code == "BD-00042"
+    create_arg = catalog.create_product.await_args.args[0]
+    assert create_arg.code == "BD-00042"
+    assert create_arg.name == "New Fund"
+    assert create_arg.manager == "Mgr"
+    history.record.assert_awaited_once()
+    assert history.record.await_args.args[1] == "create"
+
+
+async def test_create_uses_name_fallback_when_missing():
+    catalog = AsyncMock()
+    catalog.next_product_code.return_value = "BD-00043"
+    catalog.create_product.return_value = SimpleNamespace(id=6, code="BD-00043")
+    history = AsyncMock()
+
+    await create_catalog_product_from_ficha(
+        catalog, history, CatalogProductUpdate(), "Fallback Name", None
+    )
+
+    assert catalog.create_product.await_args.args[0].name == "Fallback Name"
 
 
 async def test_returns_empty_when_product_missing():

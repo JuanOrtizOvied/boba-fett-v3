@@ -72,8 +72,15 @@ writer to the V2 catalog.
   `api/routes.py`. TDD: RED → GREEN. Route tests: approve updates catalog +
   creates product; no-code skips curation. Backend 359 passed / 147 skipped / 0
   new; ruff clean; `api.routes` imports clean. Commit: `9f8dc44`.
-- [ ] **T-4 — Create new product in catalog.** Web-searched → `create_product`
-  (+ history) + code generation.
+- [x] **T-4 — Create new product in catalog.** DONE. Route: INLINE.
+  `NormalizedCatalogRepository.next_product_code()` (max `BD-#####` + 1);
+  `create_catalog_product_from_ficha(...)` generates the code, `create_product`
+  from the edited product-level fields (name fallback = client product name),
+  records a 'create' history row. Approve endpoint's no-code branch now CREATES
+  a new catalog product and links the client holding via `catalog_product_id`
+  (replacing the earlier "skip curation"). TDD: RED → GREEN. Unit tests (service
+  + name fallback) + integration (next_product_code increments) + updated route
+  test. Backend 361 passed / 148 skipped / 0 new; ruff clean. Commit: `__T4__`.
 - [ ] **T-5 — Frontend.** Button shows "Es un producto existente" (update) vs
   "Aprobar y crear producto" (create) by `catalog_matched`; wire edits → update.
 

@@ -420,18 +420,16 @@ def test_approve_updates_catalog_and_creates_client_product(app_client, monkeypa
     app.state.repo.create.assert_awaited_once()
 
 
-def test_approve_without_catalog_code_skips_curation(app_client, monkeypatch):
+def test_approve_without_catalog_code_creates_new_catalog_product(app_client, monkeypatch):
     from types import SimpleNamespace
 
     app, client = _admin_client(app_client)
     app.state.repo.create = AsyncMock(return_value=SimpleNamespace(id="p2"))
-    called = {}
 
-    async def fake_curation(*args, **kwargs):
-        called["ran"] = True
-        return {}
+    async def fake_create(*args, **kwargs):
+        return SimpleNamespace(id=9, code="BD-00099")
 
-    monkeypatch.setattr(admin_routes, "apply_catalog_curation", fake_curation)
+    monkeypatch.setattr(admin_routes, "create_catalog_product_from_ficha", fake_create)
 
     body = {
         "user_id": "u1",
@@ -445,5 +443,4 @@ def test_approve_without_catalog_code_skips_curation(app_client, monkeypatch):
     response = client.post("/admin/ficha-patrimonial/approve", json=body)
 
     assert response.status_code == 201
-    assert "ran" not in called  # no catalog code → no curation
-    assert response.json()["catalog_changes"] == {}
+    assert response.json()["catalog_changes"] == {"created": "BD-00099"}
