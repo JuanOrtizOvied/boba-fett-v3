@@ -57,5 +57,20 @@ the card with the web-grounded fields + cited sources (Fuentes).
 
 **FEATURE COMPLETE** (T-1..T-3).
 
+## Follow-ups
+- [x] **F-1 — Auto web search on a low-confidence catalog match.** DONE. Route:
+  INLINE. During parse, `cascade_search_v2` now runs the Claude web step when the
+  product is incomplete OR the catalog match is weak (`_is_low_confidence_catalog`:
+  a `catalog_product_code` with `similarity < _MEDIA_SIMILARITY` (0.4) → "baja").
+  So a weak catalog hit is auto-verified with web data + sources, without an extra
+  click. A strong, complete match still skips the web call. TDD: RED → GREEN
+  (low-confidence triggers web + attaches sources; strong match skips). Backend
+  370 passed / 149 skipped / 0 new; ruff clean. Commit: `<pending>`.
+- [x] **F-2 — "Buscar con Claude" UX.** DONE. Moved the button under the
+  similarity in the (widened `w-80`) left rail; relabeled to "✨ Buscar con
+  Claude" (gradient, prominent); Fuentes moved to a card under the button
+  ("Fuentes (N)"); search uses the ficha's declared `raw_name`, not the form
+  field. Commits: `ddee10a`, `1d70730`, `f49b2ac`, `d8d7c40`.
+
 ## Next step
 Feature complete. (Live behavior needs a real `ANTHROPIC_API_KEY` + admin login.)

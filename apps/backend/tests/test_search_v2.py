@@ -247,6 +247,64 @@ async def test_search_claude_web_empty_when_no_research(monkeypatch):
     assert await search_mod._search_claude_web("acme fund") == ({}, [])
 
 
+def _complete_result(similarity: float):
+    from db.models import SearchResult
+
+    return SearchResult(
+        name="Fondo X",
+        currency="USD",
+        manager="Gestor",
+        asset_class=[AssetAllocation(name="mercados_publicos", percentage=100)],
+        geographic_focus=[AssetAllocation(name="Perú", percentage=100)],
+        underlying=[AssetAllocation(name="Acciones", percentage=100)],
+        catalog_product_code="BD-00001",
+        similarity=similarity,
+    )
+
+
+async def test_v2_low_confidence_catalog_triggers_web_search(monkeypatch):
+    """A weak catalog match (low similarity -> 'baja') must trigger the Claude
+    web search even when the product fields are already complete."""
+    from db.models import Source
+
+    async def weak_catalog(query, pool):
+        return _complete_result(0.3)
+
+    called = {"web": False}
+
+    async def claude_web(query):
+        called["web"] = True
+        return {}, [Source(url="https://x.com", title="X")]
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", weak_catalog)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert called["web"] is True
+    assert result is not None
+    assert result.sources == [Source(url="https://x.com", title="X")]
+    assert result.confidence == "baja"
+
+
+async def test_v2_strong_catalog_match_skips_web_search(monkeypatch):
+    """A strong, complete catalog match must NOT trigger the web search."""
+
+    async def strong_catalog(query, pool):
+        return _complete_result(0.85)
+
+    async def web_must_not_run(query):
+        raise AssertionError("web search must not run for a strong catalog match")
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", strong_catalog)
+    monkeypatch.setattr(search_mod, "_search_claude_web", web_must_not_run)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert result.confidence == "alta"
+
+
 async def test_research_web_v2_fills_fields_and_sources(monkeypatch):
     from db.models import Source
 

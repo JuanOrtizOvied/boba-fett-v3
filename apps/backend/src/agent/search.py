@@ -535,6 +535,17 @@ async def _search_catalog_v2(query: str, pool: asyncpg.Pool) -> SearchResult:
     return _merge_fields(result, product_data, "catalog", fields=PRODUCT_FIELD_NAMES)
 
 
+# Catalog-match similarity below which confidence is "baja" (a weak fuzzy hit).
+_MEDIA_SIMILARITY = 0.4
+
+
+def _is_low_confidence_catalog(result: SearchResult) -> bool:
+    """A catalog match too weak to trust (confidence would be 'baja'). Such a
+    hit triggers a Claude web search even when the product fields already look
+    complete, so the admin gets web-grounded data + sources to verify it."""
+    return bool(result.catalog_product_code) and result.similarity < _MEDIA_SIMILARITY
+
+
 def _classify_match(similarity: float, has_data: bool) -> tuple[str, bool]:
     """Derive ``(confidence_level, catalog_matched)`` for a ficha enrichment
     result. Confidence is gated by the catalog match similarity so a weak fuzzy
@@ -580,7 +591,7 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         if claude_data:
             _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
 
-    if not _is_product_complete(result):
+    if not _is_product_complete(result) or _is_low_confidence_catalog(result):
         web_data, web_sources = await _search_claude_web(query)
         if web_data:
             _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
