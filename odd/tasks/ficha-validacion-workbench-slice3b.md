@@ -65,7 +65,7 @@ endpoints, so the workbench matches the full mockup.
   LIMITATION (documented follow-up): a freshly-PARSED ficha's response rows have
   no `line_id` yet (backend parse doesn't return them), so per-line decisions
   persist only after a reload; confirm→POST works for both flows via `ficha_id`.
-  Commit: `__T4__`.
+  Commit: `021c13a`.
 
 ## Acceptance criteria / checks
 - The sidebar lists saved fichas, filters by status, and loads a ficha on click.
