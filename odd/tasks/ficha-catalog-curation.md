@@ -142,7 +142,7 @@ generated code) AND creates the linked client holding, end-to-end.
   loading/error/empty states. Rendered in the card when the row has a
   `catalog_product_code`. TDD: RED (2 helper + 2 component tests) → GREEN. Web
   ficha suites 77/77; full web 159 passed / 6 pre-existing / 0 new; tsc + eslint
-  clean on edited files. Commit: `<pending>`.
+  clean on edited files. Commit: `4b5a42a`.
 
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and
