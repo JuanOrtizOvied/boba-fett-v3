@@ -66,6 +66,16 @@ the card with the web-grounded fields + cited sources (Fuentes).
   click. A strong, complete match still skips the web call. TDD: RED → GREEN
   (low-confidence triggers web + attaches sources; strong match skips). Backend
   370 passed / 149 skipped / 0 new; ruff clean. Commit: `<pending>`.
+- [x] **F-3 — Confidence rises when the web verifies.** DONE. Route: INLINE.
+  `_classify_match(similarity, has_data, web_verified=False)` now raises the floor
+  to "media" when `web_verified` (Claude web search returned cited sources) AND
+  there is data — a weak catalog match corroborated by the web is no longer merely
+  "baja". `cascade_search_v2` sets `web_verified = bool(web_sources)` from the L3
+  step; `research_web_v2` passes `web_verified=bool(web_sources)` too. "alta" stays
+  reserved for a strong catalog match (sim >= 0.6). TDD: RED → GREEN (weak catalog
+  + web sources → "media"; weak catalog + no web sources → stays "baja"; manual
+  research with sources → "media"). Backend 371 passed / 0 new; ruff clean.
+  Commit: `<pending>`.
 - [x] **F-2 — "Buscar con Claude" UX.** DONE. Moved the button under the
   similarity in the (widened `w-80`) left rail; relabeled to "✨ Buscar con
   Claude" (gradient, prominent); Fuentes moved to a card under the button

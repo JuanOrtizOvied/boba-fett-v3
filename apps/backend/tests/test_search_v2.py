@@ -284,6 +284,25 @@ async def test_v2_low_confidence_catalog_triggers_web_search(monkeypatch):
     assert called["web"] is True
     assert result is not None
     assert result.sources == [Source(url="https://x.com", title="X")]
+    # Web verification (cited sources) raises a weak catalog match to "media".
+    assert result.confidence == "media"
+
+
+async def test_v2_low_confidence_catalog_without_web_sources_stays_baja(monkeypatch):
+    """A weak catalog match whose web step finds no sources stays 'baja'."""
+
+    async def weak_catalog(query, pool):
+        return _complete_result(0.3)
+
+    async def web_no_sources(query):
+        return {}, []
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", weak_catalog)
+    monkeypatch.setattr(search_mod, "_search_claude_web", web_no_sources)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
     assert result.confidence == "baja"
 
 
@@ -322,7 +341,8 @@ async def test_research_web_v2_fills_fields_and_sources(monkeypatch):
     assert result.manager == "Web Manager"
     assert result.sources == [source]
     assert result.primary_source == "web_search"
-    assert result.confidence == "baja"
+    # Cited web sources verify the product → "media" (not a weak "baja").
+    assert result.confidence == "media"
     assert result.catalog_matched is False
 
 

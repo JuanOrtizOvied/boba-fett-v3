@@ -546,18 +546,37 @@ def _is_low_confidence_catalog(result: SearchResult) -> bool:
     return bool(result.catalog_product_code) and result.similarity < _MEDIA_SIMILARITY
 
 
-def _classify_match(similarity: float, has_data: bool) -> tuple[str, bool]:
+_CONFIDENCE_ORDER = ("sin_datos", "baja", "media", "alta")
+
+
+def _raise_confidence(level: str, floor: str) -> str:
+    """Return the higher of ``level`` and ``floor`` on the confidence scale."""
+    if _CONFIDENCE_ORDER.index(level) >= _CONFIDENCE_ORDER.index(floor):
+        return level
+    return floor
+
+
+def _classify_match(
+    similarity: float, has_data: bool, web_verified: bool = False
+) -> tuple[str, bool]:
     """Derive ``(confidence_level, catalog_matched)`` for a ficha enrichment
     result. Confidence is gated by the catalog match similarity so a weak fuzzy
     hit is never reported as high confidence; ``catalog_matched`` ("ya estaba en
-    la BD") is True only for a real catalog hit (sim >= 0.4)."""
+    la BD") is True only for a real catalog hit (sim >= 0.4). ``web_verified``
+    (Claude web search returned cited sources) raises the floor to "media" — a
+    weak catalog match corroborated by the web is no longer merely "baja"."""
     if similarity >= 0.6:
-        return ("alta", True)
-    if similarity >= 0.4:
-        return ("media", True)
-    if similarity > 0.0 or has_data:
-        return ("baja", False)
-    return ("sin_datos", False)
+        level, matched = "alta", True
+    elif similarity >= 0.4:
+        level, matched = "media", True
+    elif similarity > 0.0 or has_data:
+        level, matched = "baja", False
+    else:
+        level, matched = "sin_datos", False
+
+    if web_verified and has_data:
+        level = _raise_confidence(level, "media")
+    return level, matched
 
 
 async def research_web_v2(query: str) -> SearchResult:
@@ -576,7 +595,9 @@ async def research_web_v2(query: str) -> SearchResult:
 
     _sanitize_taxonomy(result)
     _classify(result)
-    result.confidence, result.catalog_matched = _classify_match(0.0, _has_any_data(result))
+    result.confidence, result.catalog_matched = _classify_match(
+        0.0, _has_any_data(result), web_verified=bool(web_sources)
+    )
     return result
 
 
@@ -591,12 +612,14 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         if claude_data:
             _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
 
+    web_verified = False
     if not _is_product_complete(result) or _is_low_confidence_catalog(result):
         web_data, web_sources = await _search_claude_web(query)
         if web_data:
             _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
         if web_sources:
             result.sources = web_sources
+            web_verified = True
 
     _sanitize_taxonomy(result)
     _classify(result)
@@ -605,5 +628,7 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
     if not has_data:
         return None
 
-    result.confidence, result.catalog_matched = _classify_match(result.similarity, has_data)
+    result.confidence, result.catalog_matched = _classify_match(
+        result.similarity, has_data, web_verified=web_verified
+    )
     return result
