@@ -52,7 +52,7 @@ writer to the V2 catalog.
   when something changed, and records the diff ({field:{old,new}}) to history.
   Returns the diff; empty + no writes when unchanged or missing. TDD: RED
   (ModuleNotFound) → GREEN. Unit tests (mocked repos, no DB) 4/4. Backend 355
-  passed / 0 new; ruff clean. Commit: `__T2__`. NOTE: series/admin updates and
+  passed / 0 new; ruff clean. Commit: `22e5ac5`. NOTE: series/admin updates and
   the approve ENDPOINT wiring are the next step (T-2b / T-3).
 - [ ] **T-3 — Client holding linked.** Approve also creates the client `product`
   with `catalog_product_id`/code set.
