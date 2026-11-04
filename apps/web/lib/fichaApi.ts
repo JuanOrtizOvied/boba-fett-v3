@@ -6,6 +6,7 @@
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import type {
   Ficha,
+  FichaApproveRequest,
   FichaEnrichedRow,
   FichaListItem,
   LineStatus,
@@ -52,6 +53,19 @@ export async function confirmFicha(id: number): Promise<void> {
     method: "POST",
   });
   await asJson(res);
+}
+
+/** Approve one reviewed line: curate the catalog (update/create) + create the
+ * client holding. Returns the created product id and the catalog changes. */
+export async function approveFichaLine(
+  request: FichaApproveRequest,
+): Promise<{ product_id: string; catalog_changes: Record<string, unknown> }> {
+  const res = await fetchWithAuth(`${BASE}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return asJson(res);
 }
 
 /** Delete a saved ficha (and its lines). */

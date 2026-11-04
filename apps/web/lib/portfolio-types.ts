@@ -122,6 +122,44 @@ export interface CatalogSeriesOption {
   administrators: CatalogSeriesAdminOption[];
 }
 
+/** Mirrors `db.catalog_curation.SeriesUpdateInput` — an edited series (fractions). */
+export interface CatalogSeriesUpdate {
+  series: string;
+  management_fee_ter: number | null;
+  flows_min: number | null;
+  flows_max: number | null;
+  return_min: number | null;
+  return_max: number | null;
+}
+
+/** Mirrors `db.catalog_curation.AdminUpdateInput` — an edited administrator. */
+export interface CatalogAdminUpdate {
+  series: string;
+  administrator: string;
+  custody_fee: number | null;
+  buy_commission: number | null;
+  sell_commission: number | null;
+  minimum_usd: number | null;
+  min_commission_usd: number | null;
+}
+
+/** Mirrors `api.admin_routes.FichaApproveRequest` — the per-line approve payload. */
+export interface FichaApproveRequest {
+  user_id: string;
+  product: Record<string, unknown>;
+  catalog_product_code: string;
+  catalog_update: {
+    name?: string;
+    manager?: string;
+    currency?: string;
+    asset_class?: AssetAllocation[];
+    geographic_focus?: AssetAllocation[];
+    underlying?: AssetAllocation[];
+  };
+  series: CatalogSeriesUpdate[];
+  admins: CatalogAdminUpdate[];
+}
+
 /** Mirrors `db.models.Source` — a web source (link + title) cited by L3. */
 export interface Source {
   url: string;

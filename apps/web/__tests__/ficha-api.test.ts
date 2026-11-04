@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  approveFichaLine,
   confirmFicha,
   deleteFicha,
   fichaToEnrichedRows,
@@ -65,6 +66,23 @@ describe("fichaApi", () => {
     await confirmFicha(7);
     const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
     expect(url).toBe("/api/admin/ficha-patrimonial/fichas/7/confirm");
+    expect((init as RequestInit).method).toBe("POST");
+  });
+
+  test("approveFichaLine POSTs the approve payload", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(
+      okJson({ product_id: "p1", catalog_changes: {} }),
+    );
+    await approveFichaLine({
+      user_id: "u1",
+      product: {},
+      catalog_product_code: "BD-1",
+      catalog_update: {},
+      series: [],
+      admins: [],
+    });
+    const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
+    expect(url).toBe("/api/admin/ficha-patrimonial/approve");
     expect((init as RequestInit).method).toBe("POST");
   });
 

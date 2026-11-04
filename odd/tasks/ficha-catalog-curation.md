@@ -81,8 +81,18 @@ writer to the V2 catalog.
   (replacing the earlier "skip curation"). TDD: RED → GREEN. Unit tests (service
   + name fallback) + integration (next_product_code increments) + updated route
   test. Backend 361 passed / 148 skipped / 0 new; ruff clean. Commit: `a0d46bd`.
-- [ ] **T-5 — Frontend.** Button shows "Es un producto existente" (update) vs
-  "Aprobar y crear producto" (create) by `catalog_matched`; wire edits → update.
+- [~] **T-5 — Frontend.** Split a/b.
+  - [x] **T-5a — API client + conversion helpers.** DONE. TS types
+    `CatalogSeriesUpdate`/`CatalogAdminUpdate`/`FichaApproveRequest`
+    (`portfolio-types.ts`); `approveFichaLine(request)` in `fichaApi.ts`; pure
+    `percentToFraction` + `buildApproveRequest(row, userId)` in
+    `reviewTableShared.ts` (client holding via `buildConfirmProducts`, catalog
+    code, and series/admin values converted back to fractions). TDD → GREEN.
+    Tests: percentToFraction (2), buildApproveRequest (2), approveFichaLine api
+    (1). tsc + eslint clean. Web 149 passed / 6 pre-existing / 0 new.
+  - [ ] **T-5b — Button wiring.** Card shows "Es un producto existente" (update,
+    when `catalog_matched`) vs "Aprobar y crear producto" (create); approving a
+    line POSTs `/approve` via `buildApproveRequest`.
 
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
   applySeriesAdminSelection,
+  buildApproveRequest,
   buildConfirmProducts,
   deriveConfidence,
+  percentToFraction,
   formatDeclaredSummary,
   formatFractionAsPercent,
   formatFractionValue,
@@ -411,6 +413,44 @@ describe("line status", () => {
     b.lineStatus = "discarded";
     // c stays pending
     expect(selectApprovedRows([a, b, c]).map((r) => r.excelRow)).toEqual([8]);
+  });
+});
+
+describe("percentToFraction", () => {
+  test("converts a plain percent value to a fraction", () => {
+    expect(percentToFraction("3.84")).toBeCloseTo(0.0384);
+    expect(percentToFraction("5")).toBeCloseTo(0.05);
+    expect(percentToFraction("0")).toBe(0);
+  });
+
+  test("returns null for blank or non-numeric input", () => {
+    expect(percentToFraction("")).toBeNull();
+    expect(percentToFraction("abc")).toBeNull();
+  });
+});
+
+describe("buildApproveRequest", () => {
+  test("builds the approve payload, converting percents back to fractions", () => {
+    const row = toEditableRow(
+      baseRow({ normalized_return_rate: "", enriched: v2Enriched() }),
+    );
+    const req = buildApproveRequest(row, "u1");
+
+    expect(req.user_id).toBe("u1");
+    expect(req.catalog_product_code).toBe("BD-00001");
+    expect(req.catalog_update.name).toBe("Latam Credit Opportunities Fund");
+    expect(req.series[0].series).toBe("A");
+    expect(req.series[0].management_fee_ter).toBeCloseTo(0.0384);
+    expect(req.series[0].return_min).toBeCloseTo(0.05);
+    expect(req.admins[0].administrator).toBe("Admin Co");
+    expect(req.admins[0].custody_fee).toBeCloseTo(0.001);
+    expect(req.product).toBeTruthy();
+  });
+
+  test("leaves catalog_product_code empty for a non-catalog row", () => {
+    const req = buildApproveRequest(toEditableRow(baseRow({ enriched: null })), "u1");
+    expect(req.catalog_product_code).toBe("");
+    expect(req.series).toEqual([]);
   });
 });
 

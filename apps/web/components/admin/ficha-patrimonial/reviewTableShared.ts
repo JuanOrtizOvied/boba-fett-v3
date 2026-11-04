@@ -8,7 +8,10 @@
 
 import type {
   AssetAllocation,
+  CatalogAdminUpdate,
   CatalogSeriesOption,
+  CatalogSeriesUpdate,
+  FichaApproveRequest,
   FichaEnrichedRow,
 } from "@/lib/portfolio-types";
 
@@ -468,4 +471,64 @@ export function buildConfirmProducts(
       catalog_product_id: row.enriched?.catalog_product_id ?? null,
     };
   });
+}
+
+/** Parses a plain percent value ("3.84") to a fraction (0.0384); null if blank
+ * or non-numeric. Inverse of `formatFractionValue`. */
+export function percentToFraction(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n / 100 : null;
+}
+
+function parsePlainNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Builds the per-line approve payload from an edited row: the client holding
+ * (reused from `buildConfirmProducts`), the matched catalog code, and the edited
+ * product/series/admin values converted back to catalog fractions.
+ */
+export function buildApproveRequest(
+  row: EditableFichaRow,
+  userId: string,
+): FichaApproveRequest {
+  const [product] = buildConfirmProducts([row]);
+  const series: CatalogSeriesUpdate[] = row.editableSeries.map((s) => ({
+    series: s.series,
+    management_fee_ter: percentToFraction(s.ter),
+    flows_min: percentToFraction(s.flowsMin),
+    flows_max: percentToFraction(s.flowsMax),
+    return_min: percentToFraction(s.returnMin),
+    return_max: percentToFraction(s.returnMax),
+  }));
+  const admins: CatalogAdminUpdate[] = row.editableAdmins.map((a) => ({
+    series: a.series,
+    administrator: a.administrator,
+    custody_fee: percentToFraction(a.custody),
+    buy_commission: percentToFraction(a.buy),
+    sell_commission: percentToFraction(a.sell),
+    minimum_usd: parsePlainNumber(a.minimumUsd),
+    min_commission_usd: null,
+  }));
+  return {
+    user_id: userId,
+    product: product as unknown as Record<string, unknown>,
+    catalog_product_code: row.enriched?.catalog_product_code ?? "",
+    catalog_update: {
+      name: row.name,
+      manager: row.manager,
+      currency: row.currency,
+      asset_class: row.assetClass
+        ? [{ name: row.assetClass, percentage: 100 }]
+        : [],
+      geographic_focus: row.geographicFocus,
+      underlying: row.underlying,
+    },
+    series,
+    admins,
+  };
 }
