@@ -16,7 +16,7 @@ import base64
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from agent.search import cascade_search_v2
 from api.chat_routes import _graph_config, _serialize_message, _state_messages
@@ -29,9 +29,15 @@ from catalog_sync.graph import GraphConfigError, GraphError
 from catalog_sync.lock import LockTimeoutError
 from catalog_sync.parser import MissingSheetError
 from catalog_sync.service import RunReport, SyncDisabledError, run_sync_from_sharepoint
+from db.catalog_curation import (
+    AdminUpdateInput,
+    SeriesUpdateInput,
+    apply_catalog_curation,
+)
 from db.catalog_excel import build_catalog_workbook, build_sync_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
 from db.catalog_excel import export_filename_for_sync as catalog_sync_export_filename
+from db.catalog_history import CatalogHistoryRepository
 from db.catalog_normalized import CatalogProductCreate as NormalizedProductCreate
 from db.catalog_normalized import (
     CatalogProductRow,
@@ -92,6 +98,10 @@ def _normalized_catalog_repo(request: Request) -> NormalizedCatalogRepository:
 
 def _ficha_repo(request: Request) -> FichaRepository:
     return request.app.state.ficha_repo
+
+
+def _history_repo(request: Request) -> CatalogHistoryRepository:
+    return request.app.state.history_repo
 
 
 def _versioning_repo(request: Request) -> VersioningRepository:
@@ -680,6 +690,43 @@ async def delete_ficha(
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Ficha '{ficha_id}' no encontrada")
     return {"ok": True}
+
+
+class FichaApproveRequest(BaseModel):
+    """Approve one reviewed ficha line: curate the matched catalog product (when
+    `catalog_product_code` is set) and create the client's holding."""
+
+    user_id: str
+    product: ProductCreate
+    catalog_product_code: str = ""
+    catalog_update: NormalizedProductUpdate = Field(default_factory=NormalizedProductUpdate)
+    series: list[SeriesUpdateInput] = Field(default_factory=list)
+    admins: list[AdminUpdateInput] = Field(default_factory=list)
+
+
+@router.post("/ficha-patrimonial/approve", status_code=201)
+async def approve_ficha_line(
+    data: FichaApproveRequest,
+    admin: dict = Depends(require_admin),
+    catalog_repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+    history_repo: CatalogHistoryRepository = Depends(_history_repo),
+    product_repo: ProductRepository = Depends(_product_repo),
+) -> dict:
+    """Curate the matched V2 catalog product (update + history) when it exists,
+    then create the client's portfolio product linked to it."""
+    catalog_changes: dict = {}
+    if data.catalog_product_code:
+        catalog_changes = await apply_catalog_curation(
+            catalog_repo,
+            history_repo,
+            data.catalog_product_code,
+            data.catalog_update,
+            data.series,
+            data.admins,
+            admin["id"],
+        )
+    product = await product_repo.create(data.user_id, data.product, source="admin_ficha_import")
+    return {"product_id": product.id, "catalog_changes": catalog_changes}
 
 
 @router.post("/ficha-patrimonial/confirm", status_code=201)

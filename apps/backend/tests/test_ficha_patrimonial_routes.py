@@ -49,6 +49,8 @@ def app_client():
     app.state.repo.pool = object()
     app.state.ficha_repo = AsyncMock()
     app.state.ficha_repo.create.return_value = 1
+    app.state.normalized_catalog_repo = AsyncMock()
+    app.state.history_repo = AsyncMock()
     return app, TestClient(app)
 
 
@@ -381,3 +383,67 @@ def test_delete_ficha_404_when_missing(app_client):
     response = client.delete("/admin/ficha-patrimonial/fichas/123")
 
     assert response.status_code == 404
+
+
+# --- Approve: curate catalog + create client holding -------------------------
+
+
+def test_approve_updates_catalog_and_creates_client_product(app_client, monkeypatch):
+    from types import SimpleNamespace
+
+    app, client = _admin_client(app_client)
+    app.state.repo.create = AsyncMock(return_value=SimpleNamespace(id="p1"))
+
+    async def fake_curation(*args, **kwargs):
+        return {"name": {"old": "A", "new": "B"}}
+
+    monkeypatch.setattr(admin_routes, "apply_catalog_curation", fake_curation)
+
+    body = {
+        "user_id": "u1",
+        "product": {
+            "name": "Fondo X",
+            "amount": 1000,
+            "asset_class": [{"name": "mercados_privados", "percentage": 100}],
+            "catalog_product_id": 7,
+        },
+        "catalog_product_code": "BD-1",
+        "catalog_update": {"name": "B"},
+        "series": [],
+        "admins": [],
+    }
+    response = client.post("/admin/ficha-patrimonial/approve", json=body)
+
+    assert response.status_code == 201
+    assert response.json()["product_id"] == "p1"
+    assert response.json()["catalog_changes"]["name"]["new"] == "B"
+    app.state.repo.create.assert_awaited_once()
+
+
+def test_approve_without_catalog_code_skips_curation(app_client, monkeypatch):
+    from types import SimpleNamespace
+
+    app, client = _admin_client(app_client)
+    app.state.repo.create = AsyncMock(return_value=SimpleNamespace(id="p2"))
+    called = {}
+
+    async def fake_curation(*args, **kwargs):
+        called["ran"] = True
+        return {}
+
+    monkeypatch.setattr(admin_routes, "apply_catalog_curation", fake_curation)
+
+    body = {
+        "user_id": "u1",
+        "product": {
+            "name": "New",
+            "amount": 500,
+            "asset_class": [{"name": "otros", "percentage": 100}],
+        },
+        "catalog_product_code": "",
+    }
+    response = client.post("/admin/ficha-patrimonial/approve", json=body)
+
+    assert response.status_code == 201
+    assert "ran" not in called  # no catalog code → no curation
+    assert response.json()["catalog_changes"] == {}

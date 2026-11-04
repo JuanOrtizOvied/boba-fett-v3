@@ -61,8 +61,17 @@ writer to the V2 catalog.
   `update_admin` only changed rows. `SeriesUpdateInput`/`AdminUpdateInput` models.
   `apply_catalog_product_update` kept as a product-only wrapper. TDD → GREEN;
   curation tests 6/6; backend 357 passed / 0 new; ruff clean. Commit: `__T2b__`.
-- [ ] **T-3 — Client holding linked.** Approve also creates the client `product`
-  with `catalog_product_id`/code set.
+- [x] **T-3 — Approve endpoint + client holding.** DONE. Route: INLINE.
+  `POST /admin/ficha-patrimonial/approve` (`FichaApproveRequest`: user_id,
+  ProductCreate, catalog_product_code, catalog_update, series[], admins[]): when
+  a `catalog_product_code` is present it runs `apply_catalog_curation`
+  (update + history, `changed_by` = the admin), then creates the client
+  `product` (linked via `catalog_product_id`), returning
+  `{product_id, catalog_changes}`. `_history_repo` DI helper +
+  `app.state.history_repo = CatalogHistoryRepository(pool)` wired in
+  `api/routes.py`. TDD: RED → GREEN. Route tests: approve updates catalog +
+  creates product; no-code skips curation. Backend 359 passed / 147 skipped / 0
+  new; ruff clean; `api.routes` imports clean. Commit: `__T3__`.
 - [ ] **T-4 — Create new product in catalog.** Web-searched → `create_product`
   (+ history) + code generation.
 - [ ] **T-5 — Frontend.** Button shows "Es un producto existente" (update) vs
