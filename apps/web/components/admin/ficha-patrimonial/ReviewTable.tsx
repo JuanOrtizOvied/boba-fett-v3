@@ -662,7 +662,9 @@ export default function ReviewTable({
     setErrorMessage(null);
     setResearchingIndex(index);
     try {
-      const result = await researchFichaLine(current.name || rows[index].raw_name);
+      // Search by the ficha's DECLARED name (left rail), not the editable form
+      // field — which may hold a wrong prior enrichment.
+      const result = await researchFichaLine(rows[index].raw_name || current.name);
       updateRow(index, applyResearchToRow(current, result));
     } catch {
       setErrorMessage("No se pudo investigar el producto con la búsqueda web.");

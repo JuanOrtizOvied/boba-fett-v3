@@ -228,15 +228,26 @@ describe("ReviewTable re-investigate with web", () => {
       provenance: {},
     } as unknown as FichaEnrichedRow["enriched"] as never);
 
-    const user = userEvent.setup();
-    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+    // The ficha's declared name (raw_name, left rail) differs from the
+    // enriched/form name — research must use the DECLARED name.
+    const row: FichaEnrichedRow = {
+      ...MAPPED_ROW,
+      raw_name: "BBVA Bonos BEST (CLN23LIA)",
+      enriched: { ...MAPPED_ROW.enriched!, name: "Nombre Formulario Distinto", manager: "" },
+    };
 
-    // Gestor starts empty for MAPPED_ROW.
-    expect(screen.getByLabelText("Gestor")).toHaveValue("");
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[row]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    // The form shows the (wrong) enriched name...
+    expect(screen.getByLabelText("Nombre del producto")).toHaveValue(
+      "Nombre Formulario Distinto",
+    );
 
     await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
 
-    expect(researchFichaLine).toHaveBeenCalledWith("Fondo Renta Fija");
+    // ...but the search uses the ficha's declared name.
+    expect(researchFichaLine).toHaveBeenCalledWith("BBVA Bonos BEST (CLN23LIA)");
     await waitFor(() =>
       expect(screen.getByLabelText("Gestor")).toHaveValue("Gestor Investigado"),
     );
