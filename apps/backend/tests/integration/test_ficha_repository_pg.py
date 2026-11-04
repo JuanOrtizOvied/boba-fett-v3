@@ -75,6 +75,17 @@ async def test_parse_failure_persists_as_con_error(test_pool, test_user_id):
     assert (await repo.get(fid)).status == "con_error"
 
 
+async def test_delete_removes_the_ficha_and_its_lines(test_pool, test_user_id):
+    repo = FichaRepository(test_pool)
+    client = FichaClientInfo(name="Ana", email="a@x.com", phone="", user_id=test_user_id)
+    fid = await repo.create(client, [_row(8, "Fondo A"), _row(9, "Fondo B")])
+
+    assert await repo.delete(fid) is True
+    assert await repo.get(fid) is None
+    # Idempotent: deleting a missing ficha reports False.
+    assert await repo.delete(fid) is False
+
+
 async def test_list_filters_by_status(test_pool, test_user_id):
     repo = FichaRepository(test_pool)
     client = FichaClientInfo(name="Ana", email="ana@x.com", phone="", user_id=test_user_id)

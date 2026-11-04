@@ -178,6 +178,14 @@ class FichaRepository:
             ficha_id,
         )
 
+    async def delete(self, ficha_id: int) -> bool:
+        """Delete a ficha and its lines (FK ON DELETE CASCADE). Returns whether a
+        ficha was actually removed."""
+        deleted = await self._pool.fetchval(
+            "DELETE FROM ficha WHERE id = $1 RETURNING id", ficha_id
+        )
+        return deleted is not None
+
     async def list(self, status: str | None = None) -> list[FichaListItem]:
         """List fichas (newest first), each with its derived status; filter by
         `status` when given."""

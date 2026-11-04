@@ -670,6 +670,18 @@ async def confirm_ficha(
     return {"ok": True}
 
 
+@router.delete("/ficha-patrimonial/fichas/{ficha_id}")
+async def delete_ficha(
+    ficha_id: int,
+    ficha_repo: FichaRepository = Depends(_ficha_repo),
+) -> dict:
+    """Delete a saved ficha and its lines (Slice 3b)."""
+    deleted = await ficha_repo.delete(ficha_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Ficha '{ficha_id}' no encontrada")
+    return {"ok": True}
+
+
 @router.post("/ficha-patrimonial/confirm", status_code=201)
 async def confirm_ficha_patrimonial(
     data: FichaConfirmRequest,

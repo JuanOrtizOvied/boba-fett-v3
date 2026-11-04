@@ -362,3 +362,22 @@ def test_mark_ficha_confirmed(app_client):
 
     assert response.status_code == 200
     app.state.ficha_repo.mark_confirmed.assert_awaited_once_with(9)
+
+
+def test_delete_ficha(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.delete.return_value = True
+
+    response = client.delete("/admin/ficha-patrimonial/fichas/9")
+
+    assert response.status_code == 200
+    app.state.ficha_repo.delete.assert_awaited_once_with(9)
+
+
+def test_delete_ficha_404_when_missing(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.delete.return_value = False
+
+    response = client.delete("/admin/ficha-patrimonial/fichas/123")
+
+    assert response.status_code == 404
