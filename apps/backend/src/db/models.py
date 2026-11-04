@@ -414,6 +414,14 @@ class CatalogSeriesOption(BaseModel):
     administrators: list[CatalogSeriesAdminOption] = Field(default_factory=list)
 
 
+class Source(BaseModel):
+    """A web source (link + title) cited by the L3 Claude web research, shown in
+    the ficha card's "Fuentes" section."""
+
+    url: str = ""
+    title: str = ""
+
+
 class SearchResult(BaseModel):
     """Unified result of a cascading L1 (catalog) -> L2 (Claude knowledge) ->
     L3 (Tavily web search) product search, with per-field provenance."""
@@ -447,5 +455,8 @@ class SearchResult(BaseModel):
     # whether the product is an accepted catalog match ("ya estaba en la BD").
     confidence: str = ""
     catalog_matched: bool = False
+    # Web sources cited by the L3 Claude web research (ficha "Fuentes"); empty
+    # for catalog/chat results.
+    sources: list[Source] = Field(default_factory=list)
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)

@@ -195,7 +195,7 @@ async def test_v2_l3_uses_claude_web_not_tavily(monkeypatch):
         return {}
 
     async def claude_web(query):
-        return {"name": "Researched Fund", "manager": "Web Manager"}
+        return {"name": "Researched Fund", "manager": "Web Manager"}, []
 
     async def tavily_must_not_run(query):
         raise AssertionError("ficha L3 must not call Tavily")
@@ -216,12 +216,16 @@ async def test_v2_l3_uses_claude_web_not_tavily(monkeypatch):
 
 async def test_search_claude_web_degrades_without_api_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    assert await search_mod._search_claude_web("anything") == {}
+    assert await search_mod._search_claude_web("anything") == ({}, [])
 
 
 async def test_search_claude_web_extracts_from_research_text(monkeypatch):
+    from db.models import Source
+
+    source = Source(url="https://x.com/doc", title="Doc")
+
     async def fake_research(query):
-        return "Acme Fund is a USD fixed-income fund managed by Acme."
+        return "Acme Fund is a USD fixed-income fund managed by Acme.", [source]
 
     async def fake_extract(prompt):
         assert "Acme Fund" in prompt
@@ -230,18 +234,60 @@ async def test_search_claude_web_extracts_from_research_text(monkeypatch):
     monkeypatch.setattr(search_mod, "_research_with_claude_web", fake_research)
     monkeypatch.setattr(search_mod, "_run_extraction", fake_extract)
 
-    assert await search_mod._search_claude_web("acme fund") == {
-        "name": "Acme Fund",
-        "currency": "USD",
-    }
+    fields, sources = await search_mod._search_claude_web("acme fund")
+    assert fields == {"name": "Acme Fund", "currency": "USD"}
+    assert sources == [source]
 
 
 async def test_search_claude_web_empty_when_no_research(monkeypatch):
     async def no_research(query):
-        return ""
+        return "", []
 
     monkeypatch.setattr(search_mod, "_research_with_claude_web", no_research)
-    assert await search_mod._search_claude_web("acme fund") == {}
+    assert await search_mod._search_claude_web("acme fund") == ({}, [])
+
+
+def test_extract_sources_dedupes_by_url():
+    class _Resp:
+        content_blocks = [
+            {
+                "type": "text",
+                "text": "…",
+                "annotations": [
+                    {"type": "citation", "url": "https://a.com", "title": "A"},
+                    {"type": "citation", "url": "https://a.com", "title": "A dup"},
+                    {"type": "citation", "url": "https://b.com", "title": "B"},
+                    {"type": "citation", "title": "no url"},
+                ],
+            }
+        ]
+
+    sources = search_mod._extract_sources(_Resp())
+    assert [s.url for s in sources] == ["https://a.com", "https://b.com"]
+    assert sources[0].title == "A"
+
+
+async def test_v2_captures_web_sources(monkeypatch):
+    from db.models import Source
+
+    async def no_catalog(self, query):
+        return None
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return {"name": "Web Fund"}, [Source(url="https://src", title="Src")]
+
+    monkeypatch.setattr(
+        search_mod.NormalizedCatalogRepository, "search_for_enrichment", no_catalog
+    )
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("web fund", object())
+    assert result is not None
+    assert [s.url for s in result.sources] == ["https://src"]
 
 
 async def test_v1_cascade_still_fills_commercial_fields(monkeypatch):

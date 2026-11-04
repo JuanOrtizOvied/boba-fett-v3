@@ -31,6 +31,7 @@ from db.models import (
     CatalogSeriesOption,
     FieldSource,
     SearchResult,
+    Source,
 )
 
 # String fields the cascade searches/returns at every level (field parity
@@ -314,12 +315,31 @@ def _blocks_to_text(response: object) -> str:
     return ""
 
 
-async def _research_with_claude_web(query: str) -> str:
+def _extract_sources(response: object) -> list[Source]:
+    """Collect the web citation annotations (url + title) from a chat response,
+    de-duplicated by url, for the ficha "Fuentes" section."""
+    blocks = getattr(response, "content_blocks", None) or []
+    seen: set[str] = set()
+    sources: list[Source] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        for ann in block.get("annotations") or []:
+            if not isinstance(ann, dict):
+                continue
+            url = ann.get("url")
+            if url and url not in seen:
+                seen.add(url)
+                sources.append(Source(url=url, title=ann.get("title") or ""))
+    return sources
+
+
+async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
     """Research a financial product with Claude's server-side web_search +
-    web_fetch tools; return the grounded assistant text. Returns "" when
-    `ANTHROPIC_API_KEY` is unset or the call fails — never raises."""
+    web_fetch tools; return the grounded assistant text and the cited sources.
+    Returns ("", []) when `ANTHROPIC_API_KEY` is unset or the call fails."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        return ""
+        return "", []
     try:
         llm = ChatAnthropic(
             model=EXTRACTION_MODEL_NAME,
@@ -331,23 +351,24 @@ async def _research_with_claude_web(query: str) -> str:
             "attributes (manager, currency, asset class, geographic focus, "
             f"underlying). Use web search and fetch sources as needed.\n\nProduct: {query}"
         )
-        return _blocks_to_text(response)
+        return _blocks_to_text(response), _extract_sources(response)
     except Exception:
-        return ""
+        return "", []
 
 
-async def _search_claude_web(query: str) -> dict[str, str]:
+async def _search_claude_web(query: str) -> tuple[dict[str, str], list[Source]]:
     """L3 for the ficha cascade — Claude web_search + web_fetch research,
-    grounded-extracted into the shared field set (replaces Tavily for ficha).
-    Returns {} on failure / no data; never raises."""
-    context = await _research_with_claude_web(query)
+    grounded-extracted into the shared field set plus the cited sources
+    (replaces Tavily for ficha). Returns ({}, sources) on no data; never raises."""
+    context, sources = await _research_with_claude_web(query)
     if not context:
-        return {}
-    return await _run_extraction(
+        return {}, sources
+    fields = await _run_extraction(
         f"Product to research: {query}\n\nWeb research:\n{context}\n\n"
         "Extract fields ONLY from the web research above — do not use outside "
         "knowledge."
     )
+    return fields, sources
 
 
 _LEGACY_ASSET_CLASS_LABELS: set[str] = {
@@ -540,9 +561,11 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
             _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
 
     if not _is_product_complete(result):
-        web_data = await _search_claude_web(query)
+        web_data, web_sources = await _search_claude_web(query)
         if web_data:
             _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
+        if web_sources:
+            result.sources = web_sources
 
     _sanitize_taxonomy(result)
     _classify(result)
