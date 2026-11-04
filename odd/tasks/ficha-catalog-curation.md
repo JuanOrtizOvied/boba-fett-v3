@@ -108,7 +108,7 @@ generated code) AND creates the linked client holding, end-to-end.
   TS `CatalogHistoryEntry` + `fichaApi.getCatalogHistory(code)` (api test). The
   change history is now READABLE (UI display of it is the remaining piece).
   Backend 362 passed / 0 new; web 10/10 ficha-api; tsc + eslint clean.
-  Commit: `__hist__`.
+  Commit: `3a926df`.
 
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and
