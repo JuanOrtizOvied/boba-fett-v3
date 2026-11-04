@@ -39,8 +39,8 @@ from db.catalog_excel import build_catalog_workbook, build_sync_workbook
 from db.catalog_excel import export_filename as catalog_export_filename
 from db.catalog_excel import export_filename_for_sync as catalog_sync_export_filename
 from db.catalog_history import CatalogHistoryEntry, CatalogHistoryRepository
-from db.catalog_normalized import CatalogProductCreate as NormalizedProductCreate
 from db.catalog_normalized import (
+    AlreadyExistsError,
     CatalogProductRow,
     CatalogProductSeries,
     CatalogProductSeriesAdmin,
@@ -49,8 +49,11 @@ from db.catalog_normalized import (
     CatalogProductSeriesCreate,
     CatalogProductSeriesUpdate,
     NormalizedCatalogRepository,
+    ParentNotFoundError,
 )
+from db.catalog_normalized import CatalogProductCreate as NormalizedProductCreate
 from db.catalog_normalized import CatalogProductUpdate as NormalizedProductUpdate
+from db.catalog_normalized_observations import ProductObservations, catalog_observations
 from db.catalog_repository import CatalogRepository
 from db.ficha_patrimonial import (
     FichaConfirmRequest,
@@ -815,6 +818,15 @@ async def list_normalized_products(
     return await repo.list_products(term or None)
 
 
+@router.get("/normalized-catalog/observations")
+async def list_normalized_observations(
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> list[ProductObservations]:
+    """Products with something missing or outside the official lists. The ones
+    that are complete are left out."""
+    return catalog_observations(await repo.list_with_children())
+
+
 @router.get("/normalized-catalog/products/{code}")
 async def get_normalized_product(
     code: str, repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo)
@@ -832,7 +844,7 @@ async def create_normalized_product(
 ) -> CatalogProductRow:
     try:
         return await repo.create_product(data)
-    except asyncpg.UniqueViolationError:
+    except AlreadyExistsError:
         raise HTTPException(status_code=409, detail="Ya existe un producto con ese código")
 
 
@@ -863,9 +875,9 @@ async def create_normalized_series(
 ) -> CatalogProductSeries:
     try:
         return await repo.create_series(data)
-    except asyncpg.UniqueViolationError:
+    except AlreadyExistsError:
         raise HTTPException(status_code=409, detail="Ya existe esa serie para el producto")
-    except asyncpg.ForeignKeyViolationError:
+    except ParentNotFoundError:
         raise HTTPException(status_code=404, detail="Producto inexistente")
 
 
@@ -896,9 +908,9 @@ async def create_normalized_admin(
 ) -> CatalogProductSeriesAdmin:
     try:
         return await repo.create_admin(data)
-    except asyncpg.UniqueViolationError:
+    except AlreadyExistsError:
         raise HTTPException(status_code=409, detail="Ya existe esa administradora para la serie")
-    except asyncpg.ForeignKeyViolationError:
+    except ParentNotFoundError:
         raise HTTPException(status_code=404, detail="Serie o producto inexistente")
 
 

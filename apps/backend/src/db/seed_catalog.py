@@ -59,7 +59,8 @@ def _clean_return_rate(value: object) -> str:
 def _parse_pct_list(text: str, *, fallback_100: bool = False) -> str:
     """Parse 'Name1 X%, Name2 Y%' into JSON array of {name, percentage}.
 
-    Handles comma, newline, multi-space, and ' y ' as separators.
+    Handles comma, newline, multi-space, ' y ' and '%. ' (a period after the
+    percentage, as the owners write it in the normalized workbook) as separators.
     Handles optional colon before the percentage (e.g. 'Bonos: 21%').
     When *fallback_100* is True and no percentages are found, returns a
     single entry with 100% allocation.
@@ -71,6 +72,7 @@ def _parse_pct_list(text: str, *, fallback_100: bool = False) -> str:
     normalized = cleaned.replace("\n", ",").replace("\r", ",")
     normalized = re.sub(r"%\s{2,}", "%, ", normalized)
     normalized = re.sub(r"%\s+y\s+", "%, ", normalized)
+    normalized = re.sub(r"%\.(\s+|$)", "%, ", normalized)
 
     parts = [p.strip() for p in re.split(r",(?![^(]*\))", normalized) if p.strip()]
     result = []

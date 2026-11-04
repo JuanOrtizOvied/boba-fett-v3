@@ -92,9 +92,6 @@ DO $$ BEGIN
       WHEN asset_class IS NOT NULL AND asset_class != ''
       THEN jsonb_build_array(jsonb_build_object('name', asset_class, 'percentage', 100))::text
       ELSE '[]' END;
-    -- Drop the TEXT default first (see geographic_focus above): the cast of
-    -- DEFAULT '' to jsonb would otherwise fail on a fresh apply.
-    ALTER TABLE products ALTER COLUMN asset_class DROP DEFAULT;
     ALTER TABLE products ALTER COLUMN asset_class TYPE JSONB USING asset_class::jsonb;
     ALTER TABLE products ALTER COLUMN asset_class SET DEFAULT '[]'::jsonb;
   END IF;
@@ -124,13 +121,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Legacy product_catalog clean-up (runs only when the table already exists;
--- on a fresh apply product_catalog is created further below, so skip).
-DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='product_catalog') THEN
-    ALTER TABLE product_catalog DROP COLUMN IF EXISTS subcategory;
-  END IF;
-END $$;
+ALTER TABLE product_catalog DROP COLUMN IF EXISTS subcategory;
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -596,12 +587,8 @@ DO $$ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name='products' AND column_name='amount' AND data_type='numeric'
   ) THEN
-    -- Drop the positivity CHECK first (both the explicit name and the inline
-    -- auto-generated one): it is `amount > 0`, which cannot be re-validated once
-    -- the column becomes TEXT (text > numeric).
-    ALTER TABLE products DROP CONSTRAINT IF EXISTS products_amount_positive;
-    ALTER TABLE products DROP CONSTRAINT IF EXISTS products_amount_check;
     ALTER TABLE products ALTER COLUMN amount TYPE TEXT USING amount::text;
+    ALTER TABLE products DROP CONSTRAINT IF EXISTS products_amount_positive;
   END IF;
 END $$;
 
@@ -677,7 +664,9 @@ CREATE TABLE IF NOT EXISTS catalog_product (
     underlying JSONB DEFAULT '[]',
     currency TEXT DEFAULT '',
     investment_horizon TEXT DEFAULT '',
-    created_at TIMESTAMPTZ DEFAULT now()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS catalog_product_series (
@@ -690,6 +679,8 @@ CREATE TABLE IF NOT EXISTS catalog_product_series (
     return_min NUMERIC,
     return_max NUMERIC,
     created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    deleted_at TIMESTAMPTZ,
     UNIQUE (product_code, series)
 );
 
@@ -705,6 +696,8 @@ CREATE TABLE IF NOT EXISTS catalog_product_series_admin (
     minimum_usd NUMERIC,
     min_commission_usd NUMERIC,
     created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    deleted_at TIMESTAMPTZ,
     FOREIGN KEY (product_code, series)
         REFERENCES catalog_product_series(product_code, series) ON DELETE CASCADE,
     UNIQUE (product_code, administrator, series)
@@ -756,3 +749,24 @@ CREATE TABLE IF NOT EXISTS catalog_product_history (
 
 CREATE INDEX IF NOT EXISTS catalog_product_history_code_idx
     ON catalog_product_history (product_code);
+
+-- Soft delete (migrations/versions/b9d4f6a8c2e1_add_soft_delete_to_normalized_catalog.py).
+-- Idempotent so a database built before the columns existed gets them too.
+ALTER TABLE catalog_product ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE catalog_product ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE catalog_product_series ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE catalog_product_series ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE catalog_product_series_admin ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE catalog_product_series_admin ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- ---------------------------------------------------------------------------
+-- Normalized catalog SharePoint sync: hash of the last workbook applied, so an
+-- unchanged file is skipped. One row only (id is always 1). Separate from
+-- webhook_subscriptions.last_processed_hash, which tracks the file of the
+-- legacy `product_catalog` sync.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS normalized_sync_state (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    last_processed_hash VARCHAR(64),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
