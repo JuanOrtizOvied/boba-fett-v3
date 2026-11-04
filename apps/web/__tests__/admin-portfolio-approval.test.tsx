@@ -107,9 +107,13 @@ describe("ApproveProductModal pre-fill", () => {
       />,
     );
 
-    expect(screen.getByText(/valores actuales/i)).toBeInTheDocument();
+    expect(screen.getByText(/ya existe en el catálogo/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Valor actual").length).toBeGreaterThan(0);
+    // Catalog (current) name + commission shown as read-only text...
     expect(screen.getByText("Bono Soberano Catálogo")).toBeInTheDocument();
-    expect(screen.getByText("2.0%")).toBeInTheDocument();
+    expect(screen.getByText("1.5%")).toBeInTheDocument();
+    // ...beside the proposed commission in its editable field.
+    expect(screen.getByDisplayValue("2.0%")).toBeInTheDocument();
   });
 });
 

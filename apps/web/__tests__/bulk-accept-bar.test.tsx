@@ -13,6 +13,9 @@ vi.mock("@assistant-ui/react", () => {
   const stub = () => new Proxy({}, { get: () => "div" });
   return {
     useThreadRuntime: vi.fn(() => ({ append: vi.fn() })),
+    useAuiState: vi.fn((selector: (s: unknown) => unknown) =>
+      selector({ thread: { messages: [] }, message: { id: "m", createdAt: null } }),
+    ),
     MessagePrimitive: stub(),
     ActionBarPrimitive: stub(),
     AttachmentPrimitive: stub(),
@@ -25,7 +28,7 @@ vi.mock("@assistant-ui/react", () => {
 type ProductInput = {
   name?: string;
   amount?: number;
-  asset_class?: string;
+  asset_class?: { name: string; percentage: number }[];
   underlying?: { name: string; percentage: number }[];
   provider?: string;
 };

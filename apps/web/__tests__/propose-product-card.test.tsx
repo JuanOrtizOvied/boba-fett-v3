@@ -29,7 +29,7 @@ vi.mock("@assistant-ui/react", () => {
 type ProductInput = {
   name?: string;
   amount?: number;
-  asset_class?: string;
+  asset_class?: { name: string; percentage: number }[];
   underlying?: { name: string; percentage: number }[];
   provider?: string;
 };
@@ -112,7 +112,7 @@ describe("ProposeProductCard rendering", () => {
       />,
     );
 
-    expect(screen.getByText(/composición/)).toBeInTheDocument();
+    expect(screen.getByText(/Completa:.*composición/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sí, agregar" })).toBeDisabled();
   });
 
