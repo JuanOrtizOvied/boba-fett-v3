@@ -80,7 +80,7 @@ writer to the V2 catalog.
   a new catalog product and links the client holding via `catalog_product_id`
   (replacing the earlier "skip curation"). TDD: RED → GREEN. Unit tests (service
   + name fallback) + integration (next_product_code increments) + updated route
-  test. Backend 361 passed / 148 skipped / 0 new; ruff clean. Commit: `__T4__`.
+  test. Backend 361 passed / 148 skipped / 0 new; ruff clean. Commit: `a0d46bd`.
 - [ ] **T-5 — Frontend.** Button shows "Es un producto existente" (update) vs
   "Aprobar y crear producto" (create) by `catalog_matched`; wire edits → update.
 
