@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   applySeriesAdminSelection,
+  blankEditableAdminRow,
+  blankEditableSeriesRow,
   buildApproveRequest,
   buildConfirmProducts,
   deriveConfidence,
@@ -519,5 +521,51 @@ describe("buildConfirmProducts", () => {
     const [product] = buildConfirmProducts([editable]);
     expect(product.asset_class).toEqual([]);
     expect(product.amount).toBe(1500.5);
+  });
+});
+
+describe("blank editable series/admin rows (A2 — brand-new products)", () => {
+  test("blankEditableSeriesRow is all-empty strings", () => {
+    expect(blankEditableSeriesRow()).toEqual({
+      series: "",
+      ter: "",
+      flowsMin: "",
+      flowsMax: "",
+      returnMin: "",
+      returnMax: "",
+      minimumUsd: "",
+      howCalculated: "",
+    });
+  });
+
+  test("blankEditableAdminRow is all-empty strings", () => {
+    expect(blankEditableAdminRow()).toEqual({
+      administrator: "",
+      series: "",
+      custody: "",
+      buy: "",
+      sell: "",
+      minimumUsd: "",
+    });
+  });
+
+  test("a manually added blank series row flows into the approve request", () => {
+    const editable = toEditableRow(baseRow({}));
+    editable.editableSeries = [
+      { ...blankEditableSeriesRow(), series: "Nueva", ter: "2" },
+    ];
+    editable.editableAdmins = [
+      { ...blankEditableAdminRow(), series: "Nueva", administrator: "Admin X", custody: "1" },
+    ];
+    const request = buildApproveRequest(editable, "u1");
+    expect(request.series[0]).toMatchObject({
+      series: "Nueva",
+      management_fee_ter: 0.02,
+    });
+    expect(request.admins[0]).toMatchObject({
+      series: "Nueva",
+      administrator: "Admin X",
+      custody_fee: 0.01,
+    });
   });
 });

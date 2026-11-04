@@ -317,6 +317,34 @@ export function toEditableAdminRows(
   );
 }
 
+/** An empty editable series row — the admin fills it in for a brand-new
+ * (not-in-catalog) product via the "+ agregar serie" control. */
+export function blankEditableSeriesRow(): EditableSeriesRow {
+  return {
+    series: "",
+    ter: "",
+    flowsMin: "",
+    flowsMax: "",
+    returnMin: "",
+    returnMax: "",
+    minimumUsd: "",
+    howCalculated: "",
+  };
+}
+
+/** An empty editable administrator row — the admin fills it in for a brand-new
+ * (not-in-catalog) product via the "+ agregar administrador" control. */
+export function blankEditableAdminRow(): EditableAdminRow {
+  return {
+    administrator: "",
+    series: "",
+    custody: "",
+    buy: "",
+    sell: "",
+    minimumUsd: "",
+  };
+}
+
 /**
  * Maps a parsed+enriched row into its initial editable review state.
  */

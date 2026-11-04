@@ -119,9 +119,19 @@ generated code) AND creates the linked client holding, end-to-end.
     endpoint's no-code branch passes `data.series, data.admins`. TDD: RED (2 new
     tests + updated signatures) → GREEN. Curation tests 10/10; backend 364 passed
     / 148 skipped / 0 new; ruff clean on edited files. Commit: `dbc82c8`.
-  - [ ] **A2-frontend — "+ agregar serie / administrador" buttons.** The review
-    card's series/admin tables need add-row controls so an admin can enter
-    series/admins for a brand-new (not-in-catalog) product before approving.
+  - [x] **A2-frontend — "+ agregar serie / administrador" buttons.** DONE.
+    Route: INLINE. `blankEditableSeriesRow`/`blankEditableAdminRow` factories
+    (`reviewTableShared.ts`); the card's Series/Administradores tables now always
+    render with editable name inputs (series name; admin name + series) and
+    "+ Agregar serie" / "+ Agregar administrador" footer buttons (plus per-row
+    delete), so an admin can enter series/admins for a brand-new (not-in-catalog)
+    product. `buildApproveRequest` already maps `editableSeries`/`editableAdmins`
+    → the approve payload, so added rows reach the A2 backend. TDD: RED (3 shared
+    + 1 component test) → GREEN. Web ficha suites 64/64; full web 155 passed / 6
+    pre-existing / 0 new; tsc + eslint clean on edited files. Commit: `<pending>`.
+    NOTE: making existing catalog series/admin names editable means renaming one
+    on an EXISTING product won't match in `_apply_series`/`_apply_admins` (which
+    key by name) — acceptable for now; a rename-aware update is a later follow-up.
 
 ## Acceptance criteria / checks
 - Editing a catalog-matched product and approving updates the V2 tables and

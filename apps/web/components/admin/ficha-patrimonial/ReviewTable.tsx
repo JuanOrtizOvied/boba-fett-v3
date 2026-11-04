@@ -6,6 +6,8 @@ import {
   ASSET_CLASS_LABELS,
   SOURCE_BADGES,
   applySeriesAdminSelection,
+  blankEditableAdminRow,
+  blankEditableSeriesRow,
   buildApproveRequest,
   buildConfirmProducts,
   formatDeclaredSummary,
@@ -165,45 +167,75 @@ function SeriesTable({
   const update = (index: number, patch: Partial<EditableSeriesRow>) => {
     onChange(series.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   };
+  const add = () => onChange([...series, blankEditableSeriesRow()]);
+  const remove = (index: number) =>
+    onChange(series.filter((_, i) => i !== index));
 
   return (
     <div className="flex flex-col gap-2">
       <span className="text-xs font-medium text-sabbi-neutral-500">
         Series (porcentajes en %)
       </span>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr className="text-left text-sabbi-neutral-500">
-              <th className="px-1 py-1 font-medium">Serie</th>
-              {SERIES_COLUMNS.map((c) => (
-                <th key={c.key} className="px-1 py-1 font-medium">
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {series.map((s, i) => (
-              <tr key={s.series || i}>
-                <td className="px-1 py-1 font-medium text-sabbi-neutral-700">
-                  {s.series || "—"}
-                </td>
+      {series.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-left text-sabbi-neutral-500">
+                <th className="px-1 py-1 font-medium">Serie</th>
                 {SERIES_COLUMNS.map((c) => (
-                  <td key={c.key} className="px-1 py-1">
+                  <th key={c.key} className="px-1 py-1 font-medium">
+                    {c.label}
+                  </th>
+                ))}
+                <th className="px-1 py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {series.map((s, i) => (
+                <tr key={i}>
+                  <td className="px-1 py-1">
                     <input
-                      value={s[c.key]}
-                      aria-label={`${c.label} serie ${s.series}`}
-                      onChange={(e) => update(i, { [c.key]: e.target.value })}
-                      className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                      value={s.series}
+                      aria-label={`Nombre de la serie ${i + 1}`}
+                      onChange={(e) => update(i, { series: e.target.value })}
+                      className="w-24 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
                     />
                   </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  {SERIES_COLUMNS.map((c) => (
+                    <td key={c.key} className="px-1 py-1">
+                      <input
+                        value={s[c.key]}
+                        aria-label={`${c.label} serie ${s.series}`}
+                        onChange={(e) => update(i, { [c.key]: e.target.value })}
+                        className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                      />
+                    </td>
+                  ))}
+                  <td className="px-1 py-1">
+                    <button
+                      type="button"
+                      onClick={() => remove(i)}
+                      className="rounded p-0.5 text-sabbi-neutral-400 hover:text-red-500"
+                      aria-label={`Eliminar serie ${i + 1}`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={add}
+        className="self-start rounded-lg border border-dashed border-sabbi-neutral-300 px-2 py-1 text-xs text-sabbi-neutral-600 hover:border-sabbi-primary hover:text-sabbi-primary"
+      >
+        + Agregar serie
+      </button>
     </div>
   );
 }
@@ -227,49 +259,84 @@ function AdminTable({
   const update = (index: number, patch: Partial<EditableAdminRow>) => {
     onChange(admins.map((a, i) => (i === index ? { ...a, ...patch } : a)));
   };
+  const add = () => onChange([...admins, blankEditableAdminRow()]);
+  const remove = (index: number) =>
+    onChange(admins.filter((_, i) => i !== index));
 
   return (
     <div className="flex flex-col gap-2">
       <span className="text-xs font-medium text-sabbi-neutral-500">
         Administradores
       </span>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr className="text-left text-sabbi-neutral-500">
-              <th className="px-1 py-1 font-medium">Administrador</th>
-              <th className="px-1 py-1 font-medium">Serie</th>
-              {ADMIN_COLUMNS.map((c) => (
-                <th key={c.key} className="px-1 py-1 font-medium">
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {admins.map((a, i) => (
-              <tr key={`${a.administrator}-${a.series}-${i}`}>
-                <td className="px-1 py-1 font-medium text-sabbi-neutral-700">
-                  {a.administrator || "—"}
-                </td>
-                <td className="px-1 py-1 text-sabbi-neutral-700">
-                  {a.series || "—"}
-                </td>
+      {admins.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-left text-sabbi-neutral-500">
+                <th className="px-1 py-1 font-medium">Administrador</th>
+                <th className="px-1 py-1 font-medium">Serie</th>
                 {ADMIN_COLUMNS.map((c) => (
-                  <td key={c.key} className="px-1 py-1">
+                  <th key={c.key} className="px-1 py-1 font-medium">
+                    {c.label}
+                  </th>
+                ))}
+                <th className="px-1 py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {admins.map((a, i) => (
+                <tr key={i}>
+                  <td className="px-1 py-1">
                     <input
-                      value={a[c.key]}
-                      aria-label={`${c.label} ${a.administrator} serie ${a.series}`}
-                      onChange={(e) => update(i, { [c.key]: e.target.value })}
+                      value={a.administrator}
+                      aria-label={`Nombre del administrador ${i + 1}`}
+                      onChange={(e) => update(i, { administrator: e.target.value })}
+                      className="w-28 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
+                    />
+                  </td>
+                  <td className="px-1 py-1">
+                    <input
+                      value={a.series}
+                      aria-label={`Serie del administrador ${i + 1}`}
+                      onChange={(e) => update(i, { series: e.target.value })}
                       className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
                     />
                   </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  {ADMIN_COLUMNS.map((c) => (
+                    <td key={c.key} className="px-1 py-1">
+                      <input
+                        value={a[c.key]}
+                        aria-label={`${c.label} ${a.administrator} serie ${a.series}`}
+                        onChange={(e) => update(i, { [c.key]: e.target.value })}
+                        className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                      />
+                    </td>
+                  ))}
+                  <td className="px-1 py-1">
+                    <button
+                      type="button"
+                      onClick={() => remove(i)}
+                      className="rounded p-0.5 text-sabbi-neutral-400 hover:text-red-500"
+                      aria-label={`Eliminar administrador ${i + 1}`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={add}
+        className="self-start rounded-lg border border-dashed border-sabbi-neutral-300 px-2 py-1 text-xs text-sabbi-neutral-600 hover:border-sabbi-primary hover:text-sabbi-primary"
+      >
+        + Agregar administrador
+      </button>
     </div>
   );
 }
@@ -425,19 +492,15 @@ function ProductCard({
             </div>
           </div>
 
-          {row.editableSeries.length > 0 && (
-            <SeriesTable
-              series={row.editableSeries}
-              onChange={(next) => onUpdate({ editableSeries: next })}
-            />
-          )}
+          <SeriesTable
+            series={row.editableSeries}
+            onChange={(next) => onUpdate({ editableSeries: next })}
+          />
 
-          {row.editableAdmins.length > 0 && (
-            <AdminTable
-              admins={row.editableAdmins}
-              onChange={(next) => onUpdate({ editableAdmins: next })}
-            />
-          )}
+          <AdminTable
+            admins={row.editableAdmins}
+            onChange={(next) => onUpdate({ editableAdmins: next })}
+          />
 
           {row.seriesOptions.length > 0 && (
             <div className="grid grid-cols-2 gap-3 rounded-lg bg-sabbi-neutral-50 p-2">

@@ -177,6 +177,30 @@ describe("ReviewTable V2 editable Administradores table", () => {
   });
 });
 
+describe("ReviewTable A2 — add series/admins for a brand-new product", () => {
+  test("adds an editable series and administrator row via the + buttons", async () => {
+    const user = userEvent.setup();
+    // MAPPED_ROW has no series_options → brand-new product (no catalog series).
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    // No series rows yet, but the add controls are present.
+    const addSeries = screen.getByRole("button", { name: /agregar serie/i });
+    const addAdmin = screen.getByRole("button", { name: /agregar administrador/i });
+
+    await user.click(addSeries);
+    const seriesName = screen.getByLabelText("Nombre de la serie 1");
+    await user.type(seriesName, "Serie Nueva");
+    expect(screen.getByLabelText("Nombre de la serie 1")).toHaveValue("Serie Nueva");
+
+    await user.click(addAdmin);
+    const adminName = screen.getByLabelText("Nombre del administrador 1");
+    await user.type(adminName, "Admin Nuevo");
+    expect(screen.getByLabelText("Nombre del administrador 1")).toHaveValue(
+      "Admin Nuevo",
+    );
+  });
+});
+
 describe("ReviewTable Fuentes section", () => {
   test("renders a Fuentes list with links when the enrichment has sources", () => {
     const rowWithSources: FichaEnrichedRow = {
