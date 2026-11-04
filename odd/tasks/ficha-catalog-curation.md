@@ -118,7 +118,7 @@ generated code) AND creates the linked client holding, end-to-end.
     recording the created series names in the 'create' history row. Approve
     endpoint's no-code branch passes `data.series, data.admins`. TDD: RED (2 new
     tests + updated signatures) → GREEN. Curation tests 10/10; backend 364 passed
-    / 148 skipped / 0 new; ruff clean on edited files. Commit: `<pending>`.
+    / 148 skipped / 0 new; ruff clean on edited files. Commit: `dbc82c8`.
   - [ ] **A2-frontend — "+ agregar serie / administrador" buttons.** The review
     card's series/admin tables need add-row controls so an admin can enter
     series/admins for a brand-new (not-in-catalog) product before approving.
