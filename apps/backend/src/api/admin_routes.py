@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
-from agent.search import cascade_search_v2
+from agent.search import cascade_search_v2, research_web_v2
 from api.chat_routes import _graph_config, _serialize_message, _state_messages
 from auth.dependencies import require_admin
 from auth.models import UserCreate
@@ -70,6 +70,7 @@ from db.models import (
     CatalogProductUpdate,
     ManagerCreate,
     ProductCreate,
+    SearchResult,
 )
 from db.repository import ProductRepository
 from db.versioning import VersioningRepository
@@ -751,6 +752,20 @@ async def get_catalog_product_history(
 ) -> list[CatalogHistoryEntry]:
     """Change history for one V2 catalog product (newest first)."""
     return await history_repo.list_for_product(code)
+
+
+class FichaResearchRequest(BaseModel):
+    """Re-investigate one ficha product by name with Claude's web tools."""
+
+    name: str
+
+
+@router.post("/ficha-patrimonial/research")
+async def research_ficha_line(data: FichaResearchRequest) -> SearchResult:
+    """Re-investigate one product with Claude's web search + fetch tools (the
+    review card's "Volver a investigar"). Returns a web-grounded SearchResult
+    (product fields + cited sources), independent of the catalog."""
+    return await research_web_v2(data.name.strip())
 
 
 @router.post("/ficha-patrimonial/confirm", status_code=201)

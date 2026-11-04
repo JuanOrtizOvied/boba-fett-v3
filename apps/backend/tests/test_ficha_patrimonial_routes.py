@@ -467,3 +467,37 @@ def test_approve_without_catalog_code_creates_new_catalog_product(app_client, mo
 
     assert response.status_code == 201
     assert response.json()["catalog_changes"] == {"created": "BD-00099"}
+
+
+# ---------------------------------------------------------------------------
+# POST /ficha-patrimonial/research — per-product Claude web re-investigation
+# ---------------------------------------------------------------------------
+
+
+def test_research_endpoint_returns_web_result(app_client, monkeypatch):
+    app, client = _admin_client(app_client)
+
+    async def fake_research(query):
+        assert query == "Credicorp Crecimiento"
+        return SearchResult(name="Credicorp Crecimiento VCS", manager="Credicorp")
+
+    monkeypatch.setattr(admin_routes, "research_web_v2", fake_research)
+
+    response = client.post(
+        "/admin/ficha-patrimonial/research",
+        json={"name": "Credicorp Crecimiento"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Credicorp Crecimiento VCS"
+    assert body["manager"] == "Credicorp"
+
+
+def test_research_endpoint_requires_admin(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.post("/admin/ficha-patrimonial/research", json={"name": "x"})
+
+    assert response.status_code in (401, 403)

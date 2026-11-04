@@ -247,6 +247,39 @@ async def test_search_claude_web_empty_when_no_research(monkeypatch):
     assert await search_mod._search_claude_web("acme fund") == ({}, [])
 
 
+async def test_research_web_v2_fills_fields_and_sources(monkeypatch):
+    from db.models import Source
+
+    source = Source(url="https://x.com/doc", title="Doc")
+
+    async def fake_web(query):
+        return {"name": "Researched Fund", "manager": "Web Manager"}, [source]
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("credicorp crecimiento")
+
+    assert result is not None
+    assert result.name == "Researched Fund"
+    assert result.manager == "Web Manager"
+    assert result.sources == [source]
+    assert result.primary_source == "web_search"
+    assert result.confidence == "baja"
+    assert result.catalog_matched is False
+
+
+async def test_research_web_v2_sin_datos_when_nothing_found(monkeypatch):
+    async def fake_web(query):
+        return {}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("unknown")
+
+    assert result.confidence == "sin_datos"
+    assert result.sources == []
+
+
 def test_extract_sources_dedupes_by_url():
     class _Resp:
         content_blocks = [

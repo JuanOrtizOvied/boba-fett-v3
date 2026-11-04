@@ -549,6 +549,26 @@ def _classify_match(similarity: float, has_data: bool) -> tuple[str, bool]:
     return ("sin_datos", False)
 
 
+async def research_web_v2(query: str) -> SearchResult:
+    """Force a Claude ``web_search`` + ``web_fetch`` research for one product —
+    the ficha review card's "Volver a investigar" action. Returns a web-grounded
+    ``SearchResult`` (product-level fields filled from the web plus the cited
+    sources), independent of the catalog. Confidence is always web-based ("baja"
+    with data, "sin_datos" without). Never raises; an empty result when
+    ``ANTHROPIC_API_KEY`` is unset or nothing is found."""
+    result = SearchResult()
+    web_data, web_sources = await _search_claude_web(query)
+    if web_data:
+        _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
+    if web_sources:
+        result.sources = web_sources
+
+    _sanitize_taxonomy(result)
+    _classify(result)
+    result.confidence, result.catalog_matched = _classify_match(0.0, _has_any_data(result))
+    return result
+
+
 async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | None:
     """Ficha-patrimonial enrichment cascade on the V2 normalized catalog.
     L1 = normalized catalog; L2/L3 fill PRODUCT-level gaps only. Returns None
