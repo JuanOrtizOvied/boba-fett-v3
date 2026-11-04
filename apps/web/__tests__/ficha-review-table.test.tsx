@@ -176,6 +176,35 @@ describe("ReviewTable V2 editable Administradores table", () => {
   });
 });
 
+describe("ReviewTable Fuentes section", () => {
+  test("renders a Fuentes list with links when the enrichment has sources", () => {
+    const rowWithSources: FichaEnrichedRow = {
+      ...MAPPED_ROW,
+      enriched: {
+        ...MAPPED_ROW.enriched!,
+        sources: [
+          { url: "https://x.com/doc", title: "Prospecto X" },
+          { url: "https://y.com/cmp", title: "Comparativa Y" },
+        ],
+      },
+    };
+    render(
+      <ReviewTable rows={[rowWithSources]} userId="u" onConfirmed={vi.fn()} />,
+    );
+    expect(screen.getByText("Fuentes")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Prospecto X" });
+    expect(link).toHaveAttribute("href", "https://x.com/doc");
+    expect(
+      screen.getByRole("link", { name: "Comparativa Y" }),
+    ).toHaveAttribute("href", "https://y.com/cmp");
+  });
+
+  test("renders no Fuentes section when there are no sources", () => {
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="u" onConfirmed={vi.fn()} />);
+    expect(screen.queryByText("Fuentes")).not.toBeInTheDocument();
+  });
+});
+
 describe("ReviewTable per-line persistence", () => {
   test("approving a persisted line fires onLineDecision with its line_id", async () => {
     const onLineDecision = vi.fn();

@@ -474,6 +474,28 @@ function ProductCard({
             </div>
           )}
 
+          {(rawRow.enriched?.sources?.length ?? 0) > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-sabbi-neutral-500">
+                Fuentes
+              </span>
+              <ol className="list-decimal pl-5 text-xs text-sabbi-neutral-600">
+                {rawRow.enriched?.sources?.map((source, i) => (
+                  <li key={`${source.url}-${i}`}>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sabbi-primary underline hover:no-underline"
+                    >
+                      {source.title || source.url}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
           {/* Per-line actions */}
           <div className="flex flex-wrap items-center gap-2 border-t border-sabbi-neutral-100 pt-3">
             <button

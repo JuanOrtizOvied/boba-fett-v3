@@ -122,6 +122,12 @@ export interface CatalogSeriesOption {
   administrators: CatalogSeriesAdminOption[];
 }
 
+/** Mirrors `db.models.Source` — a web source (link + title) cited by L3. */
+export interface Source {
+  url: string;
+  title: string;
+}
+
 /**
  * Mirrors `db.models.SearchResult` — the unified result of the cascading
  * L1 (catalog) -> L2 (Claude knowledge) -> L3 (Tavily web search) product
@@ -154,6 +160,8 @@ export interface SearchResult {
   confidence?: string;
   /** True when the product is an accepted catalog match ("ya estaba en la BD"). */
   catalog_matched?: boolean;
+  /** Web sources cited by the L3 research (ficha "Fuentes"); empty for catalog. */
+  sources?: Source[];
   primary_source: FieldSource;
   provenance: ProvenanceMap;
 }
