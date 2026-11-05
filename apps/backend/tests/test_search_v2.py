@@ -60,10 +60,14 @@ async def test_v2_fills_product_fields_and_attaches_series_options(monkeypatch):
     async def no_claude(query):
         return {}
 
+    async def no_web(query):
+        return {}, []
+
     monkeypatch.setattr(
         search_mod.NormalizedCatalogRepository, "search_for_enrichment", fake_search
     )
     monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", no_web)
 
     result = await search_mod.cascade_search_v2("latam credit opportunities", object())
 
@@ -322,6 +326,49 @@ async def test_v2_strong_catalog_match_skips_web_search(monkeypatch):
 
     assert result is not None
     assert result.confidence == "alta"
+
+
+async def test_v2_mid_similarity_below_threshold_triggers_web_search(monkeypatch):
+    """A complete catalog match whose similarity is under the 0.55 web-search
+    threshold (but above the 0.4 'media' boundary) must still trigger the web
+    search."""
+    from db.models import Source
+
+    async def mid_catalog(query, pool):
+        return _complete_result(0.5)
+
+    called = {"web": False}
+
+    async def claude_web(query):
+        called["web"] = True
+        return {}, [Source(url="https://x.com", title="X")]
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", mid_catalog)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert called["web"] is True
+    assert result is not None
+    assert result.sources == [Source(url="https://x.com", title="X")]
+
+
+async def test_v2_similarity_at_or_above_threshold_skips_web_search(monkeypatch):
+    """A complete catalog match at or above the 0.55 threshold skips the web
+    search."""
+
+    async def strong_catalog(query, pool):
+        return _complete_result(0.6)
+
+    async def web_must_not_run(query):
+        raise AssertionError("web search must not run at/above the 0.55 threshold")
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", strong_catalog)
+    monkeypatch.setattr(search_mod, "_search_claude_web", web_must_not_run)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
 
 
 async def test_research_web_v2_fills_fields_and_sources(monkeypatch):

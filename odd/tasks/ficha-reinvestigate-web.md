@@ -58,6 +58,15 @@ the card with the web-grounded fields + cited sources (Fuentes).
 **FEATURE COMPLETE** (T-1..T-3).
 
 ## Follow-ups
+- [x] **F-4 — Auto web-search threshold raised to 55%.** DONE. Route: INLINE.
+  Separate constant `_WEB_SEARCH_SIMILARITY = 0.55` (independent of the confidence
+  boundaries `_MEDIA_SIMILARITY=0.4`/0.6); `_is_low_confidence_catalog` now
+  triggers the Claude web search when a catalog match has `similarity < 0.55`
+  (was 0.4). Results already reflect in the card (parse fills `enriched` + sources
+  + source badge, which the card reads from `row.enriched`/`row.source`). TDD: RED
+  → GREEN (mid 0.5 triggers; 0.6 skips) + fixed a pre-existing test that relied on
+  the old threshold to avoid the network by mocking `_search_claude_web`. Backend
+  373 passed / 0 new; ruff clean.
 - [x] **F-1 — Auto web search on a low-confidence catalog match.** DONE. Route:
   INLINE. During parse, `cascade_search_v2` now runs the Claude web step when the
   product is incomplete OR the catalog match is weak (`_is_low_confidence_catalog`:

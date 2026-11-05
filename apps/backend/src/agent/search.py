@@ -537,13 +537,17 @@ async def _search_catalog_v2(query: str, pool: asyncpg.Pool) -> SearchResult:
 
 # Catalog-match similarity below which confidence is "baja" (a weak fuzzy hit).
 _MEDIA_SIMILARITY = 0.4
+# Catalog-match similarity below which a Claude web search runs automatically to
+# verify the match, even when the product fields already look complete.
+_WEB_SEARCH_SIMILARITY = 0.55
 
 
 def _is_low_confidence_catalog(result: SearchResult) -> bool:
-    """A catalog match too weak to trust (confidence would be 'baja'). Such a
-    hit triggers a Claude web search even when the product fields already look
-    complete, so the admin gets web-grounded data + sources to verify it."""
-    return bool(result.catalog_product_code) and result.similarity < _MEDIA_SIMILARITY
+    """A catalog match weak enough to auto-verify with the web (similarity under
+    `_WEB_SEARCH_SIMILARITY`). Such a hit triggers a Claude web search even when
+    the product fields already look complete, so the admin gets web-grounded
+    data + sources to verify it."""
+    return bool(result.catalog_product_code) and result.similarity < _WEB_SEARCH_SIMILARITY
 
 
 _CONFIDENCE_ORDER = ("sin_datos", "baja", "media", "alta")
