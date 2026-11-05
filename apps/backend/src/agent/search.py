@@ -14,6 +14,7 @@ The cascade never fabricates data: both Claude passes (`_extract_from_claude`,
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
 import asyncpg
@@ -33,6 +34,8 @@ from db.models import (
     SearchResult,
     Source,
 )
+
+logger = logging.getLogger("agent.search")
 
 # String fields the cascade searches/returns at every level (field parity
 # — `cascading-search.spec.md`, "Search Field Parity").
@@ -339,6 +342,7 @@ async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
     web_fetch tools; return the grounded assistant text and the cited sources.
     Returns ("", []) when `ANTHROPIC_API_KEY` is unset or the call fails."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
+        logger.warning("Claude web research skipped for %r: ANTHROPIC_API_KEY is not set", query)
         return "", []
     try:
         llm = ChatAnthropic(
@@ -351,8 +355,18 @@ async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
             "attributes (manager, currency, asset class, geographic focus, "
             f"underlying). Use web search and fetch sources as needed.\n\nProduct: {query}"
         )
-        return _blocks_to_text(response), _extract_sources(response)
+        text, sources = _blocks_to_text(response), _extract_sources(response)
+        if not text and not sources:
+            logger.warning(
+                "Claude web research returned no text/sources for %r "
+                "(model=%s, beta=%s) — check web_search/web_fetch tool access",
+                query,
+                EXTRACTION_MODEL_NAME,
+                _WEB_FETCH_BETA,
+            )
+        return text, sources
     except Exception:
+        logger.exception("Claude web research failed for %r", query)
         return "", []
 
 
