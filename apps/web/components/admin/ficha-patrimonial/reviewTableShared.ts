@@ -22,6 +22,7 @@ export type FichaAssetClassKey =
   | "mercados_publicos_variable"
   | "mercados_privados"
   | "club_deal"
+  | "commodities_y_criptos"
   | "cash_y_otros";
 
 export const ASSET_CLASS_LABELS: Record<FichaAssetClassKey, string> = {
@@ -30,6 +31,7 @@ export const ASSET_CLASS_LABELS: Record<FichaAssetClassKey, string> = {
   mercados_publicos_variable: "Mercados Publicos - Variable",
   mercados_privados: "Mercados Privados",
   club_deal: "Club Deal",
+  commodities_y_criptos: "Commodities y Criptos",
   cash_y_otros: "Cash y Otros",
 };
 
@@ -55,6 +57,8 @@ function normalizeAssetClass(name: string): FichaAssetClassKey | "" {
     return "mercados_privados";
   if (n.includes("club"))
     return "club_deal";
+  if (n.includes("commodit") || n.includes("cripto") || n.includes("crypto"))
+    return "commodities_y_criptos";
   if (n.includes("cash") || n.includes("efectivo"))
     return "cash_y_otros";
 

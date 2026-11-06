@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  ASSET_CLASS_LABELS,
   applySeriesAdminSelection,
   blankEditableAdminRow,
   blankEditableSeriesRow,
@@ -615,6 +616,19 @@ describe("applyResearchToRow (re-investigate with web)", () => {
 
     // Unmappable web class → cleared (no stale value, select shows "Sin mapear").
     expect(patch.assetClass).toBe("");
+  });
+
+  test("maps a Commodities y Criptos web class to the new ficha key", () => {
+    expect(ASSET_CLASS_LABELS.commodities_y_criptos).toBe("Commodities y Criptos");
+
+    const row = toEditableRow(baseRow({}));
+    for (const name of ["Commodities y Criptos", "Cripto", "Crypto / Commodities"]) {
+      const patch = applyResearchToRow(
+        row,
+        webResult({ asset_class: [{ name, percentage: 100 }] }),
+      );
+      expect(patch.assetClass).toBe("commodities_y_criptos");
+    }
   });
 });
 

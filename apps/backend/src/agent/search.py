@@ -87,7 +87,7 @@ _PORTFOLIO_ASSET_CLASSES = (
 )
 _FICHA_ASSET_CLASSES = (
     "Inmobiliario Directo, Mercados Publicos - Fijo, Mercados Publicos - Variable, "
-    "Mercados Privados, Club Deal, Cash y Otros"
+    "Mercados Privados, Club Deal, Commodities y Criptos, Cash y Otros"
 )
 
 _EXTRACTION_PROMPT_TEMPLATE = """You are a financial product data extraction assistant for SABBI,

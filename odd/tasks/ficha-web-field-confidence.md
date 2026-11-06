@@ -82,7 +82,34 @@ from an empty result so every filled field is web-sourced.
   an unmapped class; shared: unmappable web class clears assetClass). Web suite 174
   passed / 18 files; tsc clean.
 
+- [x] **F-3 — New ficha asset class "Commodities y Criptos".** DONE. INLINE (TDD).
+  User asked to add this class to the ficha "Clase de activo" select. Frontend
+  (`reviewTableShared.ts`): `FichaAssetClassKey` += `commodities_y_criptos`,
+  `ASSET_CLASS_LABELS` += "Commodities y Criptos", `normalizeAssetClass` maps
+  commodit*/cripto/crypto → the new key. Backend: added to `_FICHA_ASSET_CLASSES`.
+  Safe downstream: `buildConfirmProducts` writes the ficha key as the product
+  asset_class; the dashboard's `resolveAssetClassKey` already falls back to the
+  portfolio "otros" bucket (where commodities/crypto live), like every other ficha
+  key — no dashboard change. Tests: frontend mapping + label; backend prompt
+  contains the class. Backend 40 passed, web 75 passed, ruff + tsc clean.
+
+## Open findings (NOT fixed — separate from F-3, reported for prioritization)
+Discovered during a live repro while validating F-3; both pre-exist this change:
+1. **Extraction model does not adhere to the ficha asset-class taxonomy.** The small
+   extraction model (`claude-haiku-4-5`) returns portfolio labels (e.g. "otros" for a
+   Bitcoin trust) despite the ficha prompt list; a structured-output `Literal` enum did
+   NOT enforce it in the current stack (langchain-anthropic 1.4.8 / anthropic 0.116).
+   So asset_class often comes back empty/unmapped and the admin picks it manually. A
+   reliable fix needs either a stronger extraction model or an SDK/schema combo that
+   actually enforces the enum — a scoped task on its own. (Speculative enum/hint/
+   context-cap attempts were reverted to keep F-3 minimal.)
+2. **Web research can overflow the model context window.** `_research_with_claude_web`
+   (web_search + web_fetch) accumulated 4.4M tokens (> 200k max) for some products →
+   `AnthropicContextOverflowError`, caught as an empty result. web_fetch content needs
+   bounding (e.g. max fetched content per page / fewer uses). Real reliability bug for
+   the ficha web search; needs its own fix.
+
 ## Next step
-Feature + follow-ups complete. Live behavior needs the staging redeploy from the
-sibling feature (anthropic SDK pin) so the web search actually runs; the % is the
-extraction model's self-reported confidence. Pending (user-owned): merge/push + deploy.
+F-3 complete. The two findings above are candidates for follow-up features. Live
+behavior still needs the staging redeploy (sibling anthropic SDK pin). Pending
+(user-owned): merge/push + deploy.

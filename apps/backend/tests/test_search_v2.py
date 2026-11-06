@@ -454,6 +454,7 @@ def test_ficha_extraction_prompt_uses_the_ficha_asset_class_taxonomy():
     assert "Mercados Publicos - Fijo" in ficha
     assert "Mercados Publicos - Variable" in ficha
     assert "Inmobiliario Directo" in ficha
+    assert "Commodities y Criptos" in ficha
     assert "inversiones_directas" not in ficha
     # The default (chat/portfolio) prompt keeps the portfolio taxonomy.
     assert "inversiones_directas" in search_mod._EXTRACTION_SYSTEM_PROMPT
