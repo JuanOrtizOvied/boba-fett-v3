@@ -35,6 +35,7 @@ from agent.graph import builder as graph_builder
 from api.admin_routes import router as admin_router
 from api.auth_routes import router as auth_router
 from api.chat_routes import router as chat_router
+from api.logging_config import configure_logging
 from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
@@ -95,6 +96,7 @@ async def _init_chat_graph(app: FastAPI, stack: AsyncExitStack) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
     pool = await get_pool()
     app.state.repo = ProductRepository(pool)
     app.state.versioning_repo = VersioningRepository(pool)

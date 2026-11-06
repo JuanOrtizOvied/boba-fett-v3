@@ -51,18 +51,24 @@ staging issues are visible. No code behavior change; `temperature=0` determinism
   1.5.6 / langchain-core 1.7.6; all 524 tests collect with no import errors and the
   52 LLM/search/guard tests pass. The gitignored lock makes T-2 a real fork (commit
   the lock vs accept caps-only). Commit: `<pending>`.
-- [ ] **T-2 — Reproducible backend build (install from the lockfile).** INLINE.
-  Change `apps/backend/Dockerfile` so dependencies install from the frozen
-  `uv.lock` instead of floating `pip install -e .`, so the lock stops being
-  decorative and the resolved versions are deterministic. Keep gunicorn entrypoint
-  working. Checks: image build reasoning / `uv sync --frozen` resolves; no CMD
-  regression.
-- [ ] **T-3 — Backend logging configuration.** INLINE (TDD). Add a small idempotent
-  `configure_logging()` that ensures the root logger emits to stdout at INFO, call
-  it at app startup (`api/routes.py`), and add `--capture-output --log-level info`
-  to the gunicorn CMD. So `agent.search` warnings/exceptions (commit 9d79e83) reach
-  `docker logs`. TDD: RED -> GREEN unit test for the helper (attaches a handler,
-  idempotent). Checks: `pytest -q` green.
+- [x] **T-2 — Reproducible backend build.** DECIDED (caps-only), no change.
+  Decision fork: `uv.lock` is gitignored, so "install from the frozen lock" would
+  require un-gitignoring + committing the lock (a convention change) + a Dockerfile
+  rewrite. User chose **caps-only**: the T-1 pyproject caps already stop
+  `pip install -e .` from reaching the broken major, and the deploy-resolved set
+  was verified working. No Dockerfile / .gitignore change. Residual: patch drift
+  within the caps (all pre-1.0, low risk).
+- [x] **T-3 — Backend logging configuration.** DONE. INLINE (TDD). Added
+  `src/api/logging_config.py` `configure_logging(level=None, *, stream=None)`:
+  idempotent (marker attribute, not a global), attaches one stdout `StreamHandler`
+  to the root logger at `LOG_LEVEL`/INFO so `agent.search` warnings/exceptions
+  (commit 9d79e83) reach the worker stdout and thus `docker logs`. Called as the
+  first line of the `api/routes.py` lifespan startup. No gunicorn CMD change needed
+  — the explicit stdout handler is sufficient (no `--capture-output`). TDD: RED
+  (ImportError) -> GREEN. 3 unit tests (handler attached at INFO, idempotent,
+  `agent.search` output reaches the stream). Checks: 5 passed (logging+guard) on
+  both backend .venv and the deploy-sim venv (0.125/1.5.6/core 1.7.6); ruff clean;
+  `api.routes` imports cleanly. Commit: `<pending>`.
 
 ## Acceptance criteria
 - Backend resolves `anthropic` in the 0.x known-good range and `langchain-anthropic`
@@ -76,4 +82,7 @@ staging issues are visible. No code behavior change; `temperature=0` determinism
 - Memory: Engram obs #831 (confirmed root cause + repro matrix).
 
 ## Next step
-Start T-1 (pins + lock + guard test).
+All tasks done. Pending: redeploy the backend image so staging rebuilds against the
+capped versions (the running container still has the broken 2.6.0/1.7.10 until then).
+After redeploy, confirm "Buscar con Claude" returns sources in staging and that
+`agent.search` logs now appear in `docker logs`.
