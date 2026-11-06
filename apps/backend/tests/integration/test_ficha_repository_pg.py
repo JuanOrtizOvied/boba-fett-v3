@@ -57,6 +57,33 @@ async def test_create_get_and_status_lifecycle(test_pool, test_user_id):
     assert (await repo.get(fid)).status == "validada"
 
 
+async def test_create_stores_and_get_file_roundtrips_the_upload(test_pool, test_user_id):
+    repo = FichaRepository(test_pool)
+    client = FichaClientInfo(name="Ana", email="ana@x.com", phone="", user_id=test_user_id)
+    content = b"PK\x03\x04 fake xlsx bytes \x00\x01\x02"
+
+    fid = await repo.create(
+        client,
+        [_row(8, "Fondo A")],
+        file_data=content,
+        file_name="ficha-ana.xlsx",
+    )
+
+    stored = await repo.get_file(fid)
+    assert stored == ("ficha-ana.xlsx", content)
+
+
+async def test_get_file_returns_none_when_no_file_stored(test_pool, test_user_id):
+    repo = FichaRepository(test_pool)
+    client = FichaClientInfo(name="Ana", email="a@x.com", phone="", user_id=test_user_id)
+
+    fid = await repo.create(client, [_row(8, "Fondo A")])
+
+    assert await repo.get_file(fid) is None
+    # Unknown ficha id -> None, never raises.
+    assert await repo.get_file(999_999) is None
+
+
 async def test_create_sets_line_ids_on_the_input_rows(test_pool, test_user_id):
     repo = FichaRepository(test_pool)
     client = FichaClientInfo(name="Ana", email="a@x.com", phone="", user_id=test_user_id)

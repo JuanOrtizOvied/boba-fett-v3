@@ -77,15 +77,20 @@ class FichaRepository:
         client: FichaClientInfo,
         rows: list[FichaEnrichedRow],
         parse_failed: bool = False,
+        file_data: bytes | None = None,
+        file_name: str = "",
     ) -> int:
-        """Persist a parsed ficha and its lines, returning the new ficha id."""
+        """Persist a parsed ficha and its lines, returning the new ficha id.
+        The original uploaded `.xlsx` is stored (`file_data`/`file_name`) so the
+        admin can download it later."""
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 ficha_id = await conn.fetchval(
                     """
                     INSERT INTO ficha (user_id, client_name, client_email,
-                                       client_phone, parse_failed)
-                    VALUES ($1, $2, $3, $4, $5)
+                                       client_phone, parse_failed,
+                                       file_data, file_name)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     RETURNING id
                     """,
                     _as_uuid(client.user_id),
@@ -93,6 +98,8 @@ class FichaRepository:
                     client.email,
                     client.phone,
                     parse_failed,
+                    file_data,
+                    file_name,
                 )
                 for row in rows:
                     enriched_json = (
@@ -185,6 +192,16 @@ class FichaRepository:
             "DELETE FROM ficha WHERE id = $1 RETURNING id", ficha_id
         )
         return deleted is not None
+
+    async def get_file(self, ficha_id: int) -> tuple[str, bytes] | None:
+        """The original uploaded `.xlsx` for a ficha as `(file_name, bytes)`, or
+        None when the ficha does not exist or has no stored file (older rows)."""
+        row = await self._pool.fetchrow(
+            "SELECT file_name, file_data FROM ficha WHERE id = $1", ficha_id
+        )
+        if row is None or row["file_data"] is None:
+            return None
+        return row["file_name"], bytes(row["file_data"])
 
     async def list(self, status: str | None = None) -> list[FichaListItem]:
         """List fichas (newest first), each with its derived status; filter by

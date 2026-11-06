@@ -81,6 +81,52 @@ export async function researchFichaLine(name: string): Promise<SearchResult> {
   return asJson<SearchResult>(res);
 }
 
+/**
+ * Parse the download filename from a `Content-Disposition` header, preferring the
+ * RFC 5987 `filename*` (UTF-8) form, then plain `filename`, then `fallback`.
+ */
+export function filenameFromDisposition(
+  header: string | null,
+  fallback: string,
+): string {
+  if (!header) return fallback;
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      // malformed percent-encoding — fall through to the plain form
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1] : fallback;
+}
+
+/** Download the original uploaded `.xlsx` for a ficha, triggering a browser save. */
+export async function downloadFichaFile(id: number): Promise<void> {
+  const res = await fetchWithAuth(`${BASE}/fichas/${id}/file`);
+  if (!res.ok) {
+    throw new Error(
+      res.status === 404
+        ? "Esta ficha no tiene un archivo guardado para descargar"
+        : `No se pudo descargar el archivo (status ${res.status})`,
+    );
+  }
+  const blob = await res.blob();
+  const name = filenameFromDisposition(
+    res.headers.get("content-disposition"),
+    `ficha-${id}.xlsx`,
+  );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 /** Delete a saved ficha (and its lines). */
 export async function deleteFicha(id: number): Promise<void> {
   const res = await fetchWithAuth(`${BASE}/fichas/${id}`, { method: "DELETE" });

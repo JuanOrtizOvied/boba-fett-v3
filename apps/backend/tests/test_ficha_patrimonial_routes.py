@@ -292,6 +292,62 @@ def test_parse_autosaves_the_ficha(app_client, build_ficha_workbook, monkeypatch
     app.state.ficha_repo.create.assert_awaited_once()
 
 
+def test_parse_stores_the_uploaded_file(app_client, build_ficha_workbook, monkeypatch):
+    app, client = _admin_client(app_client)
+    app.state.user_repo.get_by_email.return_value = None
+    app.state.ficha_repo.create.return_value = 5
+
+    async def fake_cascade(name, pool):
+        return SearchResult(name=name)
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+    workbook_bytes = build_ficha_workbook([{"name": "Fondo A", "amount": 1000}])
+
+    response = client.post(
+        "/admin/ficha-patrimonial/parse",
+        json={"file_data": _b64(workbook_bytes), "file_name": "mi-ficha.xlsx"},
+    )
+
+    assert response.status_code == 200
+    kwargs = app.state.ficha_repo.create.await_args.kwargs
+    assert kwargs["file_data"] == workbook_bytes
+    assert kwargs["file_name"] == "mi-ficha.xlsx"
+
+
+def test_download_ficha_file_returns_the_stored_xlsx(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.get_file.return_value = ("ficha-ana.xlsx", b"PK\x03\x04xlsx")
+
+    response = client.get("/admin/ficha-patrimonial/fichas/5/file")
+
+    assert response.status_code == 200
+    assert response.content == b"PK\x03\x04xlsx"
+    assert (
+        response.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert "ficha-ana.xlsx" in response.headers["content-disposition"]
+    app.state.ficha_repo.get_file.assert_awaited_once_with(5)
+
+
+def test_download_ficha_file_404_when_no_stored_file(app_client):
+    app, client = _admin_client(app_client)
+    app.state.ficha_repo.get_file.return_value = None
+
+    response = client.get("/admin/ficha-patrimonial/fichas/9/file")
+
+    assert response.status_code == 404
+
+
+def test_download_ficha_file_blocked_for_non_admin(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.get("/admin/ficha-patrimonial/fichas/5/file")
+
+    assert response.status_code == 403
+
+
 def test_list_fichas(app_client):
     app, client = _admin_client(app_client)
     app.state.ficha_repo.list.return_value = [

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from urllib.parse import quote
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -634,7 +635,12 @@ async def parse_ficha_patrimonial(
         )
     )
 
-    ficha_id = await ficha_repo.create(parsed.client, enriched_rows)
+    ficha_id = await ficha_repo.create(
+        parsed.client,
+        enriched_rows,
+        file_data=file_bytes,
+        file_name=data.file_name,
+    )
     return FichaParseResponse(client=parsed.client, rows=enriched_rows, ficha_id=ficha_id)
 
 
@@ -658,6 +664,31 @@ async def get_ficha(
     if ficha is None:
         raise HTTPException(status_code=404, detail=f"Ficha '{ficha_id}' no encontrada")
     return ficha
+
+
+@router.get("/ficha-patrimonial/fichas/{ficha_id}/file")
+async def download_ficha_file(
+    ficha_id: int,
+    ficha_repo: FichaRepository = Depends(_ficha_repo),
+) -> Response:
+    """Download the original uploaded `.xlsx` for a ficha. 404 when the ficha does
+    not exist or has no stored file (fichas created before file storage)."""
+    stored = await ficha_repo.get_file(ficha_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=404, detail=f"La ficha '{ficha_id}' no tiene un archivo guardado"
+        )
+    file_name, content = stored
+    safe_name = quote((file_name or f"ficha-{ficha_id}.xlsx").replace("\n", " ").strip())
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"ficha-{ficha_id}.xlsx\"; filename*=UTF-8''{safe_name}"
+            )
+        },
+    )
 
 
 @router.patch("/ficha-patrimonial/lines/{line_id}")

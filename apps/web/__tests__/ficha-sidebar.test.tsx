@@ -32,6 +32,7 @@ function renderSidebar(overrides = {}) {
     onSelect: vi.fn(),
     onUpload: vi.fn(),
     onDelete: vi.fn(),
+    onDownload: vi.fn(),
     ...overrides,
   };
   render(<FichaSidebar {...props} />);
@@ -76,6 +77,16 @@ describe("FichaSidebar", () => {
     const { onDelete, onSelect } = renderSidebar();
     await user.click(screen.getByRole("button", { name: "Eliminar Ana Lopez" }));
     expect(onDelete).toHaveBeenCalledWith(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  test("clicking the download button calls onDownload, not onSelect", async () => {
+    const user = userEvent.setup();
+    const { onDownload, onSelect } = renderSidebar();
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Excel de Ana Lopez" }),
+    );
+    expect(onDownload).toHaveBeenCalledWith(1);
     expect(onSelect).not.toHaveBeenCalled();
   });
 

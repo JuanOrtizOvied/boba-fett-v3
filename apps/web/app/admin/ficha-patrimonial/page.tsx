@@ -16,6 +16,7 @@ import {
   approveFichaLine,
   confirmFicha,
   deleteFicha,
+  downloadFichaFile,
   fichaToEnrichedRows,
   getFicha,
   listFichas,
@@ -164,6 +165,12 @@ export default function FichaPatrimonialPage() {
       .catch(() => {});
   };
 
+  const handleDownloadFicha = (id: number) => {
+    void downloadFichaFile(id).catch((err) =>
+      setError(err instanceof Error ? err.message : "No se pudo descargar el archivo"),
+    );
+  };
+
   return (
     <div className="flex gap-4">
       <FichaSidebar
@@ -174,6 +181,7 @@ export default function FichaPatrimonialPage() {
         onSelect={(id) => void handleSelectFicha(id)}
         onUpload={handleReset}
         onDelete={handleDeleteFicha}
+        onDownload={handleDownloadFicha}
       />
 
       <main className="flex min-w-0 flex-1 flex-col gap-4">
