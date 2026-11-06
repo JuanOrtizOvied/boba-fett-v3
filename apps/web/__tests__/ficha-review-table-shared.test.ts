@@ -3,6 +3,7 @@ import {
   ASSET_CLASS_LABELS,
   applySeriesAdminSelection,
   blankEditableAdminRow,
+  nameDifferenceWords,
   blankEditableSeriesRow,
   buildApproveRequest,
   buildConfirmProducts,
@@ -527,6 +528,30 @@ describe("buildConfirmProducts", () => {
     const [product] = buildConfirmProducts([editable]);
     expect(product.asset_class).toEqual([]);
     expect(product.amount).toBe(1500.5);
+  });
+});
+
+describe("nameDifferenceWords (argue the similarity gap)", () => {
+  test("returns the extra word that explains the gap", () => {
+    expect(nameDifferenceWords("Fondo CC Soles", "Fondo Soles")).toEqual(["CC"]);
+  });
+
+  test("is symmetric regardless of which name has the extra word", () => {
+    expect(nameDifferenceWords("Fondo Soles", "Fondo CC Soles")).toEqual(["CC"]);
+  });
+
+  test("ignores case, accents, and punctuation", () => {
+    expect(nameDifferenceWords("Fóndo Soles", "fondo, soles")).toEqual([]);
+  });
+
+  test("returns every differing word from both sides", () => {
+    expect(nameDifferenceWords("Fondo A B", "Fondo C")).toEqual(["A", "B", "C"]);
+  });
+
+  test("returns [] for identical names and when either is blank", () => {
+    expect(nameDifferenceWords("Fondo Soles", "Fondo Soles")).toEqual([]);
+    expect(nameDifferenceWords("Fondo Soles", "")).toEqual([]);
+    expect(nameDifferenceWords("", "Fondo Soles")).toEqual([]);
   });
 });
 

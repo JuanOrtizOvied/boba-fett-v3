@@ -14,6 +14,7 @@ import {
   buildConfirmProducts,
   formatDeclaredSummary,
   formatSimilarityPercent,
+  nameDifferenceWords,
   resolveConfidence,
   selectApprovedRows,
   toEditableRow,
@@ -400,6 +401,11 @@ function ProductCard({
   const confidence = resolveConfidence(effectiveRow);
   const declaredSummary = formatDeclaredSummary(rawRow);
   const similarity = formatSimilarityPercent(row.enriched?.similarity);
+  // Words that differ between the declared name and the matched catalog name —
+  // the "argument" for why the similarity is below 100%.
+  const similarityDiff = similarity
+    ? nameDifferenceWords(rawRow.raw_name, rawRow.enriched?.name ?? "")
+    : [];
   const catalogMatched = row.enriched?.catalog_matched ?? false;
   const dataAsof = row.enriched?.data_asof || "—";
   // Per-field self-reported confidence from "Buscar con Claude" (keyed by the
@@ -431,6 +437,17 @@ function ProductCard({
           {similarity && (
             <span className="text-[11px] text-sabbi-neutral-500">
               similitud {similarity}
+            </span>
+          )}
+          {similarityDiff.length > 0 && (
+            <span
+              className="text-[11px] text-sabbi-neutral-500"
+              title={`“${rawRow.raw_name}” vs “${rawRow.enriched?.name ?? ""}”`}
+            >
+              se diferencia por:{" "}
+              <span className="font-medium text-sabbi-neutral-700">
+                {similarityDiff.join(", ")}
+              </span>
             </span>
           )}
           <button

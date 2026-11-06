@@ -602,3 +602,28 @@ describe("ReviewTable confirm submission", () => {
     expect(onConfirmed).not.toHaveBeenCalled();
   });
 });
+
+describe("ReviewTable similarity argument", () => {
+  test("shows the differing word(s) between the declared and catalog names", () => {
+    const row: FichaEnrichedRow = {
+      ...MAPPED_ROW,
+      raw_name: "Fondo CC Soles",
+      enriched: { ...MAPPED_ROW.enriched!, name: "Fondo Soles", similarity: 0.6 },
+    };
+    render(<ReviewTable rows={[row]} userId="u" onConfirmed={vi.fn()} />);
+
+    const diff = screen.getByText(/se diferencia por:/i);
+    expect(diff).toHaveTextContent("CC");
+  });
+
+  test("shows no difference line when the names match", () => {
+    const row: FichaEnrichedRow = {
+      ...MAPPED_ROW,
+      raw_name: "Fondo Soles",
+      enriched: { ...MAPPED_ROW.enriched!, name: "Fondo Soles", similarity: 0.9 },
+    };
+    render(<ReviewTable rows={[row]} userId="u" onConfirmed={vi.fn()} />);
+
+    expect(screen.queryByText(/se diferencia por:/i)).toBeNull();
+  });
+});

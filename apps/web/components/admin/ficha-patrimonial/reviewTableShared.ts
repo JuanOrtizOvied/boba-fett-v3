@@ -248,6 +248,46 @@ export function formatSimilarityPercent(value: number | null | undefined): strin
 }
 
 /**
+ * Word-level difference between the declared name and the matched catalog name —
+ * the "argument" for why the similarity is below 100%. Returns the words present
+ * in one name but not the other (compared case/accent/punctuation-insensitively),
+ * in their original casing. E.g. ("Fondo CC Soles", "Fondo Soles") -> ["CC"].
+ * Returns [] when the names are equal or either is blank.
+ */
+export function nameDifferenceWords(declared: string, catalog: string): string[] {
+  if (!declared.trim() || !catalog.trim()) return [];
+
+  const normalize = (word: string) =>
+    word
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^\p{L}\p{N}]/gu, "");
+
+  const tokenize = (name: string) =>
+    name
+      .split(/\s+/)
+      .map((raw) => ({ raw, key: normalize(raw) }))
+      .filter((token) => token.key);
+
+  const declaredTokens = tokenize(declared);
+  const catalogTokens = tokenize(catalog);
+  const declaredKeys = new Set(declaredTokens.map((t) => t.key));
+  const catalogKeys = new Set(catalogTokens.map((t) => t.key));
+
+  const diff: string[] = [];
+  const seen = new Set<string>();
+  for (const token of [...declaredTokens, ...catalogTokens]) {
+    if (seen.has(token.key)) continue;
+    if (declaredKeys.has(token.key) !== catalogKeys.has(token.key)) {
+      diff.push(token.raw);
+      seen.add(token.key);
+    }
+  }
+  return diff;
+}
+
+/**
  * Builds the read-only "declared" summary line shown on a card's left rail,
  * from the raw Excel values: "Soles · 10,294 · declara 4.13%". Blank parts and
  * a zero amount are omitted.
