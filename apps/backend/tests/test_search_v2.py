@@ -231,8 +231,10 @@ async def test_search_claude_web_extracts_from_research_text(monkeypatch):
     async def fake_research(query):
         return "Acme Fund is a USD fixed-income fund managed by Acme.", [source]
 
-    async def fake_extract(prompt):
+    async def fake_extract(prompt, *, system_prompt=None):
         assert "Acme Fund" in prompt
+        # The ficha web research classifies with the ficha taxonomy prompt.
+        assert system_prompt is search_mod._FICHA_EXTRACTION_SYSTEM_PROMPT
         return {"name": "Acme Fund", "currency": "USD"}
 
     monkeypatch.setattr(search_mod, "_research_with_claude_web", fake_research)
@@ -443,6 +445,36 @@ async def test_research_web_v2_field_confidence_empty_without_scores(monkeypatch
     result = await search_mod.research_web_v2("x")
 
     assert result.field_confidence == {}
+
+
+def test_ficha_extraction_prompt_uses_the_ficha_asset_class_taxonomy():
+    """The ficha web research must classify asset_class into the ficha select's
+    taxonomy, not the portfolio one, so the review select auto-populates."""
+    ficha = search_mod._FICHA_EXTRACTION_SYSTEM_PROMPT
+    assert "Mercados Publicos - Fijo" in ficha
+    assert "Mercados Publicos - Variable" in ficha
+    assert "Inmobiliario Directo" in ficha
+    assert "inversiones_directas" not in ficha
+    # The default (chat/portfolio) prompt keeps the portfolio taxonomy.
+    assert "inversiones_directas" in search_mod._EXTRACTION_SYSTEM_PROMPT
+
+
+async def test_search_claude_web_uses_the_ficha_taxonomy_prompt(monkeypatch):
+    captured: dict[str, str] = {}
+
+    async def fake_research(query):
+        return "some web research text", []
+
+    async def fake_extract(human_content, *, system_prompt=search_mod._EXTRACTION_SYSTEM_PROMPT):
+        captured["system_prompt"] = system_prompt
+        return {"name": "X"}
+
+    monkeypatch.setattr(search_mod, "_research_with_claude_web", fake_research)
+    monkeypatch.setattr(search_mod, "_run_extraction", fake_extract)
+
+    await search_mod._search_claude_web("gold etf")
+
+    assert captured["system_prompt"] is search_mod._FICHA_EXTRACTION_SYSTEM_PROMPT
 
 
 def test_extract_sources_dedupes_by_url():

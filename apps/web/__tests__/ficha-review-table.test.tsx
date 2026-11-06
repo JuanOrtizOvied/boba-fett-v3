@@ -289,6 +289,42 @@ describe("ReviewTable re-investigate with web", () => {
     expect(screen.getByTitle("Confianza de Claude: 70%")).toBeInTheDocument();
     expect(screen.getByTitle("Confianza de Claude: 88%")).toBeInTheDocument();
   });
+
+  test("does not show an asset-class % when the class did not map to a ficha key", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Fondo Investigado",
+      manager: "",
+      currency: "",
+      // A class that normalizeAssetClass cannot map → the select stays empty,
+      // so the % must NOT be shown (no "37% but nothing selected").
+      asset_class: [{ name: "inversiones_directas", percentage: 100 }],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+      field_confidence: { name: 95, asset_class: 37 },
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    // The name % still shows...
+    await waitFor(() =>
+      expect(screen.getByTitle("Confianza de Claude: 95%")).toBeInTheDocument(),
+    );
+    // ...but the unmapped asset-class % does not.
+    expect(screen.queryByTitle("Confianza de Claude: 37%")).toBeNull();
+  });
 });
 
 describe("ReviewTable Fuentes section", () => {

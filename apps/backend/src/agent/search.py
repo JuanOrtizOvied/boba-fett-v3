@@ -76,7 +76,21 @@ _SOURCE_RANK: dict[FieldSource, int] = {
 # LLM (which is bound to tools and would recurse) per design.md.
 EXTRACTION_MODEL_NAME = "claude-haiku-4-5"
 
-_EXTRACTION_SYSTEM_PROMPT = """You are a financial product data extraction assistant for SABBI,
+# The `asset_class` taxonomy is injected per caller: the chat/portfolio cascade
+# uses the portfolio taxonomy, while the ficha-patrimonial web research uses the
+# ficha review select's taxonomy (FichaAssetClassKey in reviewTableShared.ts) so
+# the returned class maps straight onto that select. `__ASSET_CLASSES__` is a
+# literal placeholder (not an f-string) so the braces in the examples stay intact.
+_PORTFOLIO_ASSET_CLASSES = (
+    "inversiones_directas, mercados_privados, club_deals, mercados_publicos, "
+    "otros, cash_y_equivalentes"
+)
+_FICHA_ASSET_CLASSES = (
+    "Inmobiliario Directo, Mercados Publicos - Fijo, Mercados Publicos - Variable, "
+    "Mercados Privados, Club Deal, Cash y Otros"
+)
+
+_EXTRACTION_PROMPT_TEMPLATE = """You are a financial product data extraction assistant for SABBI,
 an investment portfolio platform.
 
 Extract these fields for the requested product: name, asset_class,
@@ -84,8 +98,7 @@ geographic_focus, commission, currency, administrator, manager,
 liquidity, return_rate, underlying.
 
 `asset_class` is a list of {name, percentage} objects summing to 100%,
-where each name is one of: inversiones_directas, mercados_privados,
-club_deals, mercados_publicos, otros, cash_y_equivalentes. Most products
+where each name is one of: __ASSET_CLASSES__. Most products
 belong to a single asset class (one entry at 100%); only use multiple
 entries when the product is genuinely blended across asset classes. Return
 an empty list if unknown.
@@ -112,6 +125,15 @@ non-empty value; omit every field you left empty. Use the field names as keys
 (e.g. {"name": 95, "manager": 70, "asset_class": 60}). Be honest: a value well
 supported by the sources is high (80-100); a plausible-but-weakly-supported value
 is low (30-60)."""
+
+
+def _build_extraction_system_prompt(asset_class_names: str) -> str:
+    return _EXTRACTION_PROMPT_TEMPLATE.replace("__ASSET_CLASSES__", asset_class_names)
+
+
+_EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(_PORTFOLIO_ASSET_CLASSES)
+# Ficha web research classifies into the ficha select's taxonomy.
+_FICHA_EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(_FICHA_ASSET_CLASSES)
 
 
 class _ExtractedAllocation(BaseModel):
@@ -238,12 +260,14 @@ async def _search_catalog(query: str, pool: asyncpg.Pool) -> SearchResult:
     return _merge_fields(result, catalog_data, "catalog")
 
 
-async def _run_extraction(human_content: str) -> dict:
+async def _run_extraction(
+    human_content: str, *, system_prompt: str = _EXTRACTION_SYSTEM_PROMPT
+) -> dict:
     llm = ChatAnthropic(model=EXTRACTION_MODEL_NAME, temperature=0)
     structured_llm = llm.with_structured_output(ExtractedProduct)
     extracted = await structured_llm.ainvoke(
         [
-            SystemMessage(content=_EXTRACTION_SYSTEM_PROMPT),
+            SystemMessage(content=system_prompt),
             HumanMessage(content=human_content),
         ]
     )
@@ -389,10 +413,13 @@ async def _search_claude_web(query: str) -> tuple[dict[str, str], list[Source]]:
     context, sources = await _research_with_claude_web(query)
     if not context:
         return {}, sources
+    # Classify asset_class into the FICHA taxonomy so the ficha review select
+    # auto-populates (the portfolio taxonomy would not map onto it).
     fields = await _run_extraction(
         f"Product to research: {query}\n\nWeb research:\n{context}\n\n"
         "Extract fields ONLY from the web research above — do not use outside "
-        "knowledge."
+        "knowledge.",
+        system_prompt=_FICHA_EXTRACTION_SYSTEM_PROMPT,
     )
     return fields, sources
 

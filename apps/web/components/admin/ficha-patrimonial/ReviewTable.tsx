@@ -531,7 +531,10 @@ function ProductCard({
               </Field>
             </div>
 
-            <Field label="Clase de activo" confidence={fc.asset_class}>
+            <Field
+              label="Clase de activo"
+              confidence={row.assetClass ? fc.asset_class : undefined}
+            >
               <select
                 value={row.assetClass}
                 onChange={(e) =>

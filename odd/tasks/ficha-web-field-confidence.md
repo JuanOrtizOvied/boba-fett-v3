@@ -61,7 +61,28 @@ from an empty result so every filled field is web-sourced.
   shown only for fields Claude actually filled.
 - Backend + web suites green; no regression to the parse-time cascade.
 
+## Follow-ups
+- [x] **F-1 — Asset class mapped to the ficha taxonomy (bug: 85% but empty select).**
+  DONE. INLINE (TDD). User reported the asset-class % showed but the select stayed
+  empty. Root cause: the extraction prompt classifies `asset_class` into the PORTFOLIO
+  taxonomy (`inversiones_directas`, …) which does not map onto the ficha select
+  (`FichaAssetClassKey`: inmobiliario_directo / mercados_publicos_fijo|variable / …).
+  Fix (backend): parameterized the extraction prompt (`_EXTRACTION_PROMPT_TEMPLATE` +
+  `_build_extraction_system_prompt`); `_search_claude_web` now extracts with
+  `_FICHA_EXTRACTION_SYSTEM_PROMPT` (ficha taxonomy), chat path unchanged. Live repro
+  (StreetTracks Gold): the model now returns `asset_class: []` (gold ETF doesn't fit
+  the ficha classes) and omits its confidence — no more misleading %. 3 backend tests
+  (ficha prompt taxonomy; `_search_claude_web` uses it; updated the extract-signature
+  test). 64 passed, ruff clean.
+- [x] **F-2 — Hide the asset-class % when it did not map (frontend guard).** DONE.
+  INLINE (TDD). `ProductCard` passes the asset-class confidence only when
+  `row.assetClass` is set; `applyResearchToRow` now OVERWRITES `assetClass` with the
+  mapped key OR `""` when the web class is unmappable (clears the stale value so the
+  select shows "Sin mapear" and the guard hides the %). 2 tests (component: no % for
+  an unmapped class; shared: unmappable web class clears assetClass). Web suite 174
+  passed / 18 files; tsc clean.
+
 ## Next step
-Feature complete (T-1 + T-2). Live behavior needs the staging redeploy from the
+Feature + follow-ups complete. Live behavior needs the staging redeploy from the
 sibling feature (anthropic SDK pin) so the web search actually runs; the % is the
 extraction model's self-reported confidence. Pending (user-owned): merge/push + deploy.

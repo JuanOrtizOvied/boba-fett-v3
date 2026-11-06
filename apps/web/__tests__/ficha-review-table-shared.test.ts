@@ -603,6 +603,19 @@ describe("applyResearchToRow (re-investigate with web)", () => {
 
     expect(patch.enriched?.field_confidence).toEqual({ name: 92, manager: 70 });
   });
+
+  test("clears the asset class when the web class does not map to a ficha key", () => {
+    const row = toEditableRow(baseRow({}));
+    row.assetClass = "mercados_publicos_fijo"; // a pre-existing mapped value
+
+    const patch = applyResearchToRow(
+      row,
+      webResult({ asset_class: [{ name: "inversiones_directas", percentage: 100 }] }),
+    );
+
+    // Unmappable web class → cleared (no stale value, select shows "Sin mapear").
+    expect(patch.assetClass).toBe("");
+  });
 });
 
 describe("blank editable series/admin rows (A2 — brand-new products)", () => {

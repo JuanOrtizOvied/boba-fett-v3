@@ -446,8 +446,10 @@ export function applyResearchToRow(
   if (result.geographic_focus?.length) patch.geographicFocus = result.geographic_focus;
   if (result.underlying?.length) patch.underlying = result.underlying;
   if (result.asset_class?.length) {
-    const key = normalizeAssetClass(result.asset_class[0].name);
-    if (key) patch.assetClass = key;
+    // Overwrite with the mapped ficha key; when the web class does not map,
+    // clear the field (""), so the select shows "Sin mapear" and no stale value
+    // is left behind (the per-field % is then hidden by the card's guard).
+    patch.assetClass = normalizeAssetClass(result.asset_class[0].name);
   }
   return patch;
 }
