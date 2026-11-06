@@ -6,7 +6,16 @@ requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.4",
     "langchain-core>=0.3",
-    "langchain-anthropic>=0.3",
+    # Upper caps on the Anthropic SDK pair (verified by live repro).
+    # anthropic 2.x rejects `temperature` on beta.messages (HTTP 400) and
+    # langchain-anthropic 1.7.x still sends it, which silently broke the ficha
+    # Claude web search in staging. Caps-only: they exclude the broken major
+    # without forcing an upgrade of the known-good locked set (keeps the lower
+    # bounds permissive so no transitive churn). Keep the caps until
+    # langchain-anthropic ships verified support for the newer anthropic major.
+    # See tests/test_sdk_versions.py and odd/tasks/fix-staging-llm-sdk-drift.md.
+    "langchain-anthropic>=0.3,<1.6",
+    "anthropic>=0.116.0,<1.0",
     "langgraph-checkpoint-postgres>=3.0",
     "psycopg[binary,pool]>=3.3",
     "typing-extensions>=4.0",
