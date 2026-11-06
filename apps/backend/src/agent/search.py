@@ -103,7 +103,15 @@ list if unknown.
 CRITICAL RULE: if you are not confident about a field, or the information was
 not given to you, leave that field as an empty string (or empty list for
 underlying, geographic_focus, and asset_class). NEVER invent, guess, or
-fabricate a value you cannot verify."""
+fabricate a value you cannot verify.
+
+`field_confidence` is a map from field name to an integer 0-100 expressing how
+confident you are in the value you filled for that field, based ONLY on the
+evidence you were given. Include a key ONLY for fields you actually filled with a
+non-empty value; omit every field you left empty. Use the field names as keys
+(e.g. {"name": 95, "manager": 70, "asset_class": 60}). Be honest: a value well
+supported by the sources is high (80-100); a plausible-but-weakly-supported value
+is low (30-60)."""
 
 
 class _ExtractedAllocation(BaseModel):
@@ -125,6 +133,10 @@ class ExtractedProduct(BaseModel):
     liquidity: str = ""
     return_rate: str = ""
     underlying: list[_ExtractedAllocation] = Field(default_factory=list)
+    # Self-reported confidence (0..100) per field the model actually filled,
+    # keyed by field name (e.g. {"name": 92, "manager": 78}). Omit fields left
+    # empty. Surfaced only on the web-research path (see `_sanitize_field_confidence`).
+    field_confidence: dict[str, int] = Field(default_factory=dict)
 
 
 def _merge_fields(
@@ -597,6 +609,30 @@ def _classify_match(
     return level, matched
 
 
+# Fields that may carry a web self-reported confidence: the product-level string
+# fields the web step fills, plus the always-merged list fields.
+_CONFIDENCE_FIELDS = PRODUCT_FIELD_NAMES + ("asset_class", "geographic_focus", "underlying")
+
+
+def _sanitize_field_confidence(raw: object, result: SearchResult) -> dict[str, int]:
+    """Clean the web extraction's self-reported ``field_confidence``: keep only
+    integer scores clamped to 0..100, for fields actually populated on ``result``.
+    Drops unknown keys, empty fields, and non-numeric values — the score is a
+    model self-estimate, so its shape is never trusted blindly."""
+    if not isinstance(raw, dict):
+        return {}
+    cleaned: dict[str, int] = {}
+    for field in _CONFIDENCE_FIELDS:
+        if field not in raw or not getattr(result, field, None):
+            continue
+        try:
+            score = int(raw[field])
+        except (TypeError, ValueError):
+            continue
+        cleaned[field] = max(0, min(100, score))
+    return cleaned
+
+
 async def research_web_v2(query: str) -> SearchResult:
     """Force a Claude ``web_search`` + ``web_fetch`` research for one product —
     the ficha review card's "Volver a investigar" action. Returns a web-grounded
@@ -616,6 +652,8 @@ async def research_web_v2(query: str) -> SearchResult:
     result.confidence, result.catalog_matched = _classify_match(
         0.0, _has_any_data(result), web_verified=bool(web_sources)
     )
+    # Per-field self-reported confidence, kept only for fields the web step filled.
+    result.field_confidence = _sanitize_field_confidence(web_data.get("field_confidence"), result)
     return result
 
 

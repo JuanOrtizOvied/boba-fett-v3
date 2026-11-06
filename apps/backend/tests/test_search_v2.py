@@ -403,6 +403,46 @@ async def test_research_web_v2_sin_datos_when_nothing_found(monkeypatch):
 
     assert result.confidence == "sin_datos"
     assert result.sources == []
+    assert result.field_confidence == {}
+
+
+async def test_research_web_v2_surfaces_self_reported_field_confidence(monkeypatch):
+    """The web extraction's self-reported per-field confidence is surfaced on the
+    result — clamped to 0..100, and kept only for fields actually populated."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "manager": "Web Manager",
+                "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
+                "field_confidence": {
+                    "name": 92,
+                    "manager": 150,  # out of range -> clamped to 100
+                    "asset_class": 60,
+                    "currency": 50,  # field not populated -> dropped
+                    "bogus": 40,  # not a real field -> dropped
+                },
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert result.field_confidence == {"name": 92, "manager": 100, "asset_class": 60}
+
+
+async def test_research_web_v2_field_confidence_empty_without_scores(monkeypatch):
+    async def fake_web(query):
+        return {"name": "Researched Fund"}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert result.field_confidence == {}
 
 
 def test_extract_sources_dedupes_by_url():

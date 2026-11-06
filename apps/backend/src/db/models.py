@@ -460,3 +460,9 @@ class SearchResult(BaseModel):
     sources: list[Source] = Field(default_factory=list)
     primary_source: FieldSource = "catalog"
     provenance: dict[str, FieldSource] = Field(default_factory=dict)
+    # Per-field self-reported confidence (0..100) from the Claude web research —
+    # how sure the extraction model is of each field it filled from the web.
+    # Only populated by the explicit "Buscar con Claude" path (`research_web_v2`);
+    # empty for catalog/chat/parse-time results. The Claude web_search tool emits
+    # citations (`sources`), not a numeric score, so this is a model self-estimate.
+    field_confidence: dict[str, int] = Field(default_factory=dict)
