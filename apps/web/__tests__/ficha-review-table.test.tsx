@@ -208,7 +208,7 @@ describe("ReviewTable A2 — add series/admins for a brand-new product", () => {
 });
 
 describe("ReviewTable re-investigate with web", () => {
-  test("'Buscar con Claude' calls researchFichaLine and fills empty fields", async () => {
+  test("'Buscar con Claude' overwrites the form fields with the web result", async () => {
     vi.mocked(researchFichaLine).mockResolvedValue({
       name: "Fondo Renta Fija",
       manager: "Gestor Investigado",
@@ -246,11 +246,48 @@ describe("ReviewTable re-investigate with web", () => {
 
     await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
 
-    // ...but the search uses the ficha's declared name.
+    // ...the search uses the ficha's declared name...
     expect(researchFichaLine).toHaveBeenCalledWith("BBVA Bonos BEST (CLN23LIA)");
+    // ...and the form fields are OVERWRITTEN with the web values (Option A).
     await waitFor(() =>
       expect(screen.getByLabelText("Gestor")).toHaveValue("Gestor Investigado"),
     );
+    expect(screen.getByLabelText("Nombre del producto")).toHaveValue(
+      "Fondo Renta Fija",
+    );
+  });
+
+  test("'Buscar con Claude' shows a per-field confidence % next to each filled field", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Fondo Investigado",
+      manager: "Gestor Investigado",
+      currency: "USD",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+      field_confidence: { name: 92, manager: 70, currency: 88 },
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTitle("Confianza de Claude: 92%")).toHaveTextContent("92%"),
+    );
+    expect(screen.getByTitle("Confianza de Claude: 70%")).toBeInTheDocument();
+    expect(screen.getByTitle("Confianza de Claude: 88%")).toBeInTheDocument();
   });
 });
 

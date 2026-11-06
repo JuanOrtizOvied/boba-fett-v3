@@ -40,15 +40,19 @@ from an empty result so every filled field is web-sourced.
   underlying); wired at the end of `research_web_v2`. TDD: RED (no attribute) → GREEN.
   3 tests (surfaces+clamps+drops-empty/unknown; empty without scores; sin_datos).
   Checks: search+ficha suites 62 passed / 0 new; ruff clean. Commit: `<pending>`.
-- [ ] **T-2 — Frontend: overwrite form + render per-field %.** INLINE (TDD).
+- [x] **T-2 — Frontend: overwrite form + render per-field %.** DONE. INLINE (TDD).
   `portfolio-types.ts` SearchResult += `field_confidence?: Record<string, number>`.
-  `applyResearchToRow` overwrites product fields (name/manager/currency/commission/
-  return/geographicFocus/underlying/assetClass) when the web result has a value
-  (no longer fill-only-empty); still sets `enriched` + `source`. `ProductCard` renders
-  a small % badge next to each editable field from `row.enriched?.field_confidence`
-  (snake_case key per field). TDD: RED → GREEN. Update the existing
-  `ficha-review-table-shared` tests that assert fill-only-empty. Checks:
-  `yarn workspace web test` green, tsc + eslint clean.
+  `applyResearchToRow` now OVERWRITES product fields (name/manager/currency/commission/
+  return/geographicFocus/underlying/assetClass) when the web result has a value (no
+  longer fill-only-empty); a field the web left empty keeps its value; still sets
+  `enriched` + `source`. New `ConfidenceTag` pill (green>=80/amber>=50/red, hidden when
+  absent, `title="Confianza de Claude: N%"`); `Field` + `AllocationEditor` take an
+  optional `confidence`; `ProductCard` passes `row.enriched.field_confidence` per field
+  (name/manager/currency/asset_class/geographic_focus/underlying). TDD: RED → GREEN.
+  Updated the two fill-only-empty shared tests to the overwrite spec + added
+  does-not-clear-empty, carries-confidence, and two component tests (overwrite +
+  per-field %). Checks: full web suite 172 passed / 18 files / 0 failed; tsc + eslint
+  clean. Commit: `<pending>`.
 
 ## Acceptance criteria
 - Clicking "Buscar con Claude" visibly updates the editable fields with Claude's web
@@ -58,4 +62,6 @@ from an empty result so every filled field is web-sourced.
 - Backend + web suites green; no regression to the parse-time cascade.
 
 ## Next step
-Start T-1 (backend extraction + confidence).
+Feature complete (T-1 + T-2). Live behavior needs the staging redeploy from the
+sibling feature (anthropic SDK pin) so the web search actually runs; the % is the
+extraction model's self-reported confidence. Pending (user-owned): merge/push + deploy.

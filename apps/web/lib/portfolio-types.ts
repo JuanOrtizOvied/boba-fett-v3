@@ -211,6 +211,11 @@ export interface SearchResult {
   catalog_matched?: boolean;
   /** Web sources cited by the L3 research (ficha "Fuentes"); empty for catalog. */
   sources?: Source[];
+  /** Per-field self-reported confidence (0..100) from the Claude web research
+   * ("Buscar con Claude"). Keyed by backend field name (e.g. `{ name: 92 }`).
+   * Only present on web-research results; the web_search tool gives no numeric
+   * score, so this is the extraction model's self-estimate. */
+  field_confidence?: Record<string, number>;
   primary_source: FieldSource;
   provenance: ProvenanceMap;
 }

@@ -552,13 +552,12 @@ describe("applyResearchToRow (re-investigate with web)", () => {
     } as unknown as NonNullable<FichaEnrichedRow["enriched"]>;
   }
 
-  test("fills empty fields and always refreshes the enriched block + source", () => {
+  test("overwrites the product fields with the web values and refreshes enriched + source", () => {
     const row = toEditableRow(baseRow({ raw_name: "Algo", raw_currency: "" }));
-    row.name = "";
-    row.manager = "";
-    row.currency = "";
-    row.geographicFocus = [];
-    row.underlying = [];
+    // Pre-populated values must be REPLACED by the web result (Option A).
+    row.name = "Valor viejo";
+    row.manager = "Gestor viejo";
+    row.currency = "PEN";
 
     const patch = applyResearchToRow(row, webResult());
 
@@ -567,22 +566,42 @@ describe("applyResearchToRow (re-investigate with web)", () => {
     expect(patch.currency).toBe("Dólares");
     expect(patch.geographicFocus).toEqual([{ name: "Perú", percentage: 100 }]);
     expect(patch.underlying).toEqual([{ name: "Acciones Perú", percentage: 100 }]);
+    expect(patch.assetClass).toBeDefined();
     expect(patch.source).toBe("web_search");
     expect(patch.enriched).toMatchObject({ confidence: "baja" });
   });
 
-  test("never overwrites fields the admin already edited", () => {
+  test("overwrites even the fields the admin had already edited (Option A)", () => {
     const row = toEditableRow(baseRow({}));
     row.name = "Nombre editado por el admin";
     row.manager = "Gestor manual";
 
     const patch = applyResearchToRow(row, webResult());
 
-    expect(patch.name).toBeUndefined();
-    expect(patch.manager).toBeUndefined();
-    // The enriched block (Fuentes/confianza) still refreshes.
-    expect(patch.enriched).toBeTruthy();
+    expect(patch.name).toBe("Credicorp Crecimiento VCS");
+    expect(patch.manager).toBe("Credicorp Capital");
     expect(patch.source).toBe("web_search");
+  });
+
+  test("does not clear a field the web result left empty", () => {
+    const row = toEditableRow(baseRow({}));
+    row.commission = "0.5%";
+
+    const patch = applyResearchToRow(row, webResult({ commission: "" }));
+
+    // Web commission is empty → keep the existing value (patch omits it).
+    expect(patch.commission).toBeUndefined();
+  });
+
+  test("carries the per-field confidence through the enriched block", () => {
+    const row = toEditableRow(baseRow({}));
+
+    const patch = applyResearchToRow(
+      row,
+      webResult({ field_confidence: { name: 92, manager: 70 } }),
+    );
+
+    expect(patch.enriched?.field_confidence).toEqual({ name: 92, manager: 70 });
   });
 });
 

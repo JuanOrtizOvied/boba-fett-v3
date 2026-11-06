@@ -52,10 +52,12 @@ function AllocationEditor({
   label,
   allocations,
   onChange,
+  confidence,
 }: {
   label: string;
   allocations: AssetAllocation[];
   onChange: (next: AssetAllocation[]) => void;
+  confidence?: number;
 }) {
   const total = allocations.reduce((sum, a) => sum + a.percentage, 0);
   const isValid = allocations.length === 0 || Math.abs(total - 100) < 0.01;
@@ -70,6 +72,7 @@ function AllocationEditor({
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium text-sabbi-neutral-500">{label}</span>
+        <ConfidenceTag value={confidence} />
         {allocations.length > 0 && (
           <span
             className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
@@ -132,16 +135,44 @@ function AllocationEditor({
 
 // -- Field label + input helper -----------------------------------------------
 
+/**
+ * Small pill showing Claude's self-reported confidence (0..100) for a field it
+ * filled from the web research. Hidden when there is no score. Color bands:
+ * >=80 green, >=50 amber, else red.
+ */
+function ConfidenceTag({ value }: { value?: number }) {
+  if (value == null) return null;
+  const band =
+    value >= 80
+      ? "bg-green-50 text-green-700"
+      : value >= 50
+        ? "bg-amber-50 text-amber-700"
+        : "bg-red-50 text-red-700";
+  return (
+    <span
+      title={`Confianza de Claude: ${value}%`}
+      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${band}`}
+    >
+      {value}%
+    </span>
+  );
+}
+
 function Field({
   label,
+  confidence,
   children,
 }: {
   label: string;
+  confidence?: number;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-sabbi-neutral-500">{label}</label>
+      <label className="flex items-center gap-1.5 text-xs font-medium text-sabbi-neutral-500">
+        {label}
+        <ConfidenceTag value={confidence} />
+      </label>
       {children}
     </div>
   );
@@ -371,6 +402,9 @@ function ProductCard({
   const similarity = formatSimilarityPercent(row.enriched?.similarity);
   const catalogMatched = row.enriched?.catalog_matched ?? false;
   const dataAsof = row.enriched?.data_asof || "—";
+  // Per-field self-reported confidence from "Buscar con Claude" (keyed by the
+  // backend field name); absent for catalog/parse results.
+  const fc = row.enriched?.field_confidence ?? {};
 
   return (
     <div
@@ -450,7 +484,7 @@ function ProductCard({
 
           {/* Enriched fields */}
           <div className="flex flex-col gap-3">
-            <Field label="Nombre del producto">
+            <Field label="Nombre del producto" confidence={fc.name}>
               <input
                 value={row.name}
                 aria-label="Nombre del producto"
@@ -460,7 +494,7 @@ function ProductCard({
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Gestor">
+              <Field label="Gestor" confidence={fc.manager}>
                 <input
                   value={row.manager}
                   aria-label="Gestor"
@@ -479,7 +513,7 @@ function ProductCard({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Moneda">
+              <Field label="Moneda" confidence={fc.currency}>
                 <input
                   value={row.currency}
                   aria-label="Moneda"
@@ -497,7 +531,7 @@ function ProductCard({
               </Field>
             </div>
 
-            <Field label="Clase de activo">
+            <Field label="Clase de activo" confidence={fc.asset_class}>
               <select
                 value={row.assetClass}
                 onChange={(e) =>
@@ -524,11 +558,13 @@ function ProductCard({
                 label="Foco geográfico"
                 allocations={row.geographicFocus}
                 onChange={(next) => onUpdate({ geographicFocus: next })}
+                confidence={fc.geographic_focus}
               />
               <AllocationEditor
                 label="Subyacente"
                 allocations={row.underlying}
                 onChange={(next) => onUpdate({ underlying: next })}
+                confidence={fc.underlying}
               />
             </div>
           </div>
