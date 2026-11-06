@@ -712,6 +712,9 @@ CREATE TABLE IF NOT EXISTS ficha (
     client_phone TEXT NOT NULL DEFAULT '',
     parse_failed BOOLEAN NOT NULL DEFAULT false,
     confirmed BOOLEAN NOT NULL DEFAULT false,
+    -- Original uploaded .xlsx, kept so the admin can download it later.
+    file_data BYTEA,
+    file_name TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
