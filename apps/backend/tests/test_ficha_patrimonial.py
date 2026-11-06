@@ -198,6 +198,23 @@ def test_parse_ficha_excel_raises_on_corrupt_file():
         parse_ficha_excel(b"not a real xlsx file")
 
 
+def test_parse_ficha_excel_name_column_holds_label_value_in_adjacent():
+    """Real file (Javier Castro PRELIMINAR): the name column D5 holds the LABEL
+    'Nombres y Apellidos' and the actual name is in the adjacent column E5. The
+    label must not be taken as the client name."""
+    from db.ficha_patrimonial import parse_ficha_excel
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sabbi"
+    ws["D5"] = "Nombres y Apellidos"
+    ws["E5"] = "Javier Castro Rendon"
+
+    parsed = parse_ficha_excel(wb_to_bytes(wb))
+
+    assert parsed.client.name == "Javier Castro Rendon"
+
+
 def wb_to_bytes(wb: Workbook) -> bytes:
     buffer = io.BytesIO()
     wb.save(buffer)

@@ -424,9 +424,17 @@ def _find_client_name(ws: Any) -> str:
     return ""
 
 
+def _is_client_name_label(value: str) -> bool:
+    """True when the cell holds the 'Nombres y Apellidos' label itself (templates
+    that put the label in the name column and the value in the adjacent one)."""
+    return any(k in _norm(value) for k in _CLIENT_NAME_LABEL_KW)
+
+
 def _extract_client_info(ws: Any) -> FichaClientInfo:
     name = _cell_str(ws, CLIENT_INFO_ROW, COL_CLIENT_NAME)
-    if not name:
+    # Treat a label sitting in the name column as "no value" so the label-driven
+    # scan picks up the real name from the adjacent/next cell.
+    if not name or _is_client_name_label(name):
         name = _find_client_name(ws)
     return FichaClientInfo(
         name=name,
