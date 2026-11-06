@@ -44,6 +44,7 @@ interface FichaSidebarProps {
   onSelect: (id: number) => void;
   onUpload: () => void;
   onDelete: (id: number) => void;
+  onDownload: (id: number) => void;
 }
 
 export default function FichaSidebar({
@@ -54,6 +55,7 @@ export default function FichaSidebar({
   onSelect,
   onUpload,
   onDelete,
+  onDownload,
 }: FichaSidebarProps) {
   return (
     <div className="flex w-72 shrink-0 flex-col gap-3 border-r border-sabbi-neutral-200 pr-3">
@@ -106,7 +108,7 @@ export default function FichaSidebar({
                 data-testid={`ficha-row-${ficha.id}`}
                 aria-current={isSelected ? "true" : undefined}
                 onClick={() => onSelect(ficha.id)}
-                className={`flex w-full flex-col gap-1 rounded-lg border p-2.5 pr-8 text-left ${
+                className={`flex w-full flex-col gap-1 rounded-lg border p-2.5 pr-14 text-left ${
                   isSelected
                     ? "border-sabbi-primary bg-sabbi-primary/5"
                     : "border-sabbi-neutral-200 hover:bg-sabbi-neutral-50"
@@ -124,6 +126,17 @@ export default function FichaSidebar({
                 >
                   {badge.label}
                 </span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Descargar Excel de ${label}`}
+                title="Descargar el Excel original"
+                onClick={() => onDownload(ficha.id)}
+                className="absolute right-9 top-2 rounded p-1 text-sabbi-neutral-400 hover:bg-sabbi-primary/10 hover:text-sabbi-primary"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+                </svg>
               </button>
               <button
                 type="button"

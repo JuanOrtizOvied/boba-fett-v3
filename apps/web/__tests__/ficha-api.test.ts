@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   approveFichaLine,
   confirmFicha,
+  downloadFichaFile,
+  filenameFromDisposition,
   getCatalogHistory,
   deleteFicha,
   fichaToEnrichedRows,
@@ -180,5 +182,58 @@ describe("fichaApi", () => {
       json: async () => ({ detail: "boom" }),
     } as Response);
     await expect(listFichas()).rejects.toThrow();
+  });
+
+  test("filenameFromDisposition prefers filename*, then filename, then fallback", () => {
+    expect(
+      filenameFromDisposition(
+        "attachment; filename=\"ficha-5.xlsx\"; filename*=UTF-8''Javier%20Castro.xlsx",
+        "f.xlsx",
+      ),
+    ).toBe("Javier Castro.xlsx");
+    expect(filenameFromDisposition('attachment; filename="plain.xlsx"', "f.xlsx")).toBe(
+      "plain.xlsx",
+    );
+    expect(filenameFromDisposition(null, "f.xlsx")).toBe("f.xlsx");
+  });
+
+  test("downloadFichaFile throws a friendly error on 404", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({ ok: false, status: 404 } as Response);
+    await expect(downloadFichaFile(5)).rejects.toThrow(/no tiene un archivo guardado/i);
+  });
+
+  test("downloadFichaFile triggers a browser download on success", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(["x"]),
+      headers: { get: () => "attachment; filename*=UTF-8''mi.xlsx" },
+    } as unknown as Response);
+
+    const createObjectURL = vi.fn(() => "blob:url");
+    const revokeObjectURL = vi.fn();
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = createObjectURL;
+    (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = revokeObjectURL;
+    const anchor = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+    const createEl = vi
+      .spyOn(document, "createElement")
+      .mockReturnValue(anchor as unknown as HTMLAnchorElement);
+    const append = vi
+      .spyOn(document.body, "appendChild")
+      .mockImplementation((n) => n);
+
+    try {
+      await downloadFichaFile(5);
+
+      expect(fetchWithAuth).toHaveBeenCalledWith(
+        "/api/admin/ficha-patrimonial/fichas/5/file",
+      );
+      expect(anchor.download).toBe("mi.xlsx");
+      expect(anchor.click).toHaveBeenCalled();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:url");
+    } finally {
+      createEl.mockRestore();
+      append.mockRestore();
+    }
   });
 });

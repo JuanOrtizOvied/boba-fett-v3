@@ -39,11 +39,12 @@ admin endpoint.
   `GET /admin/ficha-patrimonial/fichas/{id}/file` → the stored `.xlsx` as an attachment
   (Content-Disposition), 404 when absent, admin-only (router dependency). Route tests
   (mocked repo, no DB): download returns the bytes + headers; 404 when `get_file` is None.
-- [ ] **T-3 — Frontend: send filename + download button.** INLINE (TDD).
-  `page.tsx` parse body += `file_name: file.name`. `fichaApi.downloadFichaFile(id)` fetches
-  the binary with auth and triggers a browser download (blob → object URL → anchor).
-  A "Descargar Excel" action per ficha in `FichaSidebar` (beside delete). Tests: api +
-  sidebar render/click.
+- [x] **T-3 — Frontend: download button.** DONE. INLINE (TDD). `page.tsx` already sent
+  `file_name: file.name`. Added `fichaApi.downloadFichaFile(id)` (fetch binary with auth →
+  blob → anchor download) + `filenameFromDisposition` (prefers RFC 5987 `filename*`). A
+  download action per ficha in `FichaSidebar` beside delete, wired to `handleDownloadFicha`
+  (shows a friendly error on 404/failure). Tests: 3 api (helper, 404, success) + 1 sidebar
+  click. Web suite 186 passed / 18 files; tsc + eslint clean.
 
 ## Acceptance criteria
 - Uploading a ficha stores its original `.xlsx`; a later download returns the exact file
@@ -51,4 +52,6 @@ admin endpoint.
 - Admin-only. Backend + web suites green; migration chains cleanly from `c7d8e9f0a1b2`.
 
 ## Next step
-Start T-1 (schema + migration + repo).
+Feature complete (T-1..T-3). The Alembic migration runs on deploy; only NEW uploads
+store their file, so existing fichas download as 404 (handled). Pending (user-owned):
+merge/push + deploy (migration).
