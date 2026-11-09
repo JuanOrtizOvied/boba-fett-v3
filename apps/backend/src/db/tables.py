@@ -35,6 +35,8 @@ users = Table(
     Column("created_at", DateTime(timezone=True), server_default=text("now()")),
     Column("updated_at", DateTime(timezone=True), server_default=text("now()")),
     Column("active_thread_id", Text),
+    Column("first_name", Text, nullable=False, server_default=""),
+    Column("last_name", Text, nullable=False, server_default=""),
     CheckConstraint("role IN ('user', 'admin')", name="users_role_check"),
 )
 

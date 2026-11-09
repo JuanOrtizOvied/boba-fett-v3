@@ -85,7 +85,7 @@ def test_create_inserts_user_with_created_by():
     pool.fetchrow.assert_awaited_once()
     call_args = pool.fetchrow.call_args.args
     assert "INSERT INTO users" in call_args[0]
-    assert call_args[1:] == ("new@sabbi.com", "$2b$xyz", "admin", "usr_admin")
+    assert call_args[1:] == ("new@sabbi.com", "$2b$xyz", "admin", "usr_admin", "", "")
 
 
 def test_list_all_returns_every_user_ordered():

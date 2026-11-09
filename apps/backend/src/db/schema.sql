@@ -8,10 +8,14 @@ CREATE TABLE IF NOT EXISTS users (
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
-    active_thread_id TEXT
+    active_thread_id TEXT,
+    first_name TEXT NOT NULL DEFAULT '',
+    last_name TEXT NOT NULL DEFAULT ''
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS active_thread_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

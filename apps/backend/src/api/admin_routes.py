@@ -805,6 +805,7 @@ async def research_ficha_line(data: FichaResearchRequest) -> SearchResult:
 @router.post("/ficha-patrimonial/confirm", status_code=201)
 async def confirm_ficha_patrimonial(
     data: FichaConfirmRequest,
+    admin: dict = Depends(require_admin),
     user_repo: UserRepository = Depends(_user_repo),
     product_repo: ProductRepository = Depends(_product_repo),
 ) -> dict:
@@ -812,18 +813,47 @@ async def confirm_ficha_patrimonial(
     target user (`sdd/admin-ficha-patrimonial/spec` — "Ficha Confirm
     Endpoint", "Confirm creates all products", "Unknown email hard-fails",
     "One invalid row rejects the whole batch"). All-or-nothing: any row
-    failure rolls back the whole batch and creates zero products."""
-    user_row = await user_repo.get_by_id(data.user_id)
-    if user_row is None:
-        raise HTTPException(status_code=404, detail=f"Usuario '{data.user_id}' no encontrado")
+    failure rolls back the whole batch and creates zero products.
+
+    When the ficha has no account, `new_client` creates one (role `user`) in
+    the same transaction as the products, so a failure leaves no orphan user."""
+    new_client = data.new_client
+    if new_client is not None:
+        if await user_repo.get_by_email(new_client.email) is not None:
+            raise HTTPException(status_code=409, detail="Ya existe un usuario con ese email")
+    elif not data.user_id.strip():
+        # A blank `user_id` would make asyncpg raise on the UUID column (500),
+        # so reject it up front with a clear 400.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "La ficha no tiene un cliente asociado: selecciona un cliente antes de confirmar"
+            ),
+        )
+    else:
+        user_row = await user_repo.get_by_id(data.user_id)
+        if user_row is None:
+            raise HTTPException(status_code=404, detail=f"Usuario '{data.user_id}' no encontrado")
 
     product_ids: list[str] = []
     try:
         async with product_repo.pool.acquire() as conn:
             async with conn.transaction():
+                target_user_id = data.user_id
+                if new_client is not None:
+                    created = await user_repo.create(
+                        email=new_client.email,
+                        password_hash=hash_password(new_client.password),
+                        role="user",
+                        created_by=admin["id"],
+                        first_name=new_client.first_name.strip(),
+                        last_name=new_client.last_name.strip(),
+                        conn=conn,
+                    )
+                    target_user_id = str(created["id"])
                 for row in data.products:
                     product = await product_repo.create(
-                        data.user_id,
+                        target_user_id,
                         ProductCreate(**row.model_dump()),
                         source="admin_ficha_import",
                         conn=conn,

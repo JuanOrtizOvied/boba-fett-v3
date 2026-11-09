@@ -122,6 +122,71 @@ async def test_confirm_invalid_row_rejects_whole_batch(admin_api_client, test_po
     assert count == 0
 
 
+def _new_client(email: str) -> dict:
+    return {
+        "email": email,
+        "first_name": "Ana",
+        "last_name": "Perez",
+        "password": "supersecret1",
+    }
+
+
+async def test_confirm_new_client_creates_user_and_products(admin_api_client, test_pool):
+    _app, client = admin_api_client
+    email = f"{uuid.uuid4()}@sabbi.test"
+
+    response = await client.post(
+        "/admin/ficha-patrimonial/confirm",
+        json={
+            "new_client": _new_client(email),
+            "products": [
+                _confirm_row(name="Fondo A", amount=1000),
+                _confirm_row(name="Fondo B", amount=2000),
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["created_count"] == 2
+    user = await test_pool.fetchrow("SELECT * FROM users WHERE email = $1", email)
+    assert user is not None
+    assert user["first_name"] == "Ana"
+    assert user["last_name"] == "Perez"
+    assert user["role"] == "user"
+    count = await test_pool.fetchval("SELECT count(*) FROM products WHERE user_id = $1", user["id"])
+    assert count == 2
+
+
+async def test_confirm_new_client_invalid_row_rolls_back_user_and_products(
+    admin_api_client, test_pool
+):
+    _app, client = admin_api_client
+    email = f"{uuid.uuid4()}@sabbi.test"
+
+    response = await client.post(
+        "/admin/ficha-patrimonial/confirm",
+        json={
+            "new_client": _new_client(email),
+            "products": [
+                _confirm_row(name="Fondo Valid", amount=1000),
+                _confirm_row(
+                    name="Fondo Invalid",
+                    amount=2000,
+                    asset_class=[{"name": "mercados_publicos", "percentage": 40}],
+                ),
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    users = await test_pool.fetchval("SELECT count(*) FROM users WHERE email = $1", email)
+    assert users == 0
+    products = await test_pool.fetchval(
+        "SELECT count(*) FROM products WHERE name IN ('Fondo Valid', 'Fondo Invalid')"
+    )
+    assert products == 0
+
+
 async def test_non_admin_blocked_from_confirm(api_client):
     _app, client = api_client
 

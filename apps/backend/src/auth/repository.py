@@ -28,15 +28,26 @@ class UserRepository:
         return await self.pool.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
 
     async def create(
-        self, *, email: str, password_hash: str, role: str, created_by: str | None
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        role: str,
+        created_by: str | None,
+        first_name: str = "",
+        last_name: str = "",
+        conn: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        return await self.pool.fetchrow(
-            """INSERT INTO users (email, password_hash, role, created_by)
-               VALUES ($1, $2, $3, $4) RETURNING *""",
+        executor = conn if conn is not None else self.pool
+        return await executor.fetchrow(
+            """INSERT INTO users (email, password_hash, role, created_by, first_name, last_name)
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
             email,
             password_hash,
             role,
             created_by,
+            first_name,
+            last_name,
         )
 
     async def list_all(self) -> list[asyncpg.Record]:
