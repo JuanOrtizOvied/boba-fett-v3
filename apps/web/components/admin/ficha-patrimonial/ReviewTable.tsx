@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CatalogHistory from "./CatalogHistory";
 import { extractErrorDetail } from "./fichaUploadShared";
 import {
   ASSET_CLASS_LABELS,
   SOURCE_BADGES,
   applyResearchToRow,
+  applyCatalogSelectionToRow,
   applySeriesAdminSelection,
   blankEditableAdminRow,
   blankEditableSeriesRow,
@@ -25,12 +26,18 @@ import {
   type FichaLineStatus,
 } from "./reviewTableShared";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import { researchFichaLine } from "@/lib/fichaApi";
+import {
+  getCatalogProductAsSearchResult,
+  researchFichaLine,
+  searchCatalogProducts,
+} from "@/lib/fichaApi";
 import type {
   AssetAllocation,
   FichaApproveRequest,
   FichaEnrichedRow,
+  SearchResult,
 } from "@/lib/portfolio-types";
+import type { CatalogProductRow } from "@/lib/normalized-catalog-types";
 
 interface ReviewTableProps {
   rows: FichaEnrichedRow[];
@@ -377,6 +384,111 @@ function AdminTable({
 
 // -- Product card -------------------------------------------------------------
 
+/**
+ * Catalog product search for a review card. Lets the investments team correct a
+ * wrong or low-confidence fuzzy match by searching the catalog (name or code)
+ * and picking the right product; the choice is loaded into the card as a catalog
+ * match via `applyCatalogSelectionToRow`. `emphasize` highlights it when the
+ * current match is low-confidence (the case this solves).
+ */
+function CatalogProductPicker({
+  emphasize,
+  onSelect,
+}: {
+  emphasize: boolean;
+  onSelect: (result: SearchResult) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<CatalogProductRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      setOpen(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const rows = await searchCatalogProducts(q);
+        if (!active) return;
+        setResults(rows);
+        setOpen(true);
+      } catch {
+        if (active) setError("No se pudo buscar en el catálogo.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  const choose = async (code: string) => {
+    setError(null);
+    try {
+      const result = await getCatalogProductAsSearchResult(code);
+      onSelect(result);
+      setQuery("");
+      setResults([]);
+      setOpen(false);
+    } catch {
+      setError("No se pudo cargar el producto seleccionado.");
+    }
+  };
+
+  return (
+    <div className="mt-1 flex flex-col gap-1">
+      <label className="text-[11px] font-medium text-sabbi-neutral-600">
+        {emphasize
+          ? "¿Match incorrecto? Busca el producto correcto en el catálogo"
+          : "Buscar producto en el catálogo"}
+      </label>
+      <input
+        type="text"
+        aria-label="Buscar producto en el catálogo"
+        placeholder="Nombre o código (ej. BD-00352)"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className={inputClass + (emphasize ? " border-orange-300" : "")}
+      />
+      {loading && (
+        <span className="text-[11px] text-sabbi-neutral-400">Buscando…</span>
+      )}
+      {open && results.length > 0 && (
+        <ul className="max-h-40 overflow-y-auto rounded-lg border border-sabbi-neutral-200 bg-white text-xs">
+          {results.map((p) => (
+            <li key={p.code}>
+              <button
+                type="button"
+                onClick={() => void choose(p.code)}
+                className="flex w-full flex-col items-start gap-0.5 px-2 py-1.5 text-left hover:bg-sabbi-neutral-50"
+              >
+                <span className="font-medium text-sabbi-neutral-900">{p.name}</span>
+                <span className="text-sabbi-neutral-500">
+                  {p.code}
+                  {p.currency ? ` · ${p.currency}` : ""}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && !loading && results.length === 0 && query.trim().length >= 2 && (
+        <span className="text-[11px] text-sabbi-neutral-400">Sin resultados.</span>
+      )}
+      {error && <span className="text-[11px] text-red-600">{error}</span>}
+    </div>
+  );
+}
+
 function ProductCard({
   row,
   rawRow,
@@ -460,6 +572,11 @@ function ProductCard({
             <span aria-hidden="true">✨</span>
             {researching ? "Buscando…" : "Buscar con Claude"}
           </button>
+
+          <CatalogProductPicker
+            emphasize={confidence.level === "baja"}
+            onSelect={(result) => onUpdate(applyCatalogSelectionToRow(row, result))}
+          />
 
           {(row.enriched?.sources?.length ?? 0) > 0 && (
             <div className="mt-1 flex flex-col gap-1 rounded-lg border border-sabbi-neutral-200 bg-sabbi-neutral-50 p-2">

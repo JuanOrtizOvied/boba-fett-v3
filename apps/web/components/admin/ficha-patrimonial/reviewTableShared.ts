@@ -498,6 +498,44 @@ export function applyResearchToRow(
   return patch;
 }
 
+/**
+ * Replaces a row's enrichment with an admin-chosen catalog product (fetched by
+ * code as a `SearchResult`). Loads ALL its data into the card exactly as the
+ * initial catalog match would — product fields, series/administrator options and
+ * their editable tables — and marks the source as `catalog`. Used to correct a
+ * wrong or low-confidence fuzzy match: the investments team searches the catalog
+ * and picks the right product (e.g. BD-00352) instead of accepting a bad match
+ * or creating a duplicate. Preserves the admin's amount/currency and the row's
+ * identity/decision; resets the series/administrator picks so they are chosen
+ * for the correct product.
+ */
+export function applyCatalogSelectionToRow(
+  row: EditableFichaRow,
+  result: NonNullable<FichaEnrichedRow["enriched"]>,
+): Partial<EditableFichaRow> {
+  const seriesOptions = result.series_options ?? [];
+  return {
+    enriched: result,
+    source: "catalog",
+    name: result.name || row.name,
+    assetClass: result.asset_class?.length
+      ? normalizeAssetClass(result.asset_class[0].name)
+      : row.assetClass,
+    geographicFocus: result.geographic_focus ?? [],
+    underlying: result.underlying ?? [],
+    manager: result.manager ?? "",
+    commission: result.commission ?? "",
+    administrator: result.administrator ?? "",
+    liquidity: result.liquidity ?? "",
+    returnRateMin: result.return_rate ?? "",
+    seriesOptions,
+    selectedSeries: "",
+    selectedAdministrator: "",
+    editableSeries: toEditableSeriesRows(seriesOptions),
+    editableAdmins: toEditableAdminRows(seriesOptions),
+  };
+}
+
 /** Returns only the rows the admin approved — the ones a confirm will create. */
 export function selectApprovedRows(rows: EditableFichaRow[]): EditableFichaRow[] {
   return rows.filter((row) => row.lineStatus === "approved");

@@ -13,6 +13,7 @@ import type {
   LineStatus,
   SearchResult,
 } from "@/lib/portfolio-types";
+import type { CatalogProductRow } from "@/lib/normalized-catalog-types";
 
 const BASE = "/api/admin/ficha-patrimonial";
 
@@ -79,6 +80,25 @@ export async function researchFichaLine(name: string): Promise<SearchResult> {
     body: JSON.stringify({ name }),
   });
   return asJson<SearchResult>(res);
+}
+
+/** Search the normalized catalog by name or code (for the card's product picker).
+ * Reuses the admin catalog list endpoint (`code ILIKE OR name ILIKE`). */
+export async function searchCatalogProducts(
+  query: string,
+): Promise<CatalogProductRow[]> {
+  const url = `/api/admin/normalized-catalog/products?search=${encodeURIComponent(query)}`;
+  return asJson<CatalogProductRow[]>(await fetchWithAuth(url));
+}
+
+/** Load one catalog product (by code) as a SearchResult so the review card can
+ * replace a wrong/low-confidence match with the product the admin picked. */
+export async function getCatalogProductAsSearchResult(
+  code: string,
+): Promise<SearchResult> {
+  return asJson<SearchResult>(
+    await fetchWithAuth(`${BASE}/catalog-product/${encodeURIComponent(code)}`),
+  );
 }
 
 /**

@@ -8,8 +8,10 @@ import {
   deleteFicha,
   fichaToEnrichedRows,
   getFicha,
+  getCatalogProductAsSearchResult,
   listFichas,
   researchFichaLine,
+  searchCatalogProducts,
   updateLineStatus,
 } from "@/lib/fichaApi";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
@@ -33,6 +35,28 @@ describe("fichaApi", () => {
       "/api/admin/ficha-patrimonial/fichas",
     );
     expect(items[0].id).toBe(1);
+  });
+
+  test("searchCatalogProducts hits the normalized-catalog list endpoint", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(
+      okJson([{ code: "BD-00352", name: "KKR Infra" }]),
+    );
+    const rows = await searchCatalogProducts("KKR Infra");
+    expect(fetchWithAuth).toHaveBeenCalledWith(
+      "/api/admin/normalized-catalog/products?search=KKR%20Infra",
+    );
+    expect(rows[0].code).toBe("BD-00352");
+  });
+
+  test("getCatalogProductAsSearchResult fetches one product by code", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(
+      okJson({ name: "KKR Infra Fund", catalog_product_code: "BD-00352" }),
+    );
+    const result = await getCatalogProductAsSearchResult("BD-00352");
+    expect(fetchWithAuth).toHaveBeenCalledWith(
+      "/api/admin/ficha-patrimonial/catalog-product/BD-00352",
+    );
+    expect(result.catalog_product_code).toBe("BD-00352");
   });
 
   test("listFichas with a status filter", async () => {
