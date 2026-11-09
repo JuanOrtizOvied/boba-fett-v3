@@ -643,6 +643,24 @@ def _classify_match(
     return level, matched
 
 
+def _strip_unconfident_catalog_match(result: SearchResult) -> None:
+    """Drop the catalog PRODUCT IDENTITY from a fuzzy hit the classifier did not
+    accept as a real match (`catalog_matched` False, e.g. KKR Infra ~0.14 fuzzy-
+    matching an unrelated product). The product-level field hints stay, but the
+    code, series_options and catalog-only signals are cleared so the card shows
+    no confident catalog match and the admin picks the right product with the
+    catalog picker. This also stops the approve flow from curating the wrong
+    catalog product (the payload carries `catalog_product_code`)."""
+    if result.catalog_matched or not result.catalog_product_code:
+        return
+    result.catalog_product_code = ""
+    result.series_options = []
+    result.ticker_isin = ""
+    result.investment_horizon = ""
+    result.data_asof = ""
+    result.similarity = 0.0
+
+
 # Fields that may carry a web self-reported confidence: the product-level string
 # fields the web step fills, plus the always-merged list fields.
 _CONFIDENCE_FIELDS = PRODUCT_FIELD_NAMES + ("asset_class", "geographic_focus", "underlying")
@@ -721,4 +739,5 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
     result.confidence, result.catalog_matched = _classify_match(
         result.similarity, has_data, web_verified=web_verified
     )
+    _strip_unconfident_catalog_match(result)
     return result

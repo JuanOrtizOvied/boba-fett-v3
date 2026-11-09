@@ -60,6 +60,17 @@ so the card renders identically (series picker, fields, "es un producto existent
   `confidence.level === "baja"`. Test: searching + selecting loads the correct product's
   name/manager into the card. Web suite 191 passed; tsc + eslint clean.
 
+- [x] **T-4 — Backend: don't attach an unconfident catalog product (root cause).** DONE. INLINE (TDD).
+  Decision: the surgical, low-regression option — keep retrieval as-is, but when `_classify_match`
+  returns `catalog_matched=False` (similarity < 0.4, e.g. KKR Infra ~0.14), `cascade_search_v2`
+  now calls `_strip_unconfident_catalog_match` to clear `catalog_product_code`, `series_options`,
+  `ticker_isin`, `investment_horizon`, `data_asof`, `similarity`. Field hints stay. Fixes the
+  misleading "wrong product with its series" card AND stops the approve flow from curating the
+  wrong catalog product (payload carries `catalog_product_code`). Test
+  `test_v2_weak_match_strips_catalog_identity`; `_canned_product()` fixture now sets
+  `match_similarity=0.73` (a real strong match). Backend 391 passed; ruff clean. Frontend already
+  handles empty code/series (button keys off `catalog_matched`); no web change needed.
+
 ## Acceptance criteria
 - On any review card the admin can search the catalog by name or code and select the correct
   product; all its data (fields + series/administrators + code) loads into the card, and it

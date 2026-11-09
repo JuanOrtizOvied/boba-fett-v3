@@ -27,6 +27,9 @@ def _canned_product() -> CatalogProductRow:
         name="Latam Credit Opportunities Fund",
         manager="Acme Manager",
         currency="USD",
+        # A real (strong) fuzzy match: above the 0.4 'matched' floor, so the
+        # catalog identity is kept (not stripped by _strip_unconfident_catalog_match).
+        match_similarity=0.73,
         asset_class=[AssetAllocation(name="mercados_privados", percentage=100)],
         geographic_focus=[AssetAllocation(name="LatAm", percentage=100)],
         underlying=[AssetAllocation(name="Private Debt", percentage=100)],
@@ -135,6 +138,53 @@ async def test_classify_match_threshold_table():
     assert classify(0.136, True) == ("baja", False)  # the live-probe false positive
     assert classify(0.0, True) == ("baja", False)  # no catalog hit, but web/claude data
     assert classify(0.0, False) == ("sin_datos", False)
+
+
+async def test_v2_weak_match_strips_catalog_identity(monkeypatch):
+    """A fuzzy catalog hit too weak to be accepted (`catalog_matched` False) must
+    NOT be presented as a specific catalog product: its code, series_options and
+    catalog-only signals are dropped so the card shows no confident match and the
+    admin uses the catalog picker. Product-level field hints are kept."""
+    from db.models import CatalogSeriesOption, SearchResult
+
+    weak = SearchResult(
+        name="FM Real Estate & Infrastructure",
+        currency="USD",
+        catalog_product_code="BD-00099",
+        series_options=[CatalogSeriesOption(series="A")],
+        ticker_isin="US9",
+        investment_horizon="Largo plazo",
+        data_asof="2026-01-01",
+        similarity=0.136,  # the live-probe false positive
+    )
+
+    async def weak_catalog(query, pool):
+        return weak
+
+    async def no_claude(query):
+        return {}
+
+    async def web_no_sources(query):
+        return {}, []
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", weak_catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", web_no_sources)
+
+    result = await search_mod.cascade_search_v2("kkr infra", object())
+
+    assert result is not None
+    assert result.catalog_matched is False
+    assert result.confidence == "baja"
+    # The weak/wrong product is no longer attached as a specific catalog product.
+    assert result.catalog_product_code == ""
+    assert result.series_options == []
+    assert result.ticker_isin == ""
+    assert result.investment_horizon == ""
+    assert result.data_asof == ""
+    assert result.similarity == 0.0
+    # Field hints are preserved for the admin to see.
+    assert result.name == "FM Real Estate & Infrastructure"
 
 
 async def test_v2_never_fills_commercial_fields_from_claude(monkeypatch):
