@@ -561,6 +561,28 @@ def _series_options(product) -> list[CatalogSeriesOption]:
     ]
 
 
+def catalog_result_from_product(product) -> SearchResult:
+    """Map a normalized-catalog product to the ficha `SearchResult` shape (product
+    level fields + `series_options`). Shared by the fuzzy L1 match and the admin's
+    explicit catalog-product pick."""
+    result = SearchResult()
+    result.catalog_product_code = product.code
+    result.series_options = _series_options(product)
+    result.ticker_isin = product.ticker_isin
+    result.investment_horizon = product.investment_horizon
+    result.similarity = product.match_similarity or 0.0
+    result.data_asof = product.created_at.date().isoformat() if product.created_at else ""
+    product_data = {
+        "name": product.name,
+        "currency": product.currency,
+        "manager": product.manager,
+        "asset_class": product.asset_class,
+        "geographic_focus": product.geographic_focus,
+        "underlying": product.underlying,
+    }
+    return _merge_fields(result, product_data, "catalog", fields=PRODUCT_FIELD_NAMES)
+
+
 async def _search_catalog_v2(query: str, pool: asyncpg.Pool) -> SearchResult:
     """L1 for ficha V2 — best fuzzy match in the normalized catalog. Fills
     only product-level fields (plus asset_class/geographic_focus/underlying)
@@ -568,24 +590,9 @@ async def _search_catalog_v2(query: str, pool: asyncpg.Pool) -> SearchResult:
     to resolve by picking a series/administrator."""
     repo = NormalizedCatalogRepository(pool)
     match = await repo.search_for_enrichment(query)
-    result = SearchResult()
     if match is None:
-        return result
-    result.catalog_product_code = match.code
-    result.series_options = _series_options(match)
-    result.ticker_isin = match.ticker_isin
-    result.investment_horizon = match.investment_horizon
-    result.similarity = match.match_similarity or 0.0
-    result.data_asof = match.created_at.date().isoformat() if match.created_at else ""
-    product_data = {
-        "name": match.name,
-        "currency": match.currency,
-        "manager": match.manager,
-        "asset_class": match.asset_class,
-        "geographic_focus": match.geographic_focus,
-        "underlying": match.underlying,
-    }
-    return _merge_fields(result, product_data, "catalog", fields=PRODUCT_FIELD_NAMES)
+        return SearchResult()
+    return catalog_result_from_product(match)
 
 
 # Catalog-match similarity below which confidence is "baja" (a weak fuzzy hit).
@@ -634,6 +641,24 @@ def _classify_match(
     if web_verified and has_data:
         level = _raise_confidence(level, "media")
     return level, matched
+
+
+def _strip_unconfident_catalog_match(result: SearchResult) -> None:
+    """Drop the catalog PRODUCT IDENTITY from a fuzzy hit the classifier did not
+    accept as a real match (`catalog_matched` False, e.g. KKR Infra ~0.14 fuzzy-
+    matching an unrelated product). The product-level field hints stay, but the
+    code, series_options and catalog-only signals are cleared so the card shows
+    no confident catalog match and the admin picks the right product with the
+    catalog picker. This also stops the approve flow from curating the wrong
+    catalog product (the payload carries `catalog_product_code`)."""
+    if result.catalog_matched or not result.catalog_product_code:
+        return
+    result.catalog_product_code = ""
+    result.series_options = []
+    result.ticker_isin = ""
+    result.investment_horizon = ""
+    result.data_asof = ""
+    result.similarity = 0.0
 
 
 # Fields that may carry a web self-reported confidence: the product-level string
@@ -714,4 +739,5 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
     result.confidence, result.catalog_matched = _classify_match(
         result.similarity, has_data, web_verified=web_verified
     )
+    _strip_unconfident_catalog_match(result)
     return result

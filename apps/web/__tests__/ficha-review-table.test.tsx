@@ -3,8 +3,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ReviewTable from "@/components/admin/ficha-patrimonial/ReviewTable";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import { researchFichaLine } from "@/lib/fichaApi";
-import type { FichaEnrichedRow } from "@/lib/portfolio-types";
+import {
+  getCatalogProductAsSearchResult,
+  researchFichaLine,
+  searchCatalogProducts,
+} from "@/lib/fichaApi";
+import type { FichaEnrichedRow, SearchResult } from "@/lib/portfolio-types";
+import type { CatalogProductRow } from "@/lib/normalized-catalog-types";
 
 vi.mock("@/lib/fetchWithAuth", () => ({
   fetchWithAuth: vi.fn(),
@@ -13,6 +18,8 @@ vi.mock("@/lib/fetchWithAuth", () => ({
 vi.mock("@/lib/fichaApi", () => ({
   researchFichaLine: vi.fn(),
   getCatalogHistory: vi.fn(),
+  searchCatalogProducts: vi.fn(),
+  getCatalogProductAsSearchResult: vi.fn(),
 }));
 
 const MAPPED_ROW: FichaEnrichedRow = {
@@ -552,6 +559,69 @@ describe("ReviewTable confirm gating", () => {
     const [, init] = vi.mocked(fetchWithAuth).mock.calls[0];
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.products).toHaveLength(1);
+  });
+});
+
+describe("ReviewTable catalog product picker", () => {
+  test("searching and selecting a catalog product loads its data into the card", async () => {
+    vi.mocked(searchCatalogProducts).mockResolvedValue([
+      { code: "BD-00352", name: "KKR Infra Global", currency: "USD" },
+    ] as unknown as CatalogProductRow[]);
+    vi.mocked(getCatalogProductAsSearchResult).mockResolvedValue({
+      name: "KKR Infra Global Fund",
+      asset_class: [{ name: "Mercados Privados", percentage: 100 }],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      currency: "USD",
+      administrator: "",
+      manager: "KKR",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      catalog_product_code: "BD-00352",
+      series_options: [],
+      confidence: "alta",
+      catalog_matched: true,
+      primary_source: "catalog",
+      provenance: {},
+    } as unknown as SearchResult);
+
+    // A low-confidence WRONG match: declared "KKR Infra" fuzzy-matched another
+    // product. The admin corrects it to BD-00352.
+    const row: FichaEnrichedRow = {
+      ...MAPPED_ROW,
+      raw_name: "KKR Infra",
+      enriched: {
+        ...MAPPED_ROW.enriched!,
+        name: "FM Real Estate & Infrastructure",
+        confidence: "baja",
+        catalog_product_code: "BD-00099",
+      },
+    };
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[row]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    // The card shows the wrong match first.
+    expect(screen.getByLabelText("Nombre del producto")).toHaveValue(
+      "FM Real Estate & Infrastructure",
+    );
+
+    await user.type(
+      screen.getByLabelText("Buscar producto en el catálogo"),
+      "KKR",
+    );
+    const option = await screen.findByText("KKR Infra Global");
+    await user.click(option);
+
+    expect(getCatalogProductAsSearchResult).toHaveBeenCalledWith("BD-00352");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Nombre del producto")).toHaveValue(
+        "KKR Infra Global Fund",
+      ),
+    );
+    expect(screen.getByLabelText("Gestor")).toHaveValue("KKR");
   });
 });
 

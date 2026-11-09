@@ -606,3 +606,78 @@ def test_research_endpoint_requires_admin(app_client):
     response = client.post("/admin/ficha-patrimonial/research", json={"name": "x"})
 
     assert response.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# GET /admin/ficha-patrimonial/catalog-product/{code}
+# ---------------------------------------------------------------------------
+
+
+def _fake_catalog_product():
+    from db.catalog_normalized import (
+        CatalogProductRow,
+        CatalogProductSeries,
+        CatalogProductSeriesAdmin,
+    )
+
+    admin = CatalogProductSeriesAdmin(
+        id=1,
+        product_code="BD-00352",
+        series="A",
+        administrator="Sabbi AGF",
+        custody_fee=0.1,
+        buy_commission=0.5,
+        billing_currency="USD",
+    )
+    series = CatalogProductSeries(
+        id=1,
+        product_code="BD-00352",
+        series="A",
+        management_fee_ter=1.2,
+        administrators=[admin],
+    )
+    return CatalogProductRow(
+        id=1,
+        code="BD-00352",
+        name="Fondo Prueba",
+        ticker_isin="CL0001",
+        manager="Gestora X",
+        currency="USD",
+        investment_horizon="largo",
+        series=[series],
+    )
+
+
+def test_get_ficha_catalog_product_returns_search_result(app_client):
+    app, client = _admin_client(app_client)
+    app.state.normalized_catalog_repo.get_product_detail.return_value = _fake_catalog_product()
+
+    response = client.get("/admin/ficha-patrimonial/catalog-product/BD-00352")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["catalog_product_code"] == "BD-00352"
+    assert body["confidence"] == "alta"
+    assert body["catalog_matched"] is True
+    assert body["similarity"] == 1.0
+    assert body["name"] == "Fondo Prueba"
+    assert len(body["series_options"]) == 1
+    assert body["series_options"][0]["series"] == "A"
+
+
+def test_get_ficha_catalog_product_404_when_missing(app_client):
+    app, client = _admin_client(app_client)
+    app.state.normalized_catalog_repo.get_product_detail.return_value = None
+
+    response = client.get("/admin/ficha-patrimonial/catalog-product/NOPE")
+
+    assert response.status_code == 404
+
+
+def test_non_admin_blocked_from_catalog_product(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.get("/admin/ficha-patrimonial/catalog-product/BD-00352")
+
+    assert response.status_code == 403

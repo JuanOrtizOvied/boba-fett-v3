@@ -15,6 +15,7 @@ import {
   formatPlainNumber,
   formatSimilarityPercent,
   applyResearchToRow,
+  applyCatalogSelectionToRow,
   resolveConfidence,
   hasUnmappedRow,
   resolveRowSource,
@@ -328,6 +329,34 @@ describe("applySeriesAdminSelection", () => {
     expect(patch.selectedSeries).toBe("ZZ");
     expect(patch.commission).toBeUndefined();
     expect(patch.returnRateMin).toBeUndefined();
+  });
+});
+
+describe("applyCatalogSelectionToRow", () => {
+  test("loads a chosen catalog product's data into the row as a catalog match", () => {
+    // A row that currently has no match (would show "create new").
+    const row = toEditableRow(baseRow({ enriched: null }));
+    const patch = applyCatalogSelectionToRow(row, v2Enriched());
+
+    expect(patch.source).toBe("catalog");
+    expect(patch.name).toBe("Latam Credit Opportunities Fund");
+    expect(patch.manager).toBe("Acme Manager");
+    expect(patch.assetClass).toBe("mercados_privados");
+    expect(patch.seriesOptions).toHaveLength(1);
+    expect(patch.editableSeries?.[0].series).toBe("A");
+    expect(patch.editableSeries?.[0].ter).toBe("3.84");
+    expect(patch.editableAdmins?.[0].administrator).toBe("Admin Co");
+    // Series/admin picks reset so the admin re-selects for the correct product.
+    expect(patch.selectedSeries).toBe("");
+    expect(patch.selectedAdministrator).toBe("");
+    expect(patch.enriched?.catalog_product_code).toBe("BD-00001");
+  });
+
+  test("does not overwrite amount/currency (admin/Excel values are preserved)", () => {
+    const row = toEditableRow(baseRow({ raw_amount: 5000, raw_currency: "PEN" }));
+    const patch = applyCatalogSelectionToRow(row, v2Enriched());
+    expect(patch.amount).toBeUndefined();
+    expect(patch.currency).toBeUndefined();
   });
 });
 

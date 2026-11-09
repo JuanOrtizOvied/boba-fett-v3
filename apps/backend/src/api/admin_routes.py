@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
-from agent.search import cascade_search_v2, research_web_v2
+from agent.search import cascade_search_v2, catalog_result_from_product, research_web_v2
 from api.chat_routes import _graph_config, _serialize_message, _state_messages
 from auth.dependencies import require_admin
 from auth.models import UserCreate
@@ -800,6 +800,26 @@ async def research_ficha_line(data: FichaResearchRequest) -> SearchResult:
     review card's "Volver a investigar"). Returns a web-grounded SearchResult
     (product fields + cited sources), independent of the catalog."""
     return await research_web_v2(data.name.strip())
+
+
+@router.get("/ficha-patrimonial/catalog-product/{code}")
+async def get_ficha_catalog_product(
+    code: str,
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> SearchResult:
+    """Return a chosen catalog product (by code) as a SearchResult, so the ficha
+    review card can replace a wrong/low-confidence enrichment with the correct
+    product the investments team picked. Confidence is 'alta' — an explicit
+    admin selection, not a fuzzy match."""
+    product = await repo.get_product_detail(code)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Producto '{code}' no encontrado")
+    result = catalog_result_from_product(product)
+    result.confidence = "alta"
+    result.catalog_matched = True
+    result.similarity = 1.0
+    result.primary_source = "catalog"
+    return result
 
 
 @router.post("/ficha-patrimonial/confirm", status_code=201)
