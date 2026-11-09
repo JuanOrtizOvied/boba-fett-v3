@@ -695,6 +695,15 @@ export default function ReviewTable({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [researchingIndex, setResearchingIndex] = useState<number | null>(null);
+  // When the ficha has no associated user, the admin creates one here
+  // (email + nombres + apellidos + contraseña) and the products are created
+  // under it. See `confirm_ficha_patrimonial` (backend) `new_client`.
+  const [newClient, setNewClient] = useState({
+    email: "",
+    first_name: "",
+    last_name: "",
+    password: "",
+  });
 
   const updateRow = (index: number, patch: Partial<EditableFichaRow>) => {
     setEditableRows((prev) =>
@@ -730,17 +739,41 @@ export default function ReviewTable({
   };
 
   const approvedRows = selectApprovedRows(editableRows);
-  const confirmDisabled = isSubmitting || approvedRows.length === 0;
+  const hasUser = userId.trim().length > 0;
+  const newClientComplete =
+    newClient.email.trim().length > 0 &&
+    newClient.first_name.trim().length > 0 &&
+    newClient.last_name.trim().length > 0 &&
+    newClient.password.length >= 8;
+  const confirmDisabled =
+    isSubmitting ||
+    approvedRows.length === 0 ||
+    (!hasUser && !newClientComplete);
 
   const handleConfirm = async () => {
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
       const products = buildConfirmProducts(selectApprovedRows(editableRows));
+      // Existing user → confirm under it. No user → create the client account
+      // from the form (`new_client`); the backend creates user + products
+      // atomically. 409 means the email is already taken.
+      const payload = hasUser
+        ? { user_id: userId, products }
+        : {
+            user_id: "",
+            new_client: {
+              email: newClient.email.trim(),
+              first_name: newClient.first_name.trim(),
+              last_name: newClient.last_name.trim(),
+              password: newClient.password,
+            },
+            products,
+          };
       const res = await fetchWithAuth("/api/admin/ficha-patrimonial/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, products }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -784,6 +817,68 @@ export default function ReviewTable({
       </div>
 
       {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+
+      {!hasUser && (
+        <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <p className="text-sm text-amber-700">
+            Esta ficha no tiene un cliente asociado. Crea la cuenta del cliente
+            para poder confirmar la importación.
+          </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs text-sabbi-neutral-700">
+              Email
+              <input
+                type="email"
+                aria-label="Email del cliente"
+                value={newClient.email}
+                onChange={(e) =>
+                  setNewClient((c) => ({ ...c, email: e.target.value }))
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-sabbi-neutral-700">
+              Contraseña
+              <input
+                type="password"
+                aria-label="Contraseña del cliente"
+                value={newClient.password}
+                onChange={(e) =>
+                  setNewClient((c) => ({ ...c, password: e.target.value }))
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-sabbi-neutral-700">
+              Nombres
+              <input
+                type="text"
+                aria-label="Nombres del cliente"
+                value={newClient.first_name}
+                onChange={(e) =>
+                  setNewClient((c) => ({ ...c, first_name: e.target.value }))
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-sabbi-neutral-700">
+              Apellidos
+              <input
+                type="text"
+                aria-label="Apellidos del cliente"
+                value={newClient.last_name}
+                onChange={(e) =>
+                  setNewClient((c) => ({ ...c, last_name: e.target.value }))
+                }
+                className={inputClass}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-sabbi-neutral-500">
+            La contraseña debe tener al menos 8 caracteres.
+          </p>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-sabbi-neutral-600">

@@ -475,6 +475,22 @@ describe("ReviewTable confirm gating", () => {
     expect(confirmButton).toBeEnabled();
   });
 
+  test("keeps Confirmar disabled and warns when the ficha has no associated user", async () => {
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="" onConfirmed={vi.fn()} />);
+    const confirmButton = screen.getByRole("button", { name: /confirmar/i });
+
+    // Approve the (mapped) line so the ONLY remaining blocker is the user.
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+
+    expect(confirmButton).toBeDisabled();
+    expect(
+      screen.getByText(/no tiene un cliente asociado/i),
+    ).toBeInTheDocument();
+  });
+
   test("'Buscar con Claude' is an enabled web-research action", () => {
     render(
       <ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />,
@@ -574,6 +590,69 @@ describe("ReviewTable confirm submission", () => {
 
     expect(await screen.findByRole("button", { name: /confirmar/i })).toBeInTheDocument();
     expect(onConfirmed).toHaveBeenCalledWith(1);
+  });
+
+  test("creates the client account: sends new_client when the ficha has no user", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ created_count: 1, product_ids: ["p1"] }),
+    } as Response);
+
+    const onConfirmed = vi.fn();
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="" onConfirmed={onConfirmed} />);
+
+    // Approve a line, then fill the new-client form.
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+    const confirmButton = screen.getByRole("button", { name: /confirmar/i });
+    expect(confirmButton).toBeDisabled(); // form still empty
+
+    await user.type(screen.getByLabelText("Email del cliente"), "nuevo@cliente.com");
+    await user.type(screen.getByLabelText("Nombres del cliente"), "Arturo");
+    await user.type(screen.getByLabelText("Apellidos del cliente"), "Valencia");
+    await user.type(screen.getByLabelText("Contraseña del cliente"), "superseguro8");
+
+    expect(confirmButton).toBeEnabled();
+    await user.click(confirmButton);
+
+    const [url, init] = vi.mocked(fetchWithAuth).mock.calls[0];
+    expect(url).toBe("/api/admin/ficha-patrimonial/confirm");
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.new_client).toEqual({
+      email: "nuevo@cliente.com",
+      first_name: "Arturo",
+      last_name: "Valencia",
+      password: "superseguro8",
+    });
+    expect(body.products).toHaveLength(1);
+    expect(onConfirmed).toHaveBeenCalledWith(1);
+  });
+
+  test("shows an email-taken message when the backend returns 409", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ detail: "Ya existe un usuario con ese email" }),
+    } as Response);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="" onConfirmed={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+    await user.type(screen.getByLabelText("Email del cliente"), "tomado@cliente.com");
+    await user.type(screen.getByLabelText("Nombres del cliente"), "Arturo");
+    await user.type(screen.getByLabelText("Apellidos del cliente"), "Valencia");
+    await user.type(screen.getByLabelText("Contraseña del cliente"), "superseguro8");
+    await user.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    expect(
+      await screen.findByText(/ya existe un usuario con ese email/i),
+    ).toBeInTheDocument();
   });
 
   test("keeps the review table populated and editable when confirm fails", async () => {

@@ -226,10 +226,20 @@ class FichaConfirmRow(BaseModel):
     catalog_product_id: int | None = None
 
 
+class NewClientInput(BaseModel):
+    """Account to create (role `user`) when the ficha has no matching user."""
+
+    email: str
+    first_name: str
+    last_name: str
+    password: str = Field(min_length=8)
+
+
 class FichaConfirmRequest(BaseModel):
     """Request body for `POST /admin/ficha-patrimonial/confirm`."""
 
-    user_id: str
+    user_id: str = ""
+    new_client: NewClientInput | None = None
     products: list[FichaConfirmRow]
 
 

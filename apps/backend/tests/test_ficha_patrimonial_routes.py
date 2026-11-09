@@ -422,6 +422,55 @@ def test_mark_ficha_confirmed(app_client):
     app.state.ficha_repo.mark_confirmed.assert_awaited_once_with(9)
 
 
+def test_confirm_empty_user_id_returns_400_without_db_call(app_client):
+    """A ficha with no associated user sends `user_id: ""`. The endpoint must
+    reject it with a 400 BEFORE querying the UUID `users.id` column, which
+    would otherwise raise and surface as a 500."""
+    app, client = _admin_client(app_client)
+
+    response = client.post(
+        "/admin/ficha-patrimonial/confirm",
+        json={"user_id": "", "products": []},
+    )
+
+    assert response.status_code == 400
+    app.state.user_repo.get_by_id.assert_not_awaited()
+
+
+def test_confirm_whitespace_user_id_returns_400(app_client):
+    app, client = _admin_client(app_client)
+
+    response = client.post(
+        "/admin/ficha-patrimonial/confirm",
+        json={"user_id": "   ", "products": []},
+    )
+
+    assert response.status_code == 400
+    app.state.user_repo.get_by_id.assert_not_awaited()
+
+
+def test_confirm_new_client_with_existing_email_returns_409(app_client):
+    app, client = _admin_client(app_client)
+    app.state.user_repo.get_by_email.return_value = {"id": "existing"}
+
+    response = client.post(
+        "/admin/ficha-patrimonial/confirm",
+        json={
+            "new_client": {
+                "email": "dup@sabbi.com",
+                "first_name": "Ana",
+                "last_name": "Perez",
+                "password": "supersecret1",
+            },
+            "products": [],
+        },
+    )
+
+    assert response.status_code == 409
+    app.state.user_repo.create.assert_not_awaited()
+    app.state.user_repo.get_by_id.assert_not_awaited()
+
+
 def test_delete_ficha(app_client):
     app, client = _admin_client(app_client)
     app.state.ficha_repo.delete.return_value = True
