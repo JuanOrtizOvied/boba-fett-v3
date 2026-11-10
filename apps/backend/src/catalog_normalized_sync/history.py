@@ -122,18 +122,21 @@ async def store_events(
     *,
     run_id: uuid.UUID,
     trigger: str,
+    changed_by: str | None = None,
 ) -> None:
     """Insert `events` with the run's id and trigger. `occurred_at` is left to its
     default, `now()`, which inside a transaction is the transaction's start, so
-    every event of the run shares one instant."""
+    every event of the run shares one instant. `changed_by` is who saved the
+    workbook the run read (an email, `author.UNKNOWN_AUTHOR`, or None when there is
+    no data) and is the same for every event of the run."""
     if not events:
         return
     if trigger not in TRIGGERS:
         raise ValueError(f"unknown sync trigger: {trigger!r}")
     await conn.executemany(
         "INSERT INTO normalized_sync_event "
-        "(run_id, trigger, action, level, product_code, series, administrator, changes) "
-        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)",
+        "(run_id, trigger, action, level, product_code, series, administrator, changes, "
+        "changed_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)",
         [
             (
                 run_id,
@@ -144,6 +147,7 @@ async def store_events(
                 event.series,
                 event.administrator,
                 json.dumps(list(event.changes)),
+                changed_by,
             )
             for event in events
         ],

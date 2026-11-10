@@ -83,11 +83,13 @@ async def apply_changeset(
     *,
     run_id: uuid.UUID | None = None,
     trigger: str = "manual",
+    changed_by: str | None = None,
 ) -> None:
     """Write `changeset` in a single transaction, and with it one history event per
     change (`catalog_normalized_sync.history`), so either everything lands or
     nothing does. `trigger` says what started the run; `run_id` groups its events
-    and is generated when not given."""
+    and is generated when not given; `changed_by` is who saved the workbook the run
+    read (see `catalog_normalized_sync.author`), stored on every event."""
     run_id = run_id or uuid.uuid4()
     async with pool.acquire() as conn, conn.transaction():
         for restore in changeset.restores:
@@ -106,4 +108,10 @@ async def apply_changeset(
         for delete in changeset.deletes:
             sql, args = _flag_statement(delete.level, delete.key, deleted=True)
             await conn.execute(f"{sql} AND NOT is_deleted", *args)
-        await store_events(conn, events_from_changeset(changeset), run_id=run_id, trigger=trigger)
+        await store_events(
+            conn,
+            events_from_changeset(changeset),
+            run_id=run_id,
+            trigger=trigger,
+            changed_by=changed_by,
+        )
