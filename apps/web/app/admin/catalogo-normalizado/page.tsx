@@ -10,6 +10,8 @@ import { CatalogSearch } from "@/components/admin/catalog/CatalogSearch";
 import ProductFormModal from "@/components/admin/catalog-normalized/ProductFormModal";
 import SeriesFormModal from "@/components/admin/catalog-normalized/SeriesFormModal";
 import AdminFormModal from "@/components/admin/catalog-normalized/AdminFormModal";
+import ChangesPanel from "@/components/admin/catalog-normalized/ChangesPanel";
+import ProductHistory from "@/components/admin/catalog-normalized/ProductHistory";
 import {
   ConfirmDeleteDialog,
   formatFraction,
@@ -31,6 +33,15 @@ import {
   seriesName,
   type ObservationScope,
 } from "@/lib/normalizedCatalogObservations";
+import {
+  changeCountLabel,
+  formatDay,
+  parseDaySummary,
+  type DayProduct,
+  type DaySummary,
+} from "@/lib/normalized-sync-events";
+
+const SUMMARY_ERROR = "No se pudieron cargar los cambios";
 
 const BASE = "/api/admin/normalized-catalog";
 
@@ -173,6 +184,48 @@ function NormalizedCatalogContent() {
     void loadObservations();
   }, [loadObservations]);
 
+  // Changes the sync made on one Lima day. `null` is "today": the backend says
+  // which day that is. A failed load only marks the panel; the catalog works.
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [summary, setSummary] = useState<DaySummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryAttempt, setSummaryAttempt] = useState(0);
+  const [onlyChanged, setOnlyChanged] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSummaryLoading(true);
+    setSummaryError(null);
+    (async () => {
+      const qs = selectedDate
+        ? `?${new URLSearchParams({ date: selectedDate })}`
+        : "";
+      const res = await fetchWithAuth(`${BASE}/changes/summary${qs}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(await readApiError(res, SUMMARY_ERROR));
+      const parsed = parseDaySummary(await res.json());
+      if (!parsed) throw new Error(SUMMARY_ERROR);
+      if (!controller.signal.aborted) setSummary(parsed);
+    })()
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof Error && err.name === "AbortError") return;
+        setSummary(null);
+        setSummaryError(err instanceof Error ? err.message : SUMMARY_ERROR);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSummaryLoading(false);
+      });
+    return () => controller.abort();
+  }, [selectedDate, summaryAttempt]);
+
+  const changesByCode = new Map<string, DayProduct>(
+    (summary?.products ?? []).map((p) => [p.product_code, p]),
+  );
+  const filterActive = onlyChanged && summary !== null;
+
   const refetchDetail = useCallback(async () => {
     if (selectedCode) await loadDetail(selectedCode);
     await loadObservations();
@@ -242,12 +295,27 @@ function NormalizedCatalogContent() {
   };
 
   const isSearchMode = debouncedSearch.trim() !== "";
+  const visibleProducts = filterActive
+    ? (products ?? []).filter((p) => changesByCode.has(p.code))
+    : (products ?? []);
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-sabbi-neutral-900">
         Catálogo normalizado
       </h1>
+
+      <ChangesPanel
+        summary={summary}
+        loading={summaryLoading}
+        error={summaryError}
+        selectedDate={selectedDate}
+        onDateChange={setSelectedDate}
+        filterOn={onlyChanged}
+        onToggleFilter={() => setOnlyChanged((v) => !v)}
+        onSelectProduct={setSelectedCode}
+        onRetry={() => setSummaryAttempt((n) => n + 1)}
+      />
 
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
         {/* -- Master: product list ------------------------------------ */}
@@ -267,19 +335,28 @@ function NormalizedCatalogContent() {
 
           {listError && <p className="text-sm text-red-600">{listError}</p>}
 
+          {filterActive && summary && (
+            <p className="text-xs text-sabbi-neutral-600">
+              Solo productos con cambios del {formatDay(summary.date)}.
+            </p>
+          )}
+
           {products === null && !listError ? (
             <p className="text-sm text-sabbi-neutral-600">Cargando…</p>
-          ) : products && products.length === 0 ? (
+          ) : products && visibleProducts.length === 0 ? (
             <p className="text-sm text-sabbi-neutral-600">
-              {isSearchMode
-                ? "No se encontraron productos."
-                : "No hay productos en el catálogo normalizado."}
+              {filterActive
+                ? "Ningún producto con cambios coincide."
+                : isSearchMode
+                  ? "No se encontraron productos."
+                  : "No hay productos en el catálogo normalizado."}
             </p>
           ) : (
             <ul className="max-h-[70vh] divide-y divide-sabbi-neutral-200 overflow-auto rounded-xl border border-sabbi-neutral-200 bg-white">
-              {(products ?? []).map((p) => {
+              {visibleProducts.map((p) => {
                 const active = p.code === selectedCode;
                 const observationCount = observations.get(p.code)?.length ?? 0;
+                const changeCount = changesByCode.get(p.code)?.events ?? 0;
                 return (
                   <li key={p.code}>
                     <button
@@ -295,6 +372,11 @@ function NormalizedCatalogContent() {
                         {observationCount > 0 && (
                           <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap text-amber-800 uppercase">
                             {observationCountLabel(observationCount)}
+                          </span>
+                        )}
+                        {changeCount > 0 && (
+                          <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap text-sky-800 uppercase">
+                            {changeCountLabel(changeCount)}
                           </span>
                         )}
                       </span>
@@ -322,6 +404,7 @@ function NormalizedCatalogContent() {
             <ProductDetail
               product={detail}
               observations={observations.get(detail.code) ?? []}
+              historyDay={filterActive && summary ? summary.date : null}
               onEditProduct={() => setModal({ kind: "product", product: detail })}
               onDeleteProduct={() =>
                 setDeleteTarget({ kind: "product", code: detail.code, name: detail.name })
@@ -471,6 +554,7 @@ const linkButtonClass =
 function ProductDetail({
   product,
   observations,
+  historyDay,
   onEditProduct,
   onDeleteProduct,
   onAddSeries,
@@ -482,6 +566,9 @@ function ProductDetail({
 }: {
   product: CatalogProductRow;
   observations: CatalogObservation[];
+  /** Lima day whose events the history highlights (the filter of changed
+   * products is on), or null. */
+  historyDay: string | null;
   onEditProduct: () => void;
   onDeleteProduct: () => void;
   onAddSeries: () => void;
@@ -723,6 +810,8 @@ function ProductDetail({
           );
         })}
       </div>
+
+      <ProductHistory key={product.code} code={product.code} highlightDay={historyDay} />
     </div>
   );
 }

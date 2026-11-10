@@ -68,8 +68,11 @@ async def preview(pool: asyncpg.Pool, data: bytes) -> tuple[ParsedWorkbook, Chan
     return parsed, diff_workbook(snapshot, parsed)
 
 
-async def _run_locked(pool: asyncpg.Pool, data: bytes, *, force: bool) -> RunReport:
-    """One pass over `data`. The caller MUST hold the advisory lock."""
+async def _run_locked(
+    pool: asyncpg.Pool, data: bytes, *, force: bool, trigger: str = "manual"
+) -> RunReport:
+    """One pass over `data`. The caller MUST hold the advisory lock. `trigger` is
+    what started the run; it is stored with the history events of its changes."""
     content_hash = _content_hash(data)
     if not force and await _get_last_hash(pool) == content_hash:
         return RunReport(content_hash=content_hash, skipped=True)
@@ -79,16 +82,18 @@ async def _run_locked(pool: asyncpg.Pool, data: bytes, *, force: bool) -> RunRep
         logger.warning(
             "Normalized catalog sync held back its deletes: %s", changeset.deletes_blocked
         )
-    await apply_changeset(pool, changeset)
+    await apply_changeset(pool, changeset, trigger=trigger)
     await _store_hash(pool, content_hash)
     return RunReport(content_hash=content_hash, skipped=False, parsed=parsed, changeset=changeset)
 
 
-async def run_sync_from_bytes(pool: asyncpg.Pool, data: bytes, *, force: bool = False) -> RunReport:
+async def run_sync_from_bytes(
+    pool: asyncpg.Pool, data: bytes, *, force: bool = False, trigger: str = "manual"
+) -> RunReport:
     """Run one sync pass over `data` (an `.xlsx` file's bytes). Unless `force`,
     content equal to the last applied one is skipped without parsing."""
     async with advisory_lock(pool, NORMALIZED_SYNC_LOCK_KEY):
-        return await _run_locked(pool, data, force=force)
+        return await _run_locked(pool, data, force=force, trigger=trigger)
 
 
 def _require_settings(settings: Settings, normalized: NormalizedSettings) -> tuple[str, str]:
@@ -130,8 +135,11 @@ async def run_sync_from_sharepoint(
     normalized: NormalizedSettings | None = None,
     client: GraphClient | None = None,
     force: bool = False,
+    trigger: str = "manual",
 ) -> RunReport:
     """Download the workbook from SharePoint and run one sync pass over it.
+    `trigger` is what started the run: `webhook`, `scheduler`, `lifecycle` or
+    `manual`.
 
     The file is fetched inside the advisory lock: two notifications that
     arrive together run one after the other, and the second one downloads the
@@ -152,7 +160,7 @@ async def run_sync_from_sharepoint(
     try:
         async with advisory_lock(pool, NORMALIZED_SYNC_LOCK_KEY):
             data = await download_workbook(settings=settings, normalized=normalized, client=graph)
-            return await _run_locked(pool, data, force=force)
+            return await _run_locked(pool, data, force=force, trigger=trigger)
     finally:
         if owns_client:
             await graph.aclose()
