@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import FichaPatrimonialPage from "@/app/admin/ficha-patrimonial/page";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import {
+  approveFichaLine,
   confirmFicha,
   deleteFicha,
   getFicha,
@@ -14,6 +15,13 @@ import type { Ficha, FichaParseResponse } from "@/lib/portfolio-types";
 
 vi.mock("@/lib/fetchWithAuth", () => ({
   fetchWithAuth: vi.fn(),
+}));
+
+// The page lives under <ToastProvider> in the app; the test renders it bare, so
+// stub the toast hook with a spy we can assert approve feedback against.
+const { toastSpy } = vi.hoisted(() => ({ toastSpy: vi.fn() }));
+vi.mock("@/components/ui/Toast", () => ({
+  useToast: () => ({ toast: toastSpy }),
 }));
 
 // Keep the pure helper real; stub the network calls so the mount list fetch
@@ -27,7 +35,7 @@ vi.mock("@/lib/fichaApi", async (importOriginal) => ({
   deleteFicha: vi.fn().mockResolvedValue(undefined),
   approveFichaLine: vi
     .fn()
-    .mockResolvedValue({ product_id: "p", catalog_changes: {} }),
+    .mockResolvedValue({ catalog_product_code: "BD-1", catalog_changes: {} }),
 }));
 
 function makeFile(name: string, sizeBytes: number): File {
@@ -221,6 +229,49 @@ describe("FichaPatrimonialPage confirm wiring", () => {
 
     expect(screen.queryByText(/cliente@sabbi\.com/)).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).toBeTruthy();
+  });
+});
+
+describe("FichaPatrimonialPage approve feedback", () => {
+  beforeEach(() => {
+    vi.mocked(fetchWithAuth).mockReset();
+    toastSpy.mockClear();
+    vi.mocked(approveFichaLine).mockResolvedValue({
+      catalog_product_code: "BD-1",
+      catalog_changes: {},
+    });
+  });
+
+  async function enterReviewAndApprove() {
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => PARSE_RESPONSE,
+    } as Response);
+    const user = userEvent.setup();
+    render(<FichaPatrimonialPage />);
+    await selectFile(makeFile("ficha.xlsx", 1024));
+    await screen.findByText(/cliente@sabbi\.com/);
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+  }
+
+  test("shows a success toast after a product is updated", async () => {
+    await enterReviewAndApprove();
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/producto/i),
+      "success",
+    );
+  });
+
+  test("shows an error toast when the approve request fails", async () => {
+    vi.mocked(approveFichaLine).mockRejectedValueOnce(new Error("500"));
+    await enterReviewAndApprove();
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/no se pudo/i),
+      "error",
+    );
   });
 });
 

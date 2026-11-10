@@ -438,6 +438,13 @@ describe("ReviewTable rendering", () => {
     expect(screen.getByLabelText("Horizonte")).toHaveValue("Largo plazo");
   });
 
+  test("shows the catalog product code read-only", () => {
+    render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+    const code = screen.getByLabelText("Código del producto");
+    expect(code).toHaveValue("BD-00001");
+    expect(code).toHaveAttribute("readonly");
+  });
+
   test("shows backend confidence, similitud %, and catalog-match status", () => {
     render(<ReviewTable rows={[V2_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
     expect(screen.getByText("Confianza alta")).toBeInTheDocument();
@@ -525,6 +532,26 @@ describe("ReviewTable confirm gating", () => {
     const req = onApprove.mock.calls[0][0];
     expect(req.user_id).toBe("user-9");
     expect(req.catalog_product_code).toBe("BD-00001");
+  });
+
+  test("approving a non-catalog row sends an empty catalog_product_code (new product)", async () => {
+    const onApprove = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReviewTable
+        rows={[MAPPED_ROW]}
+        userId="user-1"
+        onConfirmed={vi.fn()}
+        onApprove={onApprove}
+      />,
+    );
+    // No catalog match → the code field is empty and the action creates it.
+    expect(screen.getByLabelText("Código del producto")).toHaveValue("");
+    await user.click(
+      screen.getByRole("button", { name: "Aprobar y crear producto" }),
+    );
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove.mock.calls[0][0].catalog_product_code).toBe("");
   });
 
   test("discarding a line excludes it from the confirm payload", async () => {
@@ -622,6 +649,74 @@ describe("ReviewTable catalog product picker", () => {
       ),
     );
     expect(screen.getByLabelText("Gestor")).toHaveValue("KKR");
+  });
+
+  test("approving after a pick curates the CORRECTED code and shows it read-only", async () => {
+    vi.mocked(searchCatalogProducts).mockResolvedValue([
+      { code: "BD-00352", name: "KKR Infra Global", currency: "USD" },
+    ] as unknown as CatalogProductRow[]);
+    vi.mocked(getCatalogProductAsSearchResult).mockResolvedValue({
+      name: "KKR Infra Global Fund",
+      asset_class: [{ name: "Mercados Privados", percentage: 100 }],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      currency: "USD",
+      administrator: "",
+      manager: "KKR",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      catalog_product_code: "BD-00352",
+      series_options: [],
+      confidence: "alta",
+      catalog_matched: true,
+      primary_source: "catalog",
+      provenance: {},
+    } as unknown as SearchResult);
+
+    // The row starts on a WRONG low-confidence match (BD-00099).
+    const row: FichaEnrichedRow = {
+      ...MAPPED_ROW,
+      raw_name: "KKR Infra",
+      enriched: {
+        ...MAPPED_ROW.enriched!,
+        name: "FM Real Estate & Infrastructure",
+        confidence: "baja",
+        catalog_product_code: "BD-00099",
+      },
+    };
+
+    const onApprove = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReviewTable
+        rows={[row]}
+        userId="user-1"
+        onConfirmed={vi.fn()}
+        onApprove={onApprove}
+      />,
+    );
+
+    await user.type(
+      screen.getByLabelText("Buscar producto en el catálogo"),
+      "KKR",
+    );
+    await user.click(await screen.findByText("KKR Infra Global"));
+
+    // The picked product's code replaces the wrong one, shown read-only.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Código del producto")).toHaveValue(
+        "BD-00352",
+      ),
+    );
+
+    // Approving now curates the CORRECT catalog product, not the wrong BD-00099.
+    await user.click(
+      screen.getByRole("button", { name: "Es un producto existente" }),
+    );
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove.mock.calls[0][0].catalog_product_code).toBe("BD-00352");
   });
 });
 

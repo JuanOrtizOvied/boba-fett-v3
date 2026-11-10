@@ -23,6 +23,7 @@ import {
   updateLineStatus,
 } from "@/lib/fichaApi";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { useToast } from "@/components/ui/Toast";
 import type {
   FichaApproveRequest,
   FichaEnrichedRow,
@@ -46,6 +47,7 @@ interface ReviewData {
  * one for review and confirm.
  */
 export default function FichaPatrimonialPage() {
+  const { toast } = useToast();
   const [state, setState] = useState<PageState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewData | null>(null);
@@ -152,8 +154,19 @@ export default function FichaPatrimonialPage() {
 
   const handleApprove = (request: FichaApproveRequest) => {
     void approveFichaLine(request)
-      .then(() => refreshList(activeFilter))
-      .catch(() => {});
+      .then((res) => {
+        const created = (res.catalog_changes as { created?: string })?.created;
+        toast(
+          created
+            ? `Producto creado en el catálogo (${created})`
+            : "Producto actualizado en el catálogo",
+          "success",
+        );
+        return refreshList(activeFilter);
+      })
+      .catch(() => {
+        toast("No se pudo actualizar el producto. Intenta de nuevo.", "error");
+      });
   };
 
   const handleDeleteFicha = (id: number) => {

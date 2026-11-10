@@ -493,11 +493,9 @@ def test_delete_ficha_404_when_missing(app_client):
 # --- Approve: curate catalog + create client holding -------------------------
 
 
-def test_approve_updates_catalog_and_creates_client_product(app_client, monkeypatch):
-    from types import SimpleNamespace
-
+def test_approve_curates_catalog_without_creating_holding(app_client, monkeypatch):
     app, client = _admin_client(app_client)
-    app.state.repo.create = AsyncMock(return_value=SimpleNamespace(id="p1"))
+    app.state.repo.create = AsyncMock()
 
     async def fake_curation(*args, **kwargs):
         return {"name": {"old": "A", "new": "B"}}
@@ -520,9 +518,39 @@ def test_approve_updates_catalog_and_creates_client_product(app_client, monkeypa
     response = client.post("/admin/ficha-patrimonial/approve", json=body)
 
     assert response.status_code == 201
-    assert response.json()["product_id"] == "p1"
+    assert response.json()["catalog_product_code"] == "BD-1"
     assert response.json()["catalog_changes"]["name"]["new"] == "B"
-    app.state.repo.create.assert_awaited_once()
+    # Approve only curates the catalog; the client holding is created at confirm.
+    app.state.repo.create.assert_not_awaited()
+
+
+def test_approve_blank_user_id_curates_without_500(app_client, monkeypatch):
+    """A ficha with no associated client sends `user_id: ""`. Approve must curate
+    the catalog with the admin session and NOT try to insert a portfolio holding
+    (a blank UUID in `products.user_id` raised asyncpg DataError → 500)."""
+    app, client = _admin_client(app_client)
+    app.state.repo.create = AsyncMock()
+
+    async def fake_curation(*args, **kwargs):
+        return {"name": {"old": "A", "new": "B"}}
+
+    monkeypatch.setattr(admin_routes, "apply_catalog_curation", fake_curation)
+
+    body = {
+        "user_id": "",
+        "product": {
+            "name": "Fondo X",
+            "amount": 1000,
+            "asset_class": [{"name": "mercados_privados", "percentage": 100}],
+        },
+        "catalog_product_code": "BD-00155",
+        "catalog_update": {"name": "B"},
+    }
+    response = client.post("/admin/ficha-patrimonial/approve", json=body)
+
+    assert response.status_code == 201
+    assert response.json()["catalog_product_code"] == "BD-00155"
+    app.state.repo.create.assert_not_awaited()
 
 
 def test_get_catalog_product_history(app_client):
@@ -552,7 +580,7 @@ def test_approve_without_catalog_code_creates_new_catalog_product(app_client, mo
     from types import SimpleNamespace
 
     app, client = _admin_client(app_client)
-    app.state.repo.create = AsyncMock(return_value=SimpleNamespace(id="p2"))
+    app.state.repo.create = AsyncMock()
 
     async def fake_create(*args, **kwargs):
         return SimpleNamespace(id=9, code="BD-00099")
@@ -571,7 +599,9 @@ def test_approve_without_catalog_code_creates_new_catalog_product(app_client, mo
     response = client.post("/admin/ficha-patrimonial/approve", json=body)
 
     assert response.status_code == 201
+    assert response.json()["catalog_product_code"] == "BD-00099"
     assert response.json()["catalog_changes"] == {"created": "BD-00099"}
+    app.state.repo.create.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

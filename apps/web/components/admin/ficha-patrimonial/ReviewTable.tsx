@@ -618,6 +618,16 @@ function ProductCard({
 
           {/* Enriched fields */}
           <div className="flex flex-col gap-3">
+            <Field label="Código del producto">
+              <input
+                value={row.enriched?.catalog_product_code ?? ""}
+                aria-label="Código del producto"
+                readOnly
+                placeholder="Se asignará al crear el producto"
+                className={inputClass + " bg-sabbi-neutral-50"}
+              />
+            </Field>
+
             <Field label="Nombre del producto" confidence={fc.name}>
               <input
                 value={row.name}

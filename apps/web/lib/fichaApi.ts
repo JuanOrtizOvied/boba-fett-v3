@@ -58,11 +58,12 @@ export async function confirmFicha(id: number): Promise<void> {
   await asJson(res);
 }
 
-/** Approve one reviewed line: curate the catalog (update/create) + create the
- * client holding. Returns the created product id and the catalog changes. */
+/** Approve one reviewed line: curate the catalog product (update it, or create it
+ * from the line). Authorized by the admin session — no client needed; the client
+ * holdings are created later at confirm. Returns the catalog code and changes. */
 export async function approveFichaLine(
   request: FichaApproveRequest,
-): Promise<{ product_id: string; catalog_changes: Record<string, unknown> }> {
+): Promise<{ catalog_product_code: string; catalog_changes: Record<string, unknown> }> {
   const res = await fetchWithAuth(`${BASE}/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

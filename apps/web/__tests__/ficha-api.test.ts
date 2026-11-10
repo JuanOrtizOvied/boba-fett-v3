@@ -110,7 +110,7 @@ describe("fichaApi", () => {
 
   test("approveFichaLine POSTs the approve payload", async () => {
     vi.mocked(fetchWithAuth).mockResolvedValue(
-      okJson({ product_id: "p1", catalog_changes: {} }),
+      okJson({ catalog_product_code: "BD-1", catalog_changes: {} }),
     );
     await approveFichaLine({
       user_id: "u1",

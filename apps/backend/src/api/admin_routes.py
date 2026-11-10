@@ -730,10 +730,15 @@ async def delete_ficha(
 
 class FichaApproveRequest(BaseModel):
     """Approve one reviewed ficha line: curate the matched catalog product (when
-    `catalog_product_code` is set) and create the client's holding."""
+    `catalog_product_code` is set) or create it from the reviewed line.
 
-    user_id: str
+    This modifies the catalog only — authorized by the admin session — so no
+    client is required. `user_id` is kept for backward compatibility but is no
+    longer used: the client's holdings are created later at confirm
+    (`confirm_ficha_patrimonial`), never here."""
+
     product: ProductCreate
+    user_id: str = ""
     catalog_product_code: str = ""
     catalog_update: NormalizedProductUpdate = Field(default_factory=NormalizedProductUpdate)
     series: list[SeriesUpdateInput] = Field(default_factory=list)
@@ -746,23 +751,25 @@ async def approve_ficha_line(
     admin: dict = Depends(require_admin),
     catalog_repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
     history_repo: CatalogHistoryRepository = Depends(_history_repo),
-    product_repo: ProductRepository = Depends(_product_repo),
 ) -> dict:
-    """Curate the matched V2 catalog product (update + history) when it exists,
-    then create the client's portfolio product linked to it."""
-    catalog_changes: dict = {}
+    """Curate the matched V2 catalog product (update + history), or create it from
+    the reviewed line when it is not in the catalog yet. Authorized by the admin
+    session — no client is required, so this never writes a portfolio holding. The
+    client's holdings are created later at confirm (`confirm_ficha_patrimonial`),
+    which avoids a blank `user_id` hitting the UUID column (a 500)."""
     if data.catalog_product_code:
+        code = data.catalog_product_code
         catalog_changes = await apply_catalog_curation(
             catalog_repo,
             history_repo,
-            data.catalog_product_code,
+            code,
             data.catalog_update,
             data.series,
             data.admins,
             admin["id"],
         )
     else:
-        # Product not in the catalog (web-searched) → create it, link the holding.
+        # Product not in the catalog (web-searched) → create it from the line.
         created = await create_catalog_product_from_ficha(
             catalog_repo,
             history_repo,
@@ -772,11 +779,10 @@ async def approve_ficha_line(
             data.product.name,
             admin["id"],
         )
-        data.product.catalog_product_id = created.id
+        code = created.code
         catalog_changes = {"created": created.code}
 
-    product = await product_repo.create(data.user_id, data.product, source="admin_ficha_import")
-    return {"product_id": product.id, "catalog_changes": catalog_changes}
+    return {"catalog_product_code": code, "catalog_changes": catalog_changes}
 
 
 @router.get("/catalog/products/{code}/history")
