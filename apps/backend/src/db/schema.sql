@@ -805,3 +805,11 @@ CREATE INDEX IF NOT EXISTS normalized_sync_event_product_idx
     ON normalized_sync_event (product_code, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS normalized_sync_event_occurred_idx
     ON normalized_sync_event (occurred_at);
+
+-- Who saved the workbook that the run read (migrations/versions/
+-- a7d3b9e2c481_add_changed_by_to_normalized_sync_event.py): the corporate email in
+-- lower case, the marker 'unknown' when the author of a SharePoint run could not
+-- be determined, or NULL when there is no data (rows from before this column and
+-- runs started from a local file). A separate statement so databases that already
+-- have the table get the column too.
+ALTER TABLE normalized_sync_event ADD COLUMN IF NOT EXISTS changed_by TEXT;
