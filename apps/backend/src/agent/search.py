@@ -668,14 +668,20 @@ _CONFIDENCE_FIELDS = PRODUCT_FIELD_NAMES + ("asset_class", "geographic_focus", "
 
 def _sanitize_field_confidence(raw: object, result: SearchResult) -> dict[str, int]:
     """Clean the web extraction's self-reported ``field_confidence``: keep only
-    integer scores clamped to 0..100, for fields actually populated on ``result``.
-    Drops unknown keys, empty fields, and non-numeric values — the score is a
-    model self-estimate, so its shape is never trusted blindly."""
+    integer scores clamped to 0..100, for fields actually populated on ``result``
+    AND whose value came from the web (``provenance[field] == "web_search"``).
+    The provenance gate matters in the mixed ficha cascade, where the web may
+    report a score for a field the catalog already owns — that field is catalog-
+    sourced and must never carry a web score. Drops unknown keys, empty fields,
+    non-web-sourced fields, and non-numeric values — the score is a model
+    self-estimate, so its shape is never trusted blindly."""
     if not isinstance(raw, dict):
         return {}
     cleaned: dict[str, int] = {}
     for field in _CONFIDENCE_FIELDS:
         if field not in raw or not getattr(result, field, None):
+            continue
+        if result.provenance.get(field) != "web_search":
             continue
         try:
             score = int(raw[field])
@@ -721,10 +727,12 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
             _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
 
     web_verified = False
+    web_field_confidence: object = None
     if not _is_product_complete(result) or _is_low_confidence_catalog(result):
         web_data, web_sources = await _search_claude_web(query)
         if web_data:
             _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
+            web_field_confidence = web_data.get("field_confidence")
         if web_sources:
             result.sources = web_sources
             web_verified = True
@@ -740,4 +748,8 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         result.similarity, has_data, web_verified=web_verified
     )
     _strip_unconfident_catalog_match(result)
+    # Per-field self-reported confidence, kept only for the fields the web step
+    # actually filled (provenance == "web_search"); catalog/claude fields never
+    # carry a web score. Computed last so it reflects the final field set.
+    result.field_confidence = _sanitize_field_confidence(web_field_confidence, result)
     return result
