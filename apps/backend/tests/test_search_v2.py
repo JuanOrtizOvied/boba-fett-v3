@@ -497,6 +497,119 @@ async def test_research_web_v2_field_confidence_empty_without_scores(monkeypatch
     assert result.field_confidence == {}
 
 
+def _incomplete_catalog_result():
+    """A catalog hit missing `manager` (a gap L3 web can fill), with provenance
+    recorded for the fields the catalog DID fill. Similarity 0.5 keeps the catalog
+    identity (>0.4) while still triggering the web step (<0.55)."""
+    from db.models import SearchResult
+
+    return SearchResult(
+        name="Fondo X",
+        currency="USD",
+        asset_class=[AssetAllocation(name="mercados_publicos", percentage=100)],
+        geographic_focus=[AssetAllocation(name="Perú", percentage=100)],
+        underlying=[AssetAllocation(name="Acciones", percentage=100)],
+        catalog_product_code="BD-00001",
+        similarity=0.5,
+        primary_source="catalog",
+        provenance={
+            "name": "catalog",
+            "currency": "catalog",
+            "asset_class": "catalog",
+            "geographic_focus": "catalog",
+            "underlying": "catalog",
+        },
+    )
+
+
+async def test_v2_populates_field_confidence_for_web_filled_gap(monkeypatch):
+    """When L3 web fills a gap the catalog left empty, its self-reported per-field
+    confidence is surfaced on the result for that field (so the card can show a %
+    on the web-sourced field)."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {"manager": "Web Manager", "field_confidence": {"manager": 77}},
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert result.manager == "Web Manager"
+    assert result.provenance["manager"] == "web_search"
+    assert result.field_confidence == {"manager": 77}
+
+
+async def test_v2_field_confidence_excludes_catalog_sourced_fields(monkeypatch):
+    """A web score reported for a field the CATALOG already owns must be dropped:
+    the per-field % only marks fields whose value actually came from the web, and
+    the catalog value is never overwritten."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {
+                "manager": "Web Manager",
+                "name": "Should Not Overwrite",
+                "field_confidence": {"manager": 80, "name": 95},
+            },
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert result.name == "Fondo X"
+    assert result.provenance["name"] == "catalog"
+    assert result.field_confidence == {"manager": 80}
+
+
+async def test_v2_field_confidence_empty_when_web_fills_nothing(monkeypatch):
+    """A weak catalog match whose web step returns only sources (no field data)
+    leaves field_confidence empty — nothing on the card came from the web."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return {}, [Source(url="https://x.com", title="X")]
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert result.field_confidence == {}
+
+
 def test_ficha_extraction_prompt_uses_the_ficha_asset_class_taxonomy():
     """The ficha web research must classify asset_class into the ficha select's
     taxonomy, not the portfolio one, so the review select auto-populates."""
