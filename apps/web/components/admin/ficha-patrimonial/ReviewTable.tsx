@@ -25,6 +25,12 @@ import {
   type FichaAssetClassKey,
   type FichaLineStatus,
 } from "./reviewTableShared";
+import {
+  GEOGRAPHIC_FOCUS_GROUPS,
+  UNDERLYING_GROUPS,
+  allocationOptionExists,
+  type AllocationOptionGroup,
+} from "@/lib/allocationOptions";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import {
   getCatalogProductAsSearchResult,
@@ -61,11 +67,13 @@ function AllocationEditor({
   allocations,
   onChange,
   confidence,
+  optionGroups,
 }: {
   label: string;
   allocations: AssetAllocation[];
   onChange: (next: AssetAllocation[]) => void;
   confidence?: number;
+  optionGroups: AllocationOptionGroup[];
 }) {
   const total = allocations.reduce((sum, a) => sum + a.percentage, 0);
   const isValid = allocations.length === 0 || Math.abs(total - 100) < 0.01;
@@ -99,12 +107,26 @@ function AllocationEditor({
       <div className="flex flex-col gap-1.5">
         {allocations.map((a, i) => (
           <div key={i} className="flex items-center gap-1.5">
-            <input
+            <select
               value={a.name}
               onChange={(e) => update(i, { name: e.target.value })}
-              placeholder="Nombre"
-              className="flex-1 rounded-lg border border-sabbi-neutral-200 px-2 py-1 text-sm outline-none focus:border-sabbi-primary"
-            />
+              aria-label={`${label} — asignación ${i + 1}`}
+              className={inputClass + " flex-1"}
+            >
+              <option value="">Seleccionar…</option>
+              {a.name && !allocationOptionExists(optionGroups, a.name) && (
+                <option value={a.name}>{a.name}</option>
+              )}
+              {optionGroups.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.options.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
             <div className="flex items-center gap-0.5">
               <input
                 type="number"
@@ -706,12 +728,14 @@ function ProductCard({
                 allocations={row.geographicFocus}
                 onChange={(next) => onUpdate({ geographicFocus: next })}
                 confidence={fc.geographic_focus}
+                optionGroups={GEOGRAPHIC_FOCUS_GROUPS}
               />
               <AllocationEditor
                 label="Subyacente"
                 allocations={row.underlying}
                 onChange={(next) => onUpdate({ underlying: next })}
                 confidence={fc.underlying}
+                optionGroups={UNDERLYING_GROUPS}
               />
             </div>
           </div>
