@@ -85,7 +85,7 @@ function AllocationEditor({
   const add = () => onChange([...allocations, { name: "", percentage: 0 }]);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium text-sabbi-neutral-500">{label}</span>
         <ConfidenceTag value={confidence} />
@@ -111,7 +111,7 @@ function AllocationEditor({
               value={a.name}
               onChange={(e) => update(i, { name: e.target.value })}
               aria-label={`${label} — asignación ${i + 1}`}
-              className={inputClass + " flex-1"}
+              className={inputClass + " min-w-0 flex-1"}
             >
               <option value="">Seleccionar…</option>
               {a.name && !allocationOptionExists(optionGroups, a.name) && (
