@@ -871,3 +871,65 @@ describe("ReviewTable similarity argument", () => {
     expect(screen.queryByText(/se diferencia por:/i)).toBeNull();
   });
 });
+
+describe("ReviewTable strict allocation selects", () => {
+  const withAlloc = (
+    patch: Partial<NonNullable<FichaEnrichedRow["enriched"]>>,
+  ): FichaEnrichedRow => ({
+    ...MAPPED_ROW,
+    enriched: { ...MAPPED_ROW.enriched!, ...patch },
+  });
+
+  test("Foco geográfico name is a grouped select", () => {
+    const row = withAlloc({ geographic_focus: [{ name: "", percentage: 0 }] });
+    render(<ReviewTable rows={[row]} userId="user-1" onConfirmed={vi.fn()} />);
+    const select = screen.getByLabelText("Foco geográfico — asignación 1");
+    expect(select.tagName).toBe("SELECT");
+    expect(screen.getByRole("option", { name: "EEUU" })).toBeInTheDocument();
+    const labels = Array.from(select.querySelectorAll("optgroup")).map((g) =>
+      g.getAttribute("label"),
+    );
+    expect(labels).toEqual(["Perú", "Desarrollados", "Emergentes"]);
+  });
+
+  test("Subyacente name is a grouped select", () => {
+    const row = withAlloc({ underlying: [{ name: "", percentage: 0 }] });
+    render(<ReviewTable rows={[row]} userId="user-1" onConfirmed={vi.fn()} />);
+    const select = screen.getByLabelText("Subyacente — asignación 1");
+    expect(select.tagName).toBe("SELECT");
+    const labels = Array.from(select.querySelectorAll("optgroup")).map((g) =>
+      g.getAttribute("label"),
+    );
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "Renta Variable",
+        "Renta Fija",
+        "Mercados Privados / Club Deals",
+        "Alternativos",
+      ]),
+    );
+  });
+
+  test("selecting an option updates the allocation name", async () => {
+    const user = userEvent.setup();
+    const row = withAlloc({ underlying: [{ name: "", percentage: 0 }] });
+    render(<ReviewTable rows={[row]} userId="user-1" onConfirmed={vi.fn()} />);
+    const select = screen.getByLabelText(
+      "Subyacente — asignación 1",
+    ) as HTMLSelectElement;
+    await user.selectOptions(select, "US Large Cap");
+    expect(
+      (screen.getByLabelText("Subyacente — asignación 1") as HTMLSelectElement).value,
+    ).toBe("US Large Cap");
+  });
+
+  test("legacy value outside the catalog is kept as a selected option", () => {
+    const row = withAlloc({ underlying: [{ name: "Valor Legacy X", percentage: 100 }] });
+    render(<ReviewTable rows={[row]} userId="user-1" onConfirmed={vi.fn()} />);
+    const select = screen.getByLabelText(
+      "Subyacente — asignación 1",
+    ) as HTMLSelectElement;
+    expect(screen.getByRole("option", { name: "Valor Legacy X" })).toBeInTheDocument();
+    expect(select.value).toBe("Valor Legacy X");
+  });
+});
