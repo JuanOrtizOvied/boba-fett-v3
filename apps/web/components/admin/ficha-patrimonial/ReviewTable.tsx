@@ -535,6 +535,15 @@ function ProductCard({
   const confidence = resolveConfidence(effectiveRow);
   const declaredSummary = formatDeclaredSummary(rawRow);
   const similarity = formatSimilarityPercent(row.enriched?.similarity);
+  // Color band for the similarity pill, aligned with the catalog-match tiers
+  // (>=0.6 strong, >=0.4 acceptable, below weak) so a bad match is visually loud.
+  const similarityValue = row.enriched?.similarity ?? 0;
+  const similarityBand =
+    similarityValue >= 0.6
+      ? "bg-green-100 text-green-800 ring-green-300"
+      : similarityValue >= 0.4
+        ? "bg-amber-100 text-amber-800 ring-amber-300"
+        : "bg-red-100 text-red-700 ring-red-300";
   // Words that differ between the declared name and the matched catalog name —
   // the "argument" for why the similarity is below 100%.
   const similarityDiff = similarity
@@ -569,8 +578,11 @@ function ProductCard({
             {badge.label}
           </span>
           {similarity && (
-            <span className="text-[11px] text-sabbi-neutral-500">
-              similitud {similarity}
+            <span
+              title="Similitud del match con el catálogo"
+              className={`self-start rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${similarityBand}`}
+            >
+              Similitud {similarity}
             </span>
           )}
           {similarityDiff.length > 0 && (
