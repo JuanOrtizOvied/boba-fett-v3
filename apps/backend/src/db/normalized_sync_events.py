@@ -35,6 +35,10 @@ class SyncEventRow(BaseModel):
     series: str | None = None
     administrator: str | None = None
     changes: list[dict[str, Any]] = []
+    # Who saved the workbook the run read, as stored: an email, the marker
+    # `unknown` when it could not be determined, or None when there is no data
+    # (events from before the column existed and runs from a local file).
+    changed_by: str | None = None
 
 
 class ProductEvents(BaseModel):
@@ -78,6 +82,7 @@ def _event_from_record(r: asyncpg.Record) -> SyncEventRow:
         series=r["series"],
         administrator=r["administrator"],
         changes=changes or [],
+        changed_by=r["changed_by"],
     )
 
 

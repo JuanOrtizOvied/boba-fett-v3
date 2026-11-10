@@ -35,6 +35,10 @@ export interface SyncEvent {
   series: string | null;
   administrator: string | null;
   changes: SyncFieldChange[];
+  /** Who saved the workbook the run read, as stored: an email, the marker
+   * `UNKNOWN_AUTHOR`, or null when there is no data (events from before the
+   * author was recorded, runs from a local file). Absent in old responses. */
+  changed_by?: string | null;
 }
 
 /** A page of a product's events, newest first, and how many it has in all. */
@@ -82,7 +86,10 @@ function isEvent(value: unknown): value is SyncEvent {
     (value.level === "product" ||
       value.level === "series" ||
       value.level === "admin") &&
-    Array.isArray(value.changes)
+    Array.isArray(value.changes) &&
+    (value.changed_by === undefined ||
+      value.changed_by === null ||
+      typeof value.changed_by === "string")
   );
 }
 
@@ -144,6 +151,34 @@ export function totalsLabel(totals: Record<SyncAction, number>): string {
 
 export function totalEvents(totals: Record<SyncAction, number>): number {
   return ACTIONS.reduce((sum, action) => sum + totals[action], 0);
+}
+
+/** What the backend stores in `changed_by` when it could not tell who saved the
+ * workbook. An email always has an `@`, so it is never mistaken for this. */
+export const UNKNOWN_AUTHOR = "unknown";
+
+/** How the author of an event is written on the screen. */
+export type AuthorLabel =
+  | { kind: "name"; text: string }
+  | { kind: "unknown"; text: string };
+
+/** The author of an event, or null when there is nothing to show.
+ * - an email: only the part before the `@` (`user@empresa.com` -> `user`), never
+ *   the domain;
+ * - the marker `unknown`: "Desconocido", flagged, because someone may have saved
+ *   the workbook without a corporate account;
+ * - null, empty or absent: nothing (old events and local runs are not flagged);
+ * - a value that has no name before the `@`: also "Desconocido". */
+export function authorLabel(
+  changedBy: string | null | undefined,
+): AuthorLabel | null {
+  const value = changedBy?.trim();
+  if (!value) return null;
+  const unknown: AuthorLabel = { kind: "unknown", text: "Desconocido" };
+  if (value === UNKNOWN_AUTHOR) return unknown;
+  const at = value.indexOf("@");
+  if (at === 0) return unknown;
+  return { kind: "name", text: at > 0 ? value.slice(0, at) : value };
 }
 
 /** What the line says about the event. A restore is the sync reactivating a row
