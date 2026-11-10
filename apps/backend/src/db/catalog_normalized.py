@@ -3,6 +3,10 @@
 Three levels: product -> product x series -> product x series x administrator.
 Fee, commission, flow and return values are FRACTIONS as in the source Excel
 (0.0384 = 3.84%), not percentages.
+
+Rows are soft-deleted (`is_deleted`, `deleted_at`): every read and write here
+ignores them except `list_for_sync`, which the sync needs to restore a key that
+comes back.
 """
 
 from __future__ import annotations
@@ -323,6 +327,33 @@ class NormalizedCatalogRepository:
                 parent.administrators.append(_admin_from_record(admin_row))
         product.series = list(by_series.values())
         return product
+
+    async def list_with_children(self) -> list[CatalogProductRow]:
+        """Every active product with its series and their administrators, in
+        three queries (not one per product), ordered by code."""
+        products = await self.list_products()
+        series_rows = await self._pool.fetch(
+            "SELECT * FROM catalog_product_series WHERE NOT is_deleted "
+            "ORDER BY product_code, series, id"
+        )
+        admin_rows = await self._pool.fetch(
+            "SELECT * FROM catalog_product_series_admin WHERE NOT is_deleted "
+            "ORDER BY product_code, series, administrator, id"
+        )
+        by_code = {p.code: p for p in products}
+        by_series: dict[tuple[str, str], CatalogProductSeries] = {}
+        # A child under a deleted parent is skipped, not an error: deletes
+        # cascade down, but a stray active child must not hide the whole list.
+        for row in series_rows:
+            series = _series_from_record(row)
+            if series.product_code in by_code:
+                by_code[series.product_code].series.append(series)
+                by_series[(series.product_code, series.series)] = series
+        for row in admin_rows:
+            parent = by_series.get((row["product_code"], row["series"]))
+            if parent is not None:
+                parent.administrators.append(_admin_from_record(row))
+        return products
 
     async def search_for_enrichment(self, query: str) -> CatalogProductRow | None:
         """Best fuzzy name match for ficha-patrimonial V2 enrichment, with its
