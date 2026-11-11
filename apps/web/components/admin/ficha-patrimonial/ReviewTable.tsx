@@ -91,11 +91,12 @@ function AllocationEditor({
         <ConfidenceTag value={confidence} />
         {allocations.length > 0 && (
           <span
+            title="Suma de la asignación (debe dar 100%)"
             className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
               isValid ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
             }`}
           >
-            {total.toFixed(0)}%
+            Σ {total.toFixed(0)}%
           </span>
         )}
       </div>
@@ -180,9 +181,10 @@ function ConfidenceTag({ value }: { value?: number }) {
         : "bg-red-50 text-red-700";
   return (
     <span
-      title={`Confianza de Claude: ${value}%`}
-      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${band}`}
+      title={`Confianza de Claude (búsqueda web): ${value}%`}
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${band}`}
     >
+      <span aria-hidden="true">✨</span>
       {value}%
     </span>
   );
