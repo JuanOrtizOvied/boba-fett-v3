@@ -247,7 +247,7 @@ export function SeriesTable({
       </span>
       {series.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full table-fixed border-collapse text-xs">
             <thead>
               <tr className="text-left text-sabbi-neutral-500">
                 <th className="px-1 py-1 font-medium">Serie</th>
@@ -256,7 +256,7 @@ export function SeriesTable({
                     {c.label}
                   </th>
                 ))}
-                <th className="px-1 py-1" />
+                <th className="w-8 px-1 py-1" />
               </tr>
             </thead>
             <tbody>
@@ -268,7 +268,7 @@ export function SeriesTable({
                         value={s.series}
                         aria-label={`Nombre de la serie ${i + 1}`}
                         onChange={(e) => update(i, { series: e.target.value })}
-                        className="w-24 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
+                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
                       />
                       <SuggestedBadge confidence={s.suggestedConfidence} />
                     </div>
@@ -279,7 +279,7 @@ export function SeriesTable({
                         value={s[c.key]}
                         aria-label={`${c.label} serie ${s.series}`}
                         onChange={(e) => update(i, { [c.key]: e.target.value })}
-                        className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
                       />
                     </td>
                   ))}
@@ -342,7 +342,7 @@ export function AdminTable({
       </span>
       {admins.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full table-fixed border-collapse text-xs">
             <thead>
               <tr className="text-left text-sabbi-neutral-500">
                 <th className="px-1 py-1 font-medium">Administrador</th>
@@ -352,7 +352,7 @@ export function AdminTable({
                     {c.label}
                   </th>
                 ))}
-                <th className="px-1 py-1" />
+                <th className="w-8 px-1 py-1" />
               </tr>
             </thead>
             <tbody>
@@ -364,7 +364,7 @@ export function AdminTable({
                         value={a.administrator}
                         aria-label={`Nombre del administrador ${i + 1}`}
                         onChange={(e) => update(i, { administrator: e.target.value })}
-                        className="w-28 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
+                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
                       />
                       <SuggestedBadge confidence={a.suggestedConfidence} />
                     </div>
@@ -374,7 +374,7 @@ export function AdminTable({
                       value={a.series}
                       aria-label={`Serie del administrador ${i + 1}`}
                       onChange={(e) => update(i, { series: e.target.value })}
-                      className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                      className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
                     />
                   </td>
                   {ADMIN_COLUMNS.map((c) => (
@@ -383,7 +383,7 @@ export function AdminTable({
                         value={a[c.key]}
                         aria-label={`${c.label} ${a.administrator} serie ${a.series}`}
                         onChange={(e) => update(i, { [c.key]: e.target.value })}
-                        className="w-20 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
+                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
                       />
                     </td>
                   ))}
