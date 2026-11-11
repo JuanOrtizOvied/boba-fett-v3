@@ -34,6 +34,7 @@ function result(overrides: Partial<SearchResult> = {}): SearchResult {
     primary_source: "catalog",
     provenance: {},
     series_options: [],
+    ...overrides,
   } as unknown as SearchResult;
 }
 
@@ -89,5 +90,52 @@ describe("ProductLookupForm", () => {
     await waitFor(() =>
       expect(screen.getByText(/no se pudo guardar/i)).toBeInTheDocument(),
     );
+  });
+
+  test("shows a confidence tag per series/admin field, not one general badge", () => {
+    render(
+      <ProductLookupForm
+        result={result({
+          catalog_matched: false,
+          catalog_product_code: undefined,
+          primary_source: "web_search",
+          series_options: [
+            {
+              series: "A",
+              management_fee_ter: 0.0384,
+              flows_min: null,
+              flows_max: null,
+              return_min: null,
+              return_max: null,
+              confidence: 71,
+              field_confidence: { management_fee_ter: 85 },
+              administrators: [
+                {
+                  administrator: "Admin Co",
+                  custody_fee: 0.001,
+                  buy_commission: null,
+                  sell_commission: null,
+                  billing_currency: "USD",
+                  minimum_usd: null,
+                  min_commission_usd: null,
+                  confidence: 62,
+                  field_confidence: { custody_fee: 77 },
+                },
+              ],
+            },
+          ],
+        })}
+      />,
+    );
+
+    // Per-field tags.
+    expect(screen.getByText("85%")).toBeInTheDocument();
+    expect(screen.getByText("77%")).toBeInTheDocument();
+    // Existence confidence now sits on the name label.
+    expect(screen.getByText("71%")).toBeInTheDocument();
+    expect(screen.getByText("62%")).toBeInTheDocument();
+    // Existing aria-labels intact.
+    expect(screen.getByLabelText("Nombre de la serie 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nombre del administrador 1")).toBeInTheDocument();
   });
 });

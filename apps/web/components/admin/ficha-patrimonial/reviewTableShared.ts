@@ -120,6 +120,14 @@ export interface EditableSeriesRow {
    * the card shows a "sugerido por Claude" badge with this %. Absent for
    * catalog/manual rows. */
   suggestedConfidence?: number;
+  /** Per-field confidence (0..100) for the numeric fields the web research
+   * filled; absent for catalog/manual rows. */
+  fieldConfidence?: Partial<
+    Record<
+      "ter" | "flowsMin" | "flowsMax" | "returnMin" | "returnMax" | "minimumUsd",
+      number
+    >
+  >;
 }
 
 /**
@@ -138,6 +146,11 @@ export interface EditableAdminRow {
    * the card shows a "sugerido por Claude" badge with this %. Absent for
    * catalog/manual rows. */
   suggestedConfidence?: number;
+  /** Per-field confidence (0..100) for the numeric fields the web research
+   * filled; absent for catalog/manual rows. */
+  fieldConfidence?: Partial<
+    Record<"custody" | "buy" | "sell" | "minimumUsd", number>
+  >;
 }
 
 /**
@@ -336,6 +349,37 @@ export function parseAllocations(text: string): AssetAllocation[] {
  * the fraction fields as plain percent values. `minimumUsd`/`howCalculated`
  * have no series-level source yet and start blank.
  */
+/** Remaps a backend `field_confidence` map onto editable-row keys, keeping only
+ * known, numeric entries. Returns undefined when nothing applies. */
+function remapFieldConfidence<K extends string>(
+  raw: Record<string, number> | null | undefined,
+  keyMap: Record<string, K>,
+): Partial<Record<K, number>> | undefined {
+  if (!raw) return undefined;
+  const out: Partial<Record<K, number>> = {};
+  for (const [backendKey, target] of Object.entries(keyMap)) {
+    const value = raw[backendKey];
+    if (typeof value === "number" && Number.isFinite(value)) out[target] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+const SERIES_FIELD_CONFIDENCE_KEYS = {
+  management_fee_ter: "ter",
+  flows_min: "flowsMin",
+  flows_max: "flowsMax",
+  return_min: "returnMin",
+  return_max: "returnMax",
+  minimum_usd: "minimumUsd",
+} as const;
+
+const ADMIN_FIELD_CONFIDENCE_KEYS = {
+  custody_fee: "custody",
+  buy_commission: "buy",
+  sell_commission: "sell",
+  minimum_usd: "minimumUsd",
+} as const;
+
 export function toEditableSeriesRows(
   options: CatalogSeriesOption[],
 ): EditableSeriesRow[] {
@@ -349,6 +393,10 @@ export function toEditableSeriesRows(
     minimumUsd: "",
     howCalculated: "",
     suggestedConfidence: s.confidence ?? undefined,
+    fieldConfidence: remapFieldConfidence(
+      s.field_confidence,
+      SERIES_FIELD_CONFIDENCE_KEYS,
+    ),
   }));
 }
 
@@ -369,6 +417,10 @@ export function toEditableAdminRows(
       sell: formatFractionValue(a.sell_commission),
       minimumUsd: formatPlainNumber(a.minimum_usd),
       suggestedConfidence: a.confidence ?? undefined,
+      fieldConfidence: remapFieldConfidence(
+        a.field_confidence,
+        ADMIN_FIELD_CONFIDENCE_KEYS,
+      ),
     })),
   );
 }

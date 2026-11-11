@@ -138,7 +138,12 @@ fee/commission values are fractions and minimums are plain USD amounts (null whe
 unknown). Each series and each administrator also has a `confidence` (integer
 0-100) for how sure you are THIS series/administrator exists for this product.
 Only list a series or administrator you actually found evidence for — NEVER invent
-a class label or an administrator name. Return an empty list if you find none. It
+a class label or an administrator name. Additionally, for each series AND each
+administrator include a `field_confidence` object mapping each numeric field name
+you filled (`management_fee_ter`, `flows_min`, `flows_max`, `return_min`,
+`return_max` for a series; `custody_fee`, `buy_commission`, `sell_commission`,
+`minimum_usd` for an administrator) to an integer 0-100 for how sure you are of THAT
+value; omit the key for any value that is null or unknown. Return an empty list if you find none. It
 is fine to return a series with every numeric value null when you only know it
 exists."""
 
@@ -202,6 +207,7 @@ class _ExtractedSeriesAdmin(BaseModel):
     minimum_usd: _LooseNumber = None
     min_commission_usd: _LooseNumber = None
     confidence: _LooseNumber = 0
+    field_confidence: dict[str, int] = Field(default_factory=dict)
 
 
 class _ExtractedSeries(BaseModel):
@@ -217,6 +223,7 @@ class _ExtractedSeries(BaseModel):
     return_max: _LooseNumber = None
     administrators: list[_ExtractedSeriesAdmin] = Field(default_factory=list)
     confidence: _LooseNumber = 0
+    field_confidence: dict[str, int] = Field(default_factory=dict)
 
 
 class ExtractedProduct(BaseModel):
@@ -880,6 +887,27 @@ def _clamp_confidence(raw: object) -> int:
         return 0
 
 
+def _clamp_field_confidence(raw: object, filled_keys: set[str]) -> dict[str, int]:
+    """Sanitize a model-reported per-field confidence map: keep only keys whose
+    value was actually filled (`filled_keys`) and whose score coerces to an int,
+    clamped to 0..100. Anything malformed -> {}."""
+    if not isinstance(raw, dict):
+        return {}
+    cleaned: dict[str, int] = {}
+    for key, score in raw.items():
+        if key not in filled_keys or isinstance(score, bool):
+            continue
+        try:
+            cleaned[key] = max(0, min(100, int(float(score))))
+        except (TypeError, ValueError):
+            continue
+    return cleaned
+
+
+def _filled_keys(values: dict[str, float | None]) -> set[str]:
+    return {k for k, v in values.items() if v is not None}
+
+
 def _coerce_optional_float(raw: object) -> float | None:
     """Best-effort parse of a model-reported number into a float. Returns None for
     blanks, booleans, and unit/symbol-laden strings ('3.84%', '50,000', 'N/A') — we
@@ -911,30 +939,44 @@ def _suggested_series_options(web_data: dict) -> list[CatalogSeriesOption]:
         label = (s.get("series") or "").strip()
         if not label:
             continue
-        admins = [
-            CatalogSeriesAdminOption(
-                administrator=(a.get("administrator") or "").strip(),
-                custody_fee=_coerce_optional_float(a.get("custody_fee")),
-                buy_commission=_coerce_optional_float(a.get("buy_commission")),
-                sell_commission=_coerce_optional_float(a.get("sell_commission")),
-                billing_currency=a.get("billing_currency") or "",
-                minimum_usd=_coerce_optional_float(a.get("minimum_usd")),
-                min_commission_usd=_coerce_optional_float(a.get("min_commission_usd")),
-                confidence=_clamp_confidence(a.get("confidence")),
+        admins = []
+        for a in s.get("administrators") or []:
+            if not isinstance(a, dict) or not (a.get("administrator") or "").strip():
+                continue
+            a_vals = {
+                "custody_fee": _coerce_optional_float(a.get("custody_fee")),
+                "buy_commission": _coerce_optional_float(a.get("buy_commission")),
+                "sell_commission": _coerce_optional_float(a.get("sell_commission")),
+                "minimum_usd": _coerce_optional_float(a.get("minimum_usd")),
+            }
+            admins.append(
+                CatalogSeriesAdminOption(
+                    administrator=(a.get("administrator") or "").strip(),
+                    billing_currency=a.get("billing_currency") or "",
+                    min_commission_usd=_coerce_optional_float(a.get("min_commission_usd")),
+                    confidence=_clamp_confidence(a.get("confidence")),
+                    field_confidence=_clamp_field_confidence(
+                        a.get("field_confidence"), _filled_keys(a_vals)
+                    ),
+                    **a_vals,
+                )
             )
-            for a in (s.get("administrators") or [])
-            if isinstance(a, dict) and (a.get("administrator") or "").strip()
-        ]
+        s_vals = {
+            "management_fee_ter": _coerce_optional_float(s.get("management_fee_ter")),
+            "flows_min": _coerce_optional_float(s.get("flows_min")),
+            "flows_max": _coerce_optional_float(s.get("flows_max")),
+            "return_min": _coerce_optional_float(s.get("return_min")),
+            "return_max": _coerce_optional_float(s.get("return_max")),
+        }
         options.append(
             CatalogSeriesOption(
                 series=label,
-                management_fee_ter=_coerce_optional_float(s.get("management_fee_ter")),
-                flows_min=_coerce_optional_float(s.get("flows_min")),
-                flows_max=_coerce_optional_float(s.get("flows_max")),
-                return_min=_coerce_optional_float(s.get("return_min")),
-                return_max=_coerce_optional_float(s.get("return_max")),
                 administrators=admins,
                 confidence=_clamp_confidence(s.get("confidence")),
+                field_confidence=_clamp_field_confidence(
+                    s.get("field_confidence"), _filled_keys(s_vals)
+                ),
+                **s_vals,
             )
         )
     return options

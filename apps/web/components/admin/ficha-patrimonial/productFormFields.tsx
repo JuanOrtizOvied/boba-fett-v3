@@ -194,7 +194,16 @@ export function Field({
 
 // -- Series table (editable catalog series) -----------------------------------
 
-const SERIES_COLUMNS: { key: keyof EditableSeriesRow; label: string }[] = [
+type SeriesColumnKey =
+  | "ter"
+  | "flowsMin"
+  | "flowsMax"
+  | "returnMin"
+  | "returnMax"
+  | "minimumUsd"
+  | "howCalculated";
+
+const SERIES_COLUMNS: { key: SeriesColumnKey; label: string }[] = [
   { key: "ter", label: "TER c/IGV" },
   { key: "flowsMin", label: "Flujos mín" },
   { key: "flowsMax", label: "Flujos máx" },
@@ -252,8 +261,9 @@ export function SeriesTable({
         >
           <div className="flex items-end gap-2">
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <label className="text-[11px] font-medium text-sabbi-neutral-500">
+              <label className="flex items-center gap-1 text-[11px] font-medium text-sabbi-neutral-500">
                 Serie
+                <ConfidenceTag value={s.suggestedConfidence} />
               </label>
               <input
                 value={s.series}
@@ -262,7 +272,6 @@ export function SeriesTable({
                 className={inputClass + " font-medium"}
               />
             </div>
-            <SuggestedBadge confidence={s.suggestedConfidence} />
             <button
               type="button"
               onClick={() => remove(i)}
@@ -283,8 +292,11 @@ export function SeriesTable({
                   (c.key === "howCalculated" ? " col-span-2 sm:col-span-3" : "")
                 }
               >
-                <label className="text-[11px] font-medium text-sabbi-neutral-500">
+                <label className="flex items-center gap-1 text-[11px] font-medium text-sabbi-neutral-500">
                   {c.label}
+                  {c.key !== "howCalculated" && (
+                    <ConfidenceTag value={s.fieldConfidence?.[c.key as Exclude<SeriesColumnKey, "howCalculated">]} />
+                  )}
                 </label>
                 <input
                   value={s[c.key]}
@@ -310,7 +322,10 @@ export function SeriesTable({
 
 // -- Administradores table (editable catalog admins) --------------------------
 
-const ADMIN_COLUMNS: { key: keyof EditableAdminRow; label: string }[] = [
+const ADMIN_COLUMNS: {
+  key: "custody" | "buy" | "sell" | "minimumUsd";
+  label: string;
+}[] = [
   { key: "custody", label: "Custodia %" },
   { key: "buy", label: "Compra %" },
   { key: "sell", label: "Venta %" },
@@ -343,8 +358,9 @@ export function AdminTable({
         >
           <div className="flex items-end gap-2">
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <label className="text-[11px] font-medium text-sabbi-neutral-500">
+              <label className="flex items-center gap-1 text-[11px] font-medium text-sabbi-neutral-500">
                 Administrador
+                <ConfidenceTag value={a.suggestedConfidence} />
               </label>
               <input
                 value={a.administrator}
@@ -353,7 +369,6 @@ export function AdminTable({
                 className={inputClass + " font-medium"}
               />
             </div>
-            <SuggestedBadge confidence={a.suggestedConfidence} />
             <button
               type="button"
               onClick={() => remove(i)}
@@ -379,8 +394,9 @@ export function AdminTable({
             </div>
             {ADMIN_COLUMNS.map((c) => (
               <div key={c.key} className="flex min-w-0 flex-col gap-1">
-                <label className="text-[11px] font-medium text-sabbi-neutral-500">
+                <label className="flex items-center gap-1 text-[11px] font-medium text-sabbi-neutral-500">
                   {c.label}
+                  <ConfidenceTag value={a.fieldConfidence?.[c.key]} />
                 </label>
                 <input
                   value={a[c.key]}

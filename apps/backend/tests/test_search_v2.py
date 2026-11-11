@@ -1225,3 +1225,64 @@ async def test_cascade_search_v2_refines_ambiguous_class_with_web(monkeypatch):
     result = await search_mod.cascade_search_v2("vvo", object())
     assert result is not None
     assert [a.name for a in result.asset_class] == ["Mercados Publicos - Variable"]
+
+
+async def test_research_web_v2_series_and_admin_field_confidence(monkeypatch):
+    """Each series/admin FIELD carries its own confidence; keys for null/absent
+    values are dropped, scores are clamped, junk is ignored."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": 0.0384,
+                        "flows_min": None,
+                        "return_min": 0.05,
+                        "confidence": 70,
+                        "field_confidence": {
+                            "management_fee_ter": 85,
+                            "flows_min": 90,  # value is null -> dropped
+                            "return_min": 150,  # clamped
+                            "return_max": 40,  # value absent -> dropped
+                            "bogus": 10,  # unknown key -> dropped
+                        },
+                        "administrators": [
+                            {
+                                "administrator": "Admin Co",
+                                "custody_fee": 0.001,
+                                "buy_commission": None,
+                                "minimum_usd": 50000,
+                                "confidence": 60,
+                                "field_confidence": {
+                                    "custody_fee": 75,
+                                    "buy_commission": 80,  # null -> dropped
+                                    "minimum_usd": "55",
+                                },
+                            }
+                        ],
+                    },
+                    {
+                        "series": "B",
+                        "management_fee_ter": 0.01,
+                        "field_confidence": "garbage",
+                        "administrators": [],
+                    },
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    series = result.series_options[0]
+    assert series.field_confidence == {"management_fee_ter": 85, "return_min": 100}
+    assert series.administrators[0].field_confidence == {
+        "custody_fee": 75,
+        "minimum_usd": 55,
+    }
+    assert result.series_options[1].field_confidence == {}

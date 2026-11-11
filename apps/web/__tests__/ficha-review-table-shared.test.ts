@@ -261,6 +261,41 @@ describe("toEditableSeriesRows", () => {
     expect(rows[0].suggestedConfidence).toBe(70);
   });
 
+  test("remaps backend field_confidence keys onto the editable series fields", () => {
+    const rows = toEditableSeriesRows([
+      {
+        series: "A",
+        management_fee_ter: 0.0384,
+        flows_min: 0.01,
+        flows_max: null,
+        return_min: 0.05,
+        return_max: 0.08,
+        administrators: [],
+        confidence: 70,
+        field_confidence: {
+          management_fee_ter: 85,
+          flows_min: 60,
+          return_min: 40,
+          return_max: 30,
+          minimum_usd: 20,
+          bogus: 10,
+        },
+      },
+    ]);
+    expect(rows[0].fieldConfidence).toEqual({
+      ter: 85,
+      flowsMin: 60,
+      returnMin: 40,
+      returnMax: 30,
+      minimumUsd: 20,
+    });
+  });
+
+  test("catalog series carry no fieldConfidence entries", () => {
+    const rows = toEditableSeriesRows(v2Enriched().series_options ?? []);
+    expect(rows[0].fieldConfidence ?? {}).toEqual({});
+  });
+
   test("catalog series carry no suggestedConfidence", () => {
     const rows = toEditableSeriesRows(v2Enriched().series_options ?? []);
     expect(rows[0].suggestedConfidence).toBeUndefined();
@@ -277,6 +312,45 @@ describe("formatPlainNumber", () => {
   test("returns an empty string for a null/undefined value", () => {
     expect(formatPlainNumber(null)).toBe("");
     expect(formatPlainNumber(undefined)).toBe("");
+  });
+});
+
+describe("toEditableAdminRows field confidence", () => {
+  test("remaps backend field_confidence keys onto the editable admin fields", () => {
+    const rows = toEditableAdminRows([
+      {
+        series: "A",
+        management_fee_ter: null,
+        flows_min: null,
+        flows_max: null,
+        return_min: null,
+        return_max: null,
+        administrators: [
+          {
+            administrator: "Admin Co",
+            custody_fee: 0.001,
+            buy_commission: 0.002,
+            sell_commission: 0.003,
+            billing_currency: "USD",
+            minimum_usd: 50000,
+            min_commission_usd: null,
+            confidence: 60,
+            field_confidence: {
+              custody_fee: 75,
+              buy_commission: 65,
+              sell_commission: 55,
+              minimum_usd: 45,
+            },
+          },
+        ],
+      },
+    ]);
+    expect(rows[0].fieldConfidence).toEqual({
+      custody: 75,
+      buy: 65,
+      sell: 55,
+      minimumUsd: 45,
+    });
   });
 });
 
