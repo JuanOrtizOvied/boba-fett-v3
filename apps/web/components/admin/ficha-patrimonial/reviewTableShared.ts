@@ -115,6 +115,10 @@ export interface EditableSeriesRow {
   returnMax: string;
   minimumUsd: string;
   howCalculated: string;
+  /** Present (0..100) only when this row was SUGGESTED by the web research —
+   * the card shows a "sugerido por Claude" badge with this %. Absent for
+   * catalog/manual rows. */
+  suggestedConfidence?: number;
 }
 
 /**
@@ -129,6 +133,10 @@ export interface EditableAdminRow {
   buy: string;
   sell: string;
   minimumUsd: string;
+  /** Present (0..100) only when this row was SUGGESTED by the web research —
+   * the card shows a "sugerido por Claude" badge with this %. Absent for
+   * catalog/manual rows. */
+  suggestedConfidence?: number;
 }
 
 /**
@@ -339,6 +347,7 @@ export function toEditableSeriesRows(
     returnMax: formatFractionValue(s.return_max),
     minimumUsd: "",
     howCalculated: "",
+    suggestedConfidence: s.confidence ?? undefined,
   }));
 }
 
@@ -358,6 +367,7 @@ export function toEditableAdminRows(
       buy: formatFractionValue(a.buy_commission),
       sell: formatFractionValue(a.sell_commission),
       minimumUsd: formatPlainNumber(a.minimum_usd),
+      suggestedConfidence: a.confidence ?? undefined,
     })),
   );
 }
@@ -494,6 +504,14 @@ export function applyResearchToRow(
     // clear the field (""), so the select shows "Sin mapear" and no stale value
     // is left behind (the per-field % is then hidden by the card's guard).
     patch.assetClass = normalizeAssetClass(result.asset_class[0].name);
+  }
+  // Web-SUGGESTED series (with their administrators) populate the Series and
+  // Administradores tables, each row carrying its confidence (shown as "sugerido
+  // por Claude"). Only when the web found some — never wipe an existing table.
+  if (result.series_options?.length) {
+    patch.seriesOptions = result.series_options;
+    patch.editableSeries = toEditableSeriesRows(result.series_options);
+    patch.editableAdmins = toEditableAdminRows(result.series_options);
   }
   return patch;
 }

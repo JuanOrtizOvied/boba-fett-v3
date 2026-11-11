@@ -297,6 +297,71 @@ describe("ReviewTable re-investigate with web", () => {
     expect(screen.getByTitle("Confianza de Claude (búsqueda web): 88%")).toBeInTheDocument();
   });
 
+  test("'Buscar con Claude' suggests series + administrators with a confidence badge", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Fondo Investigado",
+      manager: "Gestor Investigado",
+      currency: "USD",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+      series_options: [
+        {
+          series: "A",
+          management_fee_ter: 0.0384,
+          flows_min: null,
+          flows_max: null,
+          return_min: null,
+          return_max: null,
+          confidence: 70,
+          administrators: [
+            {
+              administrator: "Admin Sugerido",
+              custody_fee: null,
+              buy_commission: null,
+              sell_commission: null,
+              billing_currency: "",
+              minimum_usd: null,
+              min_commission_usd: null,
+              confidence: 55,
+            },
+          ],
+        },
+      ],
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    // MAPPED_ROW has no catalog series → the web suggestion fills the tables.
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    // The Series table is populated with the suggested series + its TER...
+    await waitFor(() =>
+      expect(screen.getByLabelText("Nombre de la serie 1")).toHaveValue("A"),
+    );
+    expect(screen.getByLabelText("Nombre del administrador 1")).toHaveValue(
+      "Admin Sugerido",
+    );
+    // ...each marked as a Claude suggestion with its confidence.
+    expect(
+      screen.getByTitle("Sugerido por Claude (búsqueda web): 70% de confianza"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Sugerido por Claude (búsqueda web): 55% de confianza"),
+    ).toBeInTheDocument();
+  });
+
   test("does not show an asset-class % when the class did not map to a ficha key", async () => {
     vi.mocked(researchFichaLine).mockResolvedValue({
       name: "Fondo Investigado",

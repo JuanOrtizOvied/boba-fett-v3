@@ -398,12 +398,17 @@ class CatalogSeriesAdminOption(BaseModel):
     billing_currency: str = ""
     minimum_usd: float | None = None
     min_commission_usd: float | None = None
+    # Self-reported confidence (0..100) when this administrator was SUGGESTED by
+    # the web research ("Buscar con Claude"). None for catalog/manual admins —
+    # that None is what the frontend reads as "not a web suggestion".
+    confidence: int | None = None
 
 
 class CatalogSeriesOption(BaseModel):
     """One series option (with its administrators) offered to the admin in the
     ficha-patrimonial V2 review table. The admin picks a series + administrator;
-    the commercial fields are NEVER auto-guessed."""
+    catalog commercial fields are NEVER auto-guessed. The web-research path
+    (`research_web_v2`) may instead SUGGEST series/admins with a `confidence`."""
 
     series: str
     management_fee_ter: float | None = None
@@ -412,6 +417,10 @@ class CatalogSeriesOption(BaseModel):
     return_min: float | None = None
     return_max: float | None = None
     administrators: list[CatalogSeriesAdminOption] = Field(default_factory=list)
+    # Self-reported confidence (0..100) when this series was SUGGESTED by the web
+    # research. None for catalog series (the frontend reads None as "from catalog,
+    # not a web suggestion"); a number marks it "sugerido por Claude".
+    confidence: int | None = None
 
 
 class Source(BaseModel):

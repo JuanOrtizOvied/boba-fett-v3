@@ -222,6 +222,28 @@ const SERIES_COLUMNS: { key: keyof EditableSeriesRow; label: string }[] = [
   { key: "howCalculated", label: "Cómo se calculó" },
 ];
 
+/** Small "sugerido por Claude" pill shown on a series/admin row the web research
+ * suggested, carrying its self-reported confidence %. Nothing for catalog/manual
+ * rows (confidence undefined). Color-banded like `ConfidenceTag`. */
+function SuggestedBadge({ confidence }: { confidence?: number }) {
+  if (confidence === undefined) return null;
+  const band =
+    confidence >= 80
+      ? "bg-green-100 text-green-800 ring-green-300"
+      : confidence >= 50
+        ? "bg-amber-100 text-amber-800 ring-amber-300"
+        : "bg-red-100 text-red-700 ring-red-300";
+  return (
+    <span
+      title={`Sugerido por Claude (búsqueda web): ${confidence}% de confianza`}
+      className={`inline-flex items-center gap-0.5 self-start rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${band}`}
+    >
+      <span aria-hidden="true">✨</span>
+      {confidence}%
+    </span>
+  );
+}
+
 function SeriesTable({
   series,
   onChange,
@@ -259,12 +281,15 @@ function SeriesTable({
               {series.map((s, i) => (
                 <tr key={i}>
                   <td className="px-1 py-1">
-                    <input
-                      value={s.series}
-                      aria-label={`Nombre de la serie ${i + 1}`}
-                      onChange={(e) => update(i, { series: e.target.value })}
-                      className="w-24 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
-                    />
+                    <div className="flex flex-col items-start gap-0.5">
+                      <input
+                        value={s.series}
+                        aria-label={`Nombre de la serie ${i + 1}`}
+                        onChange={(e) => update(i, { series: e.target.value })}
+                        className="w-24 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
+                      />
+                      <SuggestedBadge confidence={s.suggestedConfidence} />
+                    </div>
                   </td>
                   {SERIES_COLUMNS.map((c) => (
                     <td key={c.key} className="px-1 py-1">
@@ -352,12 +377,15 @@ function AdminTable({
               {admins.map((a, i) => (
                 <tr key={i}>
                   <td className="px-1 py-1">
-                    <input
-                      value={a.administrator}
-                      aria-label={`Nombre del administrador ${i + 1}`}
-                      onChange={(e) => update(i, { administrator: e.target.value })}
-                      className="w-28 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
-                    />
+                    <div className="flex flex-col items-start gap-0.5">
+                      <input
+                        value={a.administrator}
+                        aria-label={`Nombre del administrador ${i + 1}`}
+                        onChange={(e) => update(i, { administrator: e.target.value })}
+                        className="w-28 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
+                      />
+                      <SuggestedBadge confidence={a.suggestedConfidence} />
+                    </div>
                   </td>
                   <td className="px-1 py-1">
                     <input

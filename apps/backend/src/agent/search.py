@@ -124,7 +124,21 @@ evidence you were given. Include a key ONLY for fields you actually filled with 
 non-empty value; omit every field you left empty. Use the field names as keys
 (e.g. {"name": 95, "manager": 70, "asset_class": 60}). Be honest: a value well
 supported by the sources is high (80-100); a plausible-but-weakly-supported value
-is low (30-60)."""
+is low (30-60).
+
+`series` is a list of the product's SHARE CLASSES / series you can identify, each
+with its administrators. For each series provide: `series` (the class label, e.g.
+"A", "I", "Clean"), the fractions `management_fee_ter`, `flows_min`, `flows_max`,
+`return_min`, `return_max` (0.0384 = 3.84%; use null for any you cannot find), and
+`administrators` — a list of {administrator, custody_fee, buy_commission,
+sell_commission, billing_currency, minimum_usd, min_commission_usd} where the
+fee/commission values are fractions and minimums are plain USD amounts (null when
+unknown). Each series and each administrator also has a `confidence` (integer
+0-100) for how sure you are THIS series/administrator exists for this product.
+Only list a series or administrator you actually found evidence for — NEVER invent
+a class label or an administrator name. Return an empty list if you find none. It
+is fine to return a series with every numeric value null when you only know it
+exists."""
 
 
 def _build_extraction_system_prompt(asset_class_names: str) -> str:
@@ -139,6 +153,36 @@ _FICHA_EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(_FICHA_ASSET_C
 class _ExtractedAllocation(BaseModel):
     name: str = ""
     percentage: float = 0
+
+
+class _ExtractedSeriesAdmin(BaseModel):
+    """A SUGGESTED series administrator from the web research. Numeric values are
+    fractions (0.001 = 0.1%), left null when not found. `confidence` is the
+    model's 0..100 self-estimate for this administrator suggestion."""
+
+    administrator: str = ""
+    custody_fee: float | None = None
+    buy_commission: float | None = None
+    sell_commission: float | None = None
+    billing_currency: str = ""
+    minimum_usd: float | None = None
+    min_commission_usd: float | None = None
+    confidence: int = 0
+
+
+class _ExtractedSeries(BaseModel):
+    """A SUGGESTED series (share class) from the web research, with its
+    administrators. Numeric values are fractions, left null when not found.
+    `confidence` is the model's 0..100 self-estimate for this series suggestion."""
+
+    series: str = ""
+    management_fee_ter: float | None = None
+    flows_min: float | None = None
+    flows_max: float | None = None
+    return_min: float | None = None
+    return_max: float | None = None
+    administrators: list[_ExtractedSeriesAdmin] = Field(default_factory=list)
+    confidence: int = 0
 
 
 class ExtractedProduct(BaseModel):
@@ -159,6 +203,10 @@ class ExtractedProduct(BaseModel):
     # keyed by field name (e.g. {"name": 92, "manager": 78}). Omit fields left
     # empty. Surfaced only on the web-research path (see `_sanitize_field_confidence`).
     field_confidence: dict[str, int] = Field(default_factory=dict)
+    # SUGGESTED series (share classes) with their administrators, filled only on
+    # the web-research path. Mapped into `SearchResult.series_options` with each
+    # suggestion's confidence (see `_suggested_series_options`).
+    series: list[_ExtractedSeries] = Field(default_factory=list)
 
 
 def _merge_fields(
@@ -691,6 +739,57 @@ def _sanitize_field_confidence(raw: object, result: SearchResult) -> dict[str, i
     return cleaned
 
 
+def _clamp_confidence(raw: object) -> int:
+    """Coerce a self-reported confidence into 0..100; non-numeric -> 0."""
+    try:
+        return max(0, min(100, int(raw)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _suggested_series_options(web_data: dict) -> list[CatalogSeriesOption]:
+    """Map the web extraction's `series` suggestions into `CatalogSeriesOption`s,
+    carrying each series/admin `confidence` (which marks it "sugerido por Claude"
+    on the card — catalog series leave `confidence` None). A suggestion with a
+    blank series label is dropped; numeric values pass through as-is (null when
+    the model could not find them). Never raises on a malformed shape."""
+    raw_series = web_data.get("series") or []
+    options: list[CatalogSeriesOption] = []
+    for s in raw_series:
+        if not isinstance(s, dict):
+            continue
+        label = (s.get("series") or "").strip()
+        if not label:
+            continue
+        admins = [
+            CatalogSeriesAdminOption(
+                administrator=(a.get("administrator") or "").strip(),
+                custody_fee=a.get("custody_fee"),
+                buy_commission=a.get("buy_commission"),
+                sell_commission=a.get("sell_commission"),
+                billing_currency=a.get("billing_currency") or "",
+                minimum_usd=a.get("minimum_usd"),
+                min_commission_usd=a.get("min_commission_usd"),
+                confidence=_clamp_confidence(a.get("confidence")),
+            )
+            for a in (s.get("administrators") or [])
+            if isinstance(a, dict) and (a.get("administrator") or "").strip()
+        ]
+        options.append(
+            CatalogSeriesOption(
+                series=label,
+                management_fee_ter=s.get("management_fee_ter"),
+                flows_min=s.get("flows_min"),
+                flows_max=s.get("flows_max"),
+                return_min=s.get("return_min"),
+                return_max=s.get("return_max"),
+                administrators=admins,
+                confidence=_clamp_confidence(s.get("confidence")),
+            )
+        )
+    return options
+
+
 async def research_web_v2(query: str) -> SearchResult:
     """Force a Claude ``web_search`` + ``web_fetch`` research for one product —
     the ficha review card's "Volver a investigar" action. Returns a web-grounded
@@ -702,6 +801,9 @@ async def research_web_v2(query: str) -> SearchResult:
     web_data, web_sources = await _search_claude_web(query)
     if web_data:
         _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
+        # Suggested series/administrators (with per-suggestion confidence) — the
+        # catalog has none here, so the web suggestion owns `series_options`.
+        result.series_options = _suggested_series_options(web_data)
     if web_sources:
         result.sources = web_sources
 
@@ -728,11 +830,13 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
 
     web_verified = False
     web_field_confidence: object = None
+    web_suggested_series: list[CatalogSeriesOption] = []
     if not _is_product_complete(result) or _is_low_confidence_catalog(result):
         web_data, web_sources = await _search_claude_web(query)
         if web_data:
             _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
             web_field_confidence = web_data.get("field_confidence")
+            web_suggested_series = _suggested_series_options(web_data)
         if web_sources:
             result.sources = web_sources
             web_verified = True
@@ -748,6 +852,11 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         result.similarity, has_data, web_verified=web_verified
     )
     _strip_unconfident_catalog_match(result)
+    # The catalog is authoritative for series: fill from the web suggestion ONLY
+    # when no catalog series remain (unmatched product, or a fuzzy hit whose
+    # identity was just stripped). A confident catalog match keeps its own series.
+    if not result.series_options and web_suggested_series:
+        result.series_options = web_suggested_series
     # Per-field self-reported confidence, kept only for the fields the web step
     # actually filled (provenance == "web_search"); catalog/claude fields never
     # carry a web score. Computed last so it reflects the final field set.
