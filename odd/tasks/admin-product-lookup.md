@@ -32,14 +32,16 @@ no approve/create/edit.
   → GREEN. 4 tests (returns result + trims name + passes pool; null when None; blank
   short-circuit no cascade call; non-admin blocked). Checks: ficha-routes suite 39 passed;
   ruff clean. Commit: `<pending>`.
-- [ ] **T-2 — Frontend: "Buscar producto" page + nav + read-only result.** `fichaApi` (or new
-  `catalogLookupApi`) `lookupProduct(name): Promise<SearchResult | null>` →
-  `POST /api/admin/product-lookup`. New route `app/admin/buscar-producto/page.tsx`: name input +
-  search button + states (idle/loading/empty/result). Read-only result component: source badge
-  (Catálogo/Claude/Web) + confidence pill; product fields; asset_class/geographic_focus/
-  underlying; series_options (with ✨ suggested badge); Fuentes; the "no se encontró / insuficiente"
-  notice. Nav entry in `app/admin/layout.tsx`: `{ href: "/admin/buscar-producto", label: "Buscar producto" }`.
-  Tests + tsc.
+- [x] **T-2 — Frontend: "Buscar producto" page + nav + read-only result.** DONE. INLINE (TDD).
+  New `lib/catalogLookupApi.ts` `lookupProduct(name): Promise<SearchResult | null>` →
+  `POST /api/admin/product-lookup`. New route `app/admin/buscar-producto/page.tsx` (name input +
+  Buscar button + idle/loading/done states; not-found message on null). New read-only
+  `components/admin/ProductLookupResult.tsx`: reuses `SOURCE_BADGES` for the origin badge, shows
+  a confidence pill, the present product fields, asset_class/geographic_focus/underlying lists,
+  series_options (with ✨ suggested confidence badge), Fuentes, and the web_search_insufficient
+  notice. Nav entry added in `app/admin/layout.tsx`. TDD: RED (missing modules) → GREEN. 3 tests
+  (search shows result + origin badge; null → not-found; insufficient → warning). Checks: full
+  web suite 218 passed / 20 files; tsc clean. Commit: `<pending>`.
 
 ## Acceptance criteria
 - A "Buscar producto" admin section runs the catalog→web cascade on the entered name and shows
