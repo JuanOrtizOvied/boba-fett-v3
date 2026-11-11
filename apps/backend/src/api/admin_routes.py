@@ -925,8 +925,9 @@ async def normalized_changes_summary(
     date: datetime.date | None = None,
     repo: NormalizedSyncEventRepository = Depends(_sync_events_repo),
 ) -> DaySummary:
-    """What the sync changed on one day (00:00 to 24:00, Lima time): totals per
-    action and one entry per product. Today when `date` is left out."""
+    """What the sync changed on one day (00:00 to 24:00, Lima time): one entry per
+    product with its status, and the number of products per status (new, modified,
+    deleted, restored). Today when `date` is left out."""
     return await repo.day_summary(date)
 
 

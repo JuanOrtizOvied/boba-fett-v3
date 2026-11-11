@@ -35,6 +35,10 @@ export interface SyncEvent {
   series: string | null;
   administrator: string | null;
   changes: SyncFieldChange[];
+  /** Who saved the workbook the run read, as stored: an email, the marker
+   * `UNKNOWN_AUTHOR`, or null when there is no data (events from before the
+   * author was recorded, runs from a local file). Absent in old responses. */
+  changed_by?: string | null;
 }
 
 /** A page of a product's events, newest first, and how many it has in all. */
@@ -43,11 +47,24 @@ export interface ProductHistoryPage {
   events: SyncEvent[];
 }
 
-/** What happened to one product on one day. */
+/** What a product did on a day, counted once: `deleted` when it is soft-deleted
+ * now, `new` when it was created that day, `restored` when the sync reactivated
+ * it, `modified` otherwise (a changed value, or a series or administrator that
+ * was added, changed or removed). */
+export type ProductStatus = "new" | "modified" | "deleted" | "restored";
+
+const STATUSES: readonly ProductStatus[] = ["new", "modified", "deleted", "restored"];
+
+/** Number of PRODUCTS per status, each product once. */
+export type DayTotals = Record<ProductStatus, number>;
+
+/** What happened to one product on one day. `events` and the per-action counts
+ * are events of every level (product, series, administrator). */
 export interface DayProduct {
   product_code: string;
   name: string;
   deleted: boolean;
+  status: ProductStatus;
   events: number;
   create: number;
   update: number;
@@ -58,7 +75,7 @@ export interface DayProduct {
 export interface DaySummary {
   /** The Lima day it covers, `YYYY-MM-DD`. */
   date: string;
-  totals: Record<SyncAction, number>;
+  totals: DayTotals;
   products: DayProduct[];
 }
 
@@ -82,7 +99,10 @@ function isEvent(value: unknown): value is SyncEvent {
     (value.level === "product" ||
       value.level === "series" ||
       value.level === "admin") &&
-    Array.isArray(value.changes)
+    Array.isArray(value.changes) &&
+    (value.changed_by === undefined ||
+      value.changed_by === null ||
+      typeof value.changed_by === "string")
   );
 }
 
@@ -98,6 +118,7 @@ function isDayProduct(value: unknown): value is DayProduct {
     typeof value.product_code === "string" &&
     typeof value.name === "string" &&
     typeof value.deleted === "boolean" &&
+    STATUSES.includes(value.status as ProductStatus) &&
     typeof value.events === "number" &&
     ACTIONS.every((a) => typeof value[a] === "number")
   );
@@ -106,7 +127,7 @@ function isDayProduct(value: unknown): value is DayProduct {
 export function parseDaySummary(data: unknown): DaySummary | null {
   if (!isRecord(data) || typeof data.date !== "string") return null;
   const totals = data.totals;
-  if (!isRecord(totals) || !ACTIONS.every((a) => typeof totals[a] === "number")) {
+  if (!isRecord(totals) || !STATUSES.every((s) => typeof totals[s] === "number")) {
     return null;
   }
   if (!Array.isArray(data.products) || !data.products.every(isDayProduct)) {
@@ -114,7 +135,7 @@ export function parseDaySummary(data: unknown): DaySummary | null {
   }
   return {
     date: data.date,
-    totals: totals as Record<SyncAction, number>,
+    totals: totals as DayTotals,
     products: data.products,
   };
 }
@@ -130,20 +151,75 @@ export function changeCountLabel(count: number): string {
   return plural(count, "cambio", "cambios");
 }
 
-/** Header of the daily panel: `3 nuevos · 12 cambios · 1 eliminado`. Kinds with
- * no events are left out. */
-export function totalsLabel(totals: Record<SyncAction, number>): string {
-  const parts = [
-    totals.create > 0 && plural(totals.create, "nuevo", "nuevos"),
-    totals.update > 0 && plural(totals.update, "cambio", "cambios"),
-    totals.delete > 0 && plural(totals.delete, "eliminado", "eliminados"),
-    totals.restore > 0 && plural(totals.restore, "reactivado", "reactivados"),
-  ].filter(Boolean);
+const STATUS_WORDS: Record<ProductStatus, { one: string; many: string }> = {
+  new: { one: "nuevo", many: "nuevos" },
+  modified: { one: "modificado", many: "modificados" },
+  deleted: { one: "eliminado", many: "eliminados" },
+  restored: { one: "reactivado", many: "reactivados" },
+};
+
+/** Header of the daily panel. It counts PRODUCTS, each once, and names the noun
+ * only in the first part: `18 productos nuevos · 20 modificados · 1 eliminado`.
+ * Statuses with no products are left out. */
+export function totalsLabel(totals: DayTotals): string {
+  const parts = STATUSES.filter((s) => totals[s] > 0).map((s, index) => {
+    const count = totals[s];
+    const word = count === 1 ? STATUS_WORDS[s].one : STATUS_WORDS[s].many;
+    return index === 0
+      ? `${count} ${count === 1 ? "producto" : "productos"} ${word}`
+      : `${count} ${word}`;
+  });
   return parts.length > 0 ? parts.join(" · ") : "sin cambios";
 }
 
-export function totalEvents(totals: Record<SyncAction, number>): number {
-  return ACTIONS.reduce((sum, action) => sum + totals[action], 0);
+/** How many products the day touched. */
+export function totalProducts(totals: DayTotals): number {
+  return STATUSES.reduce((sum, status) => sum + totals[status], 0);
+}
+
+/** What the line or badge of a product says about its day: "Nuevo" for a product
+ * created that day, "Reactivado" for one the sync brought back, the number of
+ * events for one that already existed ("3 cambios"), and nothing for a deleted
+ * one (it carries its own "eliminado" tag). */
+export function productDayLabel(product: DayProduct): string {
+  switch (product.status) {
+    case "new":
+      return "Nuevo";
+    case "restored":
+      return "Reactivado";
+    case "deleted":
+      return "";
+    case "modified":
+      return changeCountLabel(product.events);
+  }
+}
+
+/** What the backend stores in `changed_by` when it could not tell who saved the
+ * workbook. An email always has an `@`, so it is never mistaken for this. */
+export const UNKNOWN_AUTHOR = "unknown";
+
+/** How the author of an event is written on the screen. */
+export type AuthorLabel =
+  | { kind: "name"; text: string }
+  | { kind: "unknown"; text: string };
+
+/** The author of an event, or null when there is nothing to show.
+ * - an email: only the part before the `@` (`user@empresa.com` -> `user`), never
+ *   the domain;
+ * - the marker `unknown`: "Desconocido", flagged, because someone may have saved
+ *   the workbook without a corporate account;
+ * - null, empty or absent: nothing (old events and local runs are not flagged);
+ * - a value that has no name before the `@`: also "Desconocido". */
+export function authorLabel(
+  changedBy: string | null | undefined,
+): AuthorLabel | null {
+  const value = changedBy?.trim();
+  if (!value) return null;
+  const unknown: AuthorLabel = { kind: "unknown", text: "Desconocido" };
+  if (value === UNKNOWN_AUTHOR) return unknown;
+  const at = value.indexOf("@");
+  if (at === 0) return unknown;
+  return { kind: "name", text: at > 0 ? value.slice(0, at) : value };
 }
 
 /** What the line says about the event. A restore is the sync reactivating a row
