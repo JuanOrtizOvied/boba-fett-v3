@@ -14,6 +14,7 @@ import type {
   CatalogSeriesUpdate,
   FichaApproveRequest,
   FichaEnrichedRow,
+  SearchResult,
 } from "@/lib/portfolio-types";
 
 export type FichaAssetClassKey =
@@ -738,4 +739,61 @@ export function buildApproveRequest(
     series,
     admins,
   };
+}
+
+/** Mirrors `api.admin_routes.ProductLookupSaveRequest` — persist a looked-up
+ * product into the normalized catalog, with no client/holding. */
+export interface CatalogSaveRequest {
+  name: string;
+  catalog_product_code: string;
+  catalog_update: {
+    name?: string;
+    manager?: string;
+    currency?: string;
+    asset_class?: AssetAllocation[];
+    geographic_focus?: AssetAllocation[];
+    underlying?: AssetAllocation[];
+  };
+  series: CatalogSeriesUpdate[];
+  admins: CatalogAdminUpdate[];
+}
+
+/**
+ * Builds the catalog-save payload for the standalone "Buscar producto" form.
+ * Reuses `buildApproveRequest`'s product/series/admin mapping (single source of
+ * truth) and drops the ficha-only `product`/`user_id` — the lookup never writes
+ * a client holding, so there is no amount.
+ */
+export function buildCatalogSaveRequest(row: EditableFichaRow): CatalogSaveRequest {
+  const approve = buildApproveRequest(row, "");
+  return {
+    name: row.name,
+    catalog_product_code: approve.catalog_product_code,
+    catalog_update: approve.catalog_update,
+    series: approve.series,
+    admins: approve.admins,
+  };
+}
+
+/**
+ * Builds an editable review row from a standalone lookup `SearchResult` (no
+ * ficha line behind it) by synthesizing the minimal `FichaEnrichedRow` that
+ * `toEditableRow` consumes. There is no declared/raw Excel line, so that rail is
+ * empty and the editable form is seeded entirely from the enrichment.
+ */
+export function searchResultToEditableRow(result: SearchResult): EditableFichaRow {
+  const synthetic: FichaEnrichedRow = {
+    excel_row: 0,
+    raw_name: result.name,
+    raw_tipo_activo: "",
+    raw_amount: 0,
+    raw_currency: result.currency ?? "",
+    raw_return_rate: "",
+    raw_pertenencia: "",
+    mapped_asset_class: null,
+    normalized_return_rate: "",
+    enriched: result,
+    enrichment_failed: false,
+  };
+  return toEditableRow(synthetic);
 }

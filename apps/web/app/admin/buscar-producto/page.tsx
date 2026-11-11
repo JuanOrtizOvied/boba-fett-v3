@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import ProductLookupResult from "@/components/admin/ProductLookupResult";
+import ProductLookupForm from "@/components/admin/ProductLookupForm";
 import { lookupProduct } from "@/lib/catalogLookupApi";
 import type { SearchResult } from "@/lib/portfolio-types";
 
@@ -69,7 +69,7 @@ export default function BuscarProductoPage() {
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {status === "done" && result && <ProductLookupResult result={result} />}
+      {status === "done" && result && <ProductLookupForm result={result} />}
 
       {status === "done" && result === null && (
         <p className="rounded-lg border border-sabbi-neutral-200 bg-sabbi-neutral-50 px-3 py-2 text-sm text-sabbi-neutral-600">

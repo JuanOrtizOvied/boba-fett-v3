@@ -31,7 +31,7 @@ no approve/create/edit.
   blank name → null with no DB/LLM call. Router-level `require_admin` guards it. TDD: RED (404)
   → GREEN. 4 tests (returns result + trims name + passes pool; null when None; blank
   short-circuit no cascade call; non-admin blocked). Checks: ficha-routes suite 39 passed;
-  ruff clean. Commit: `<pending>`.
+  ruff clean. Commit: `eafcde0`.
 - [x] **T-2 — Frontend: "Buscar producto" page + nav + read-only result.** DONE. INLINE (TDD).
   New `lib/catalogLookupApi.ts` `lookupProduct(name): Promise<SearchResult | null>` →
   `POST /api/admin/product-lookup`. New route `app/admin/buscar-producto/page.tsx` (name input +
@@ -41,7 +41,7 @@ no approve/create/edit.
   series_options (with ✨ suggested confidence badge), Fuentes, and the web_search_insufficient
   notice. Nav entry added in `app/admin/layout.tsx`. TDD: RED (missing modules) → GREEN. 3 tests
   (search shows result + origin badge; null → not-found; insufficient → warning). Checks: full
-  web suite 218 passed / 20 files; tsc clean. Commit: `<pending>`.
+  web suite 218 passed / 20 files; tsc clean. Commit: `eafcde0`.
 
 ## Extension (2026-11-11): editable form + save to catalog
 
@@ -69,19 +69,21 @@ catalog. No client/holding part (that only applies to the ficha).
   `create_catalog_product_from_ficha(name_fallback=catalog_update.name or name)`; returns
   `{catalog_product_code, catalog_changes}`. `Depends(require_admin)` for `admin["id"]`
   (history changed_by). TDD: RED (404) → GREEN. 3 tests (curate branch, create branch, non-admin
-  blocked). Checks: ficha-routes suite 42 passed; ruff clean. Commit: `<pending>`.
+  blocked). Checks: ficha-routes suite 42 passed; ruff clean. Commit: `2d8c6ce`.
 - [x] **T-4 — Frontend: extract shared form atoms.** DONE. INLINE (refactor, guarded by existing
-  `ficha-review-table.test.tsx`). Move AllocationEditor/Field/ConfidenceTag/SuggestedBadge/
-  SeriesTable/AdminTable/inputClass from `ReviewTable.tsx` into
+  `ficha-review-table.test.tsx`). Moved AllocationEditor/Field/ConfidenceTag/SuggestedBadge/
+  SeriesTable/AdminTable/CatalogProductPicker/inputClass from `ReviewTable.tsx` into
   `components/admin/ficha-patrimonial/productFormFields.tsx`; `ReviewTable` imports them. No
-  behavior change.
-- [ ] **T-5 — Frontend: editable `ProductLookupForm` + save + wire page.** INLINE (TDD).
+  behavior change. Checks: tsc + eslint clean; ficha suites 103 passed. Commit: `0b04f0d`.
+- [x] **T-5 — Frontend: editable `ProductLookupForm` + save + wire page.** DONE. INLINE (TDD).
   `reviewTableShared.ts`: `searchResultToEditableRow(result)` + `buildCatalogSaveRequest(row)`
   (reuse the series/admin fraction mapping, drop `product`/`user_id`). `catalogLookupApi.ts`:
   `saveProductToCatalog(req)`. New `components/admin/ProductLookupForm.tsx` (editable fields +
-  Series/Admin tables + origin/confidence/Fuentes + "Guardar en catálogo"). Wire into
-  `buscar-producto/page.tsx` (replaces the read-only `ProductLookupResult`, which is deleted).
-  Update `buscar-producto-page.test.tsx`; new `product-lookup-form.test.tsx`.
+  Series/Admin tables + "Buscar con Claude" refine + origin/confidence/Fuentes + "Guardar en
+  catálogo"). Wired into `buscar-producto/page.tsx` (replaced the read-only `ProductLookupResult`,
+  deleted). TDD: RED → GREEN. New `product-lookup-form.test.tsx` (3), updated
+  `buscar-producto-page.test.tsx`. Checks: full web suite 221 passed / 21 files; tsc + eslint
+  clean. Commit: `eafcde0`.
 
 ## Acceptance criteria
 - A "Buscar producto" admin section runs the catalog→web cascade on the entered name and shows
