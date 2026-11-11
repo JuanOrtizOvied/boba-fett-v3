@@ -17,6 +17,7 @@ import asyncio
 import logging
 import os
 import re
+import unicodedata
 
 import asyncpg
 from langchain_anthropic import ChatAnthropic
@@ -142,13 +143,38 @@ is fine to return a series with every numeric value null when you only know it
 exists."""
 
 
-def _build_extraction_system_prompt(asset_class_names: str) -> str:
-    return _EXTRACTION_PROMPT_TEMPLATE.replace("__ASSET_CLASSES__", asset_class_names)
+# Ficha-only: asset_class is a CLASSIFICATION, not a fact to find stated in the
+# sources, so the ficha review select is never left blank for a found product.
+# This intentionally overrides the shared prompt's "leave empty if unsure" rule
+# for asset_class ONLY — every other field keeps the no-fabricate rule.
+_ALWAYS_CLASSIFY_ASSET_CLASS = (
+    "ASSET CLASS IS MANDATORY. asset_class is a CLASSIFICATION decision, not a "
+    "fact you must find stated in the sources: every investment product belongs "
+    "to exactly one of the asset classes listed above. ALWAYS return exactly one "
+    "asset_class entry (name = the single best-fitting class from that list, "
+    "percentage = 100). NEVER leave asset_class empty — if you are unsure, choose "
+    "the closest class from the evidence you do have (the product type, its name, "
+    "its underlying holdings, its geographic focus). This overrides the "
+    "empty-list guidance for asset_class ONLY; every other field still follows "
+    "the no-fabricate rule above."
+)
+
+
+def _build_extraction_system_prompt(
+    asset_class_names: str, *, always_classify: bool = False
+) -> str:
+    prompt = _EXTRACTION_PROMPT_TEMPLATE.replace("__ASSET_CLASSES__", asset_class_names)
+    if always_classify:
+        prompt = f"{prompt}\n\n{_ALWAYS_CLASSIFY_ASSET_CLASS}"
+    return prompt
 
 
 _EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(_PORTFOLIO_ASSET_CLASSES)
-# Ficha web research classifies into the ficha select's taxonomy.
-_FICHA_EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(_FICHA_ASSET_CLASSES)
+# Ficha web research classifies into the ficha select's taxonomy and must always
+# assign a class (the admin can still override it in the review card).
+_FICHA_EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(
+    _FICHA_ASSET_CLASSES, always_classify=True
+)
 
 
 class _ExtractedAllocation(BaseModel):
@@ -575,6 +601,87 @@ def _classify(result: SearchResult) -> None:
     result.provenance["asset_class"] = result.primary_source
 
 
+# --- Ficha asset-class taxonomy (reviewTableShared.ts `ASSET_CLASS_LABELS`) ---
+# The ficha review select uses a 7-class taxonomy that SPLITS public markets into
+# fijo/variable, unlike the portfolio `ASSET_CLASSES`. The ficha enrichment keeps
+# asset_class in THIS taxonomy so the select auto-populates; the portfolio
+# `_sanitize_taxonomy`/`_classify` would drop a correct ficha label as "invalid".
+_FICHA_ASSET_CLASS_BY_KEY: dict[str, str] = {
+    "inmobiliario_directo": "Inmobiliario Directo",
+    "mercados_publicos_fijo": "Mercados Publicos - Fijo",
+    "mercados_publicos_variable": "Mercados Publicos - Variable",
+    "mercados_privados": "Mercados Privados",
+    "club_deal": "Club Deal",
+    "commodities_y_criptos": "Commodities y Criptos",
+    "cash_y_otros": "Cash y Otros",
+}
+
+
+def _ficha_asset_class_label(name: str) -> str:
+    """Map a free-form asset-class name to the canonical ficha label, or "" when
+    it does not fit the ficha taxonomy. Mirrors `normalizeAssetClass` in
+    reviewTableShared.ts, plus a few model-wording synonyms, so whatever the
+    extraction returns ("Mercados Publicos - Variable", "Renta Variable",
+    "equity", "mercados_publicos_variable") canonicalizes to the one ficha class
+    the review select maps. The ambiguous portfolio value "mercados_publicos"
+    (no fijo/variable) does not fit and is dropped."""
+    n = unicodedata.normalize("NFD", name.lower())
+    n = "".join(c for c in n if unicodedata.category(c) != "Mn")
+    n = re.sub(r"[–—]", "-", n).strip()
+    # Order matters: the more specific classes win over the generic public-markets
+    # synonyms (e.g. "Private Equity" is mercados_privados, not public variable).
+    if "inmobiliario" in n or "inversiones directa" in n or "real estate directo" in n:
+        key = "inmobiliario_directo"
+    elif "club" in n:
+        key = "club_deal"
+    elif "privado" in n or "private" in n:
+        key = "mercados_privados"
+    elif "commodit" in n or "cripto" in n or "crypto" in n or "bitcoin" in n:
+        key = "commodities_y_criptos"
+    elif "cash" in n or "efectivo" in n or "money market" in n or "deposito" in n:
+        key = "cash_y_otros"
+    elif (
+        ("publico" in n and "fijo" in n)
+        or "renta fija" in n
+        or "fixed income" in n
+        or "bond" in n
+        or "bono" in n
+    ):
+        key = "mercados_publicos_fijo"
+    elif (
+        ("publico" in n and "variable" in n)
+        or "renta variable" in n
+        or "equity" in n
+        or "accion" in n
+        or "stock" in n
+    ):
+        key = "mercados_publicos_variable"
+    else:
+        key = ""
+    return _FICHA_ASSET_CLASS_BY_KEY.get(key, "")
+
+
+def _sanitize_taxonomy_ficha(result: SearchResult) -> None:
+    """Keep `asset_class` in the FICHA taxonomy. Catalog-sourced values are
+    trusted as-is (an admin already reviewed them). Any other allocation name is
+    canonicalized to its ficha label; names that do not fit the ficha taxonomy
+    (e.g. the ambiguous portfolio "mercados_publicos", or "Diversificado") are
+    dropped so the select stays blank rather than showing an unmappable value —
+    and, in the cascade, so a later level can refine it."""
+    if not result.asset_class:
+        return
+    if result.provenance.get("asset_class") == "catalog":
+        return
+    canonical: list[AssetAllocation] = []
+    for a in result.asset_class:
+        label = _ficha_asset_class_label(a.name)
+        if label:
+            canonical.append(AssetAllocation(name=label, percentage=a.percentage))
+    result.asset_class = canonical
+    if not canonical:
+        result.provenance.pop("asset_class", None)
+
+
 async def cascade_search(query: str, pool: asyncpg.Pool) -> SearchResult | None:
     """L1 -> L2 -> L3 cascade. Returns None only if all levels find nothing."""
     result = await _search_catalog(query, pool)
@@ -891,8 +998,9 @@ async def _research_web_once(query: str) -> SearchResult:
     if web_sources:
         result.sources = web_sources
 
-    _sanitize_taxonomy(result)
-    _classify(result)
+    # Ficha taxonomy: keep the model's ficha class (the portfolio sanitize/classify
+    # would drop a correct ficha label like "Mercados Publicos - Variable").
+    _sanitize_taxonomy_ficha(result)
     result.confidence, result.catalog_matched = _classify_match(
         0.0, _has_any_data(result), web_verified=bool(web_sources)
     )
@@ -931,6 +1039,12 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         if claude_data:
             _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
 
+    # Drop an ambiguous/non-ficha asset_class from L1/L2 (e.g. the portfolio
+    # "mercados_publicos") BEFORE the L3 gate, so the product counts as
+    # incomplete and the web step can refine the class into the ficha taxonomy
+    # instead of being skipped. Catalog-sourced classes are kept untouched.
+    _sanitize_taxonomy_ficha(result)
+
     web_verified = False
     web_field_confidence: object = None
     web_suggested_series: list[CatalogSeriesOption] = []
@@ -944,8 +1058,9 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
             result.sources = web_sources
             web_verified = True
 
-    _sanitize_taxonomy(result)
-    _classify(result)
+    # Final pass in the ficha taxonomy (keeps the web-refined ficha class; the
+    # portfolio sanitize/classify would drop it).
+    _sanitize_taxonomy_ficha(result)
 
     has_data = _has_any_data(result)
     if not has_data:

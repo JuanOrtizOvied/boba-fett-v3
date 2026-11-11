@@ -229,11 +229,16 @@ async def test_v2_returns_none_when_no_data(monkeypatch):
     async def nothing(query):
         return {}
 
+    # The ficha cascade's L3 is Claude web (not Tavily); with no web data the
+    # whole cascade finds nothing and returns None.
+    async def no_web(query):
+        return {}, []
+
     monkeypatch.setattr(
         search_mod.NormalizedCatalogRepository, "search_for_enrichment", no_match
     )
     monkeypatch.setattr(search_mod, "_extract_from_claude", nothing)
-    monkeypatch.setattr(search_mod, "_search_tavily", nothing)
+    monkeypatch.setattr(search_mod, "_search_claude_web", no_web)
 
     result = await search_mod.cascade_search_v2("nothing at all", object())
     assert result is None
@@ -315,6 +320,9 @@ def _complete_result(similarity: float):
         underlying=[AssetAllocation(name="Acciones", percentage=100)],
         catalog_product_code="BD-00001",
         similarity=similarity,
+        # A real catalog match: its asset_class is catalog-sourced, so the ficha
+        # taxonomy pass trusts it as-is (does not drop/re-derive it).
+        provenance={"asset_class": "catalog"},
     )
 
 
@@ -467,7 +475,7 @@ async def test_research_web_v2_surfaces_self_reported_field_confidence(monkeypat
             {
                 "name": "Researched Fund",
                 "manager": "Web Manager",
-                "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
+                "asset_class": [{"name": "Mercados Publicos - Variable", "percentage": 100}],
                 "field_confidence": {
                     "name": 92,
                     "manager": 150,  # out of range -> clamped to 100
@@ -1117,3 +1125,103 @@ async def test_v1_cascade_still_fills_commercial_fields(monkeypatch):
     assert result.administrator == "Chat Admin"
     assert result.liquidity == "Monthly"
     assert result.return_rate == "7%"
+
+
+# ---------------------------------------------------------------------------
+# Ficha asset-class taxonomy (feature: ficha-asset-class-classified)
+# The ficha enrichment must classify asset_class into the FICHA 7-class taxonomy
+# (reviewTableShared.ts) and keep it — the portfolio sanitize used to DROP a
+# correct ficha label ("Mercados Publicos - Variable"), leaving the select blank.
+# ---------------------------------------------------------------------------
+
+
+async def test_ficha_asset_class_label_maps_labels_and_synonyms():
+    f = search_mod._ficha_asset_class_label
+    # The 7 canonical ficha labels map to themselves.
+    assert f("Inmobiliario Directo") == "Inmobiliario Directo"
+    assert f("Mercados Publicos - Fijo") == "Mercados Publicos - Fijo"
+    assert f("Mercados Publicos - Variable") == "Mercados Publicos - Variable"
+    assert f("Mercados Privados") == "Mercados Privados"
+    assert f("Club Deal") == "Club Deal"
+    assert f("Commodities y Criptos") == "Commodities y Criptos"
+    assert f("Cash y Otros") == "Cash y Otros"
+    # Common synonyms the extraction model may return.
+    assert f("Renta Variable") == "Mercados Publicos - Variable"
+    assert f("equity") == "Mercados Publicos - Variable"
+    assert f("Renta Fija") == "Mercados Publicos - Fijo"
+    assert f("Private Equity") == "Mercados Privados"  # private wins over "equity"
+    assert f("Bitcoin / crypto") == "Commodities y Criptos"
+    # The ambiguous portfolio value and junk do not fit the ficha taxonomy.
+    assert f("mercados_publicos") == ""
+    assert f("Diversificado") == ""
+
+
+async def test_ficha_extraction_prompt_mandates_asset_class():
+    """The ficha extraction prompt must force a classification (never empty),
+    while the portfolio/chat prompt keeps the conservative empty-if-unsure rule."""
+    marker = "ALWAYS return exactly one asset_class"
+    assert marker in search_mod._FICHA_EXTRACTION_SYSTEM_PROMPT
+    assert marker not in search_mod._EXTRACTION_SYSTEM_PROMPT
+
+
+async def test_research_web_v2_keeps_ficha_asset_class(monkeypatch):
+    async def fake_web(query):
+        return (
+            {
+                "name": "VVO",
+                "asset_class": [{"name": "Mercados Publicos - Variable", "percentage": 100}],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+    result = await search_mod.research_web_v2("vvo")
+    assert [a.name for a in result.asset_class] == ["Mercados Publicos - Variable"]
+
+
+async def test_research_web_v2_canonicalizes_asset_class_synonym(monkeypatch):
+    async def fake_web(query):
+        return (
+            {"name": "X", "asset_class": [{"name": "Renta Variable", "percentage": 100}]},
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+    result = await search_mod.research_web_v2("x")
+    assert [a.name for a in result.asset_class] == ["Mercados Publicos - Variable"]
+
+
+async def test_cascade_search_v2_refines_ambiguous_class_with_web(monkeypatch):
+    """When L2 (Claude knowledge) returns the ambiguous portfolio class
+    'mercados_publicos', it is dropped so L3 web research can refine it into the
+    exact ficha class — the field never ends empty for a found product."""
+    from db.models import Source
+
+    async def no_catalog(self, query):
+        return None
+
+    async def claude(query):
+        return {
+            "name": "VVO",
+            "currency": "USD",
+            "manager": "Vanguard",
+            "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
+            "geographic_focus": [{"name": "Global", "percentage": 100}],
+            "underlying": [{"name": "Equities", "percentage": 100}],
+        }
+
+    async def web(query):
+        return (
+            {"asset_class": [{"name": "Mercados Publicos - Variable", "percentage": 100}]},
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(
+        search_mod.NormalizedCatalogRepository, "search_for_enrichment", no_catalog
+    )
+    monkeypatch.setattr(search_mod, "_extract_from_claude", claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", web)
+
+    result = await search_mod.cascade_search_v2("vvo", object())
+    assert result is not None
+    assert [a.name for a in result.asset_class] == ["Mercados Publicos - Variable"]
