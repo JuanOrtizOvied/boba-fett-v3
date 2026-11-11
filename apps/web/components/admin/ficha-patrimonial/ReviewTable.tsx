@@ -887,6 +887,7 @@ export default function ReviewTable({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [researchingIndex, setResearchingIndex] = useState<number | null>(null);
   // When the ficha has no associated user, the admin creates one here
   // (email + nombres + apellidos + contraseña) and the products are created
@@ -918,12 +919,23 @@ export default function ReviewTable({
     const current = editableRows[index];
     if (!current) return;
     setErrorMessage(null);
+    setNotice(null);
     setResearchingIndex(index);
+    const declaredName = rows[index].raw_name || current.name;
     try {
       // Search by the ficha's DECLARED name (left rail), not the editable form
       // field — which may hold a wrong prior enrichment.
-      const result = await researchFichaLine(rows[index].raw_name || current.name);
+      const result = await researchFichaLine(declaredName);
       updateRow(index, applyResearchToRow(current, result));
+      // The search ran but found no useful data (even after the backend's
+      // reformulated retry) — tell the admin instead of leaving empty fields
+      // that look like a failure.
+      if (result.web_search_insufficient) {
+        setNotice(
+          `No se encontró información suficiente en la web para «${declaredName}». ` +
+            "Revisá o completá los datos manualmente.",
+        );
+      }
     } catch {
       setErrorMessage("No se pudo investigar el producto con la búsqueda web.");
     } finally {
@@ -1010,6 +1022,14 @@ export default function ReviewTable({
       </div>
 
       {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+      {notice && (
+        <p
+          role="status"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          {notice}
+        </p>
+      )}
 
       {!hasUser && (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">

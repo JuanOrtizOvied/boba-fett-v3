@@ -141,9 +141,14 @@ is independent). Flagged for the user's merge step.
   gate, reformulate strip + none, retry-and-use, flag-when-both-empty, no-retry-when-useful,
   no-retry-when-not-reformulable. Checks: full backend unit suite 416 passed; ruff clean.
   Commit: `<pending>`.
-- [ ] **F-4 — Frontend: warn the admin when `web_search_insufficient`.** `portfolio-types.ts`
-  += `web_search_insufficient?: boolean`; `ReviewTable.researchRow` shows a clear notice
-  when the flag is set (still applies the sparse result so name/source show). Tests + tsc.
+- [x] **F-4 — Frontend: warn the admin when `web_search_insufficient`.** DONE. INLINE (TDD).
+  `portfolio-types.ts` SearchResult += `web_search_insufficient?: boolean`. `ReviewTable`:
+  new `notice` state (amber `role="status"` banner, distinct from the red error banner);
+  `researchRow` sets it ("No se encontró información suficiente en la web para «{name}».
+  Revisá o completá los datos manualmente.") when the flag is set, and still applies the
+  sparse result so the name/source show. TDD: RED → GREEN. 2 tests (warns when insufficient;
+  no warning when useful data). Checks: full web suite 214 passed / 19 files; tsc clean.
+  Commit: `<pending>`.
 
 ## Next step
 Start T-1 (backend) with a RED test.

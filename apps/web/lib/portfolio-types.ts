@@ -223,6 +223,9 @@ export interface SearchResult {
    * Only present on web-research results; the web_search tool gives no numeric
    * score, so this is the extraction model's self-estimate. */
   field_confidence?: Record<string, number>;
+  /** True when "Buscar con Claude" (incl. one reformulated retry) found no useful
+   * product/series data — only the name, or nothing. The card warns the admin. */
+  web_search_insufficient?: boolean;
   primary_source: FieldSource;
   provenance: ProvenanceMap;
 }
