@@ -93,5 +93,26 @@ is independent). Flagged for the user's merge step.
 - Catalog-matched series are unchanged (no confidence badge). Backend + web suites green;
   no regression to the parse-time cascade or the chat/portfolio cascade.
 
+## Follow-ups
+- [x] **F-1 — BUG: "Buscar con Claude" 500 on messy series numbers.** DONE. INLINE (TDD).
+  User hit a 500 on `POST /research` (~8s, no traceback). Root cause (reproduced
+  deterministically): the small extraction model returns series fee/return values as
+  unit-laden strings ("3.84%", "5%", "50,000"); the new `float | None` schema/model
+  fields raised Pydantic `ValidationError` in TWO spots — `_run_extraction`
+  (`ExtractedProduct` validation, which killed the WHOLE extraction) and
+  `_suggested_series_options` (`CatalogSeriesOption`/`CatalogSeriesAdminOption`
+  construction). No traceback because `_search_claude_web`/`research_web_v2` claimed
+  "never raises" but did not guard `_run_extraction`. Fix (3 layers): (A) extracted
+  series numeric/confidence fields accept `_LooseNumber = float|int|str|None` so a messy
+  value never rejects the whole payload; (B) new `_coerce_optional_float` (clean number
+  or None — never guesses a magnitude, so "3.84%" → None, admin fills it) used in
+  `_suggested_series_options`; `_clamp_confidence` hardened to `int(float(...))`;
+  (C) wrapped `_run_extraction` in `_search_claude_web` with try/except +
+  `logger.exception` (degrades to sources-only, logs the traceback). TDD: RED (4 fails)
+  → GREEN. 6 tests (schema tolerates bad numbers; `_suggested_series_options` coerces to
+  null + keeps clean; research_web_v2 survives messy; `_search_claude_web` degrades on
+  extraction raise). Checks: full backend unit suite 408 passed; ruff clean. Commit:
+  `<pending>`.
+
 ## Next step
 Start T-1 (backend) with a RED test.

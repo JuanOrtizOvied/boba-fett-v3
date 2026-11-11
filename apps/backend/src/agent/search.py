@@ -155,19 +155,26 @@ class _ExtractedAllocation(BaseModel):
     percentage: float = 0
 
 
+# The small extraction model often reports numbers as unit/symbol-laden strings
+# ("3.84%", "50,000", "N/A"). These schema fields therefore accept `str` too, so a
+# messy value never makes Pydantic reject the WHOLE extraction; the real parsing
+# (clean number or None) happens later in `_suggested_series_options`.
+_LooseNumber = float | int | str | None
+
+
 class _ExtractedSeriesAdmin(BaseModel):
     """A SUGGESTED series administrator from the web research. Numeric values are
     fractions (0.001 = 0.1%), left null when not found. `confidence` is the
     model's 0..100 self-estimate for this administrator suggestion."""
 
     administrator: str = ""
-    custody_fee: float | None = None
-    buy_commission: float | None = None
-    sell_commission: float | None = None
+    custody_fee: _LooseNumber = None
+    buy_commission: _LooseNumber = None
+    sell_commission: _LooseNumber = None
     billing_currency: str = ""
-    minimum_usd: float | None = None
-    min_commission_usd: float | None = None
-    confidence: int = 0
+    minimum_usd: _LooseNumber = None
+    min_commission_usd: _LooseNumber = None
+    confidence: _LooseNumber = 0
 
 
 class _ExtractedSeries(BaseModel):
@@ -176,13 +183,13 @@ class _ExtractedSeries(BaseModel):
     `confidence` is the model's 0..100 self-estimate for this series suggestion."""
 
     series: str = ""
-    management_fee_ter: float | None = None
-    flows_min: float | None = None
-    flows_max: float | None = None
-    return_min: float | None = None
-    return_max: float | None = None
+    management_fee_ter: _LooseNumber = None
+    flows_min: _LooseNumber = None
+    flows_max: _LooseNumber = None
+    return_min: _LooseNumber = None
+    return_max: _LooseNumber = None
     administrators: list[_ExtractedSeriesAdmin] = Field(default_factory=list)
-    confidence: int = 0
+    confidence: _LooseNumber = 0
 
 
 class ExtractedProduct(BaseModel):
@@ -462,13 +469,20 @@ async def _search_claude_web(query: str) -> tuple[dict[str, str], list[Source]]:
     if not context:
         return {}, sources
     # Classify asset_class into the FICHA taxonomy so the ficha review select
-    # auto-populates (the portfolio taxonomy would not map onto it).
-    fields = await _run_extraction(
-        f"Product to research: {query}\n\nWeb research:\n{context}\n\n"
-        "Extract fields ONLY from the web research above — do not use outside "
-        "knowledge.",
-        system_prompt=_FICHA_EXTRACTION_SYSTEM_PROMPT,
-    )
+    # auto-populates (the portfolio taxonomy would not map onto it). Guard the
+    # structured extraction: a malformed model payload must degrade to
+    # sources-only, never 500 the "Buscar con Claude" endpoint (this honors the
+    # "never raises" contract and logs the traceback for diagnosis).
+    try:
+        fields = await _run_extraction(
+            f"Product to research: {query}\n\nWeb research:\n{context}\n\n"
+            "Extract fields ONLY from the web research above — do not use outside "
+            "knowledge.",
+            system_prompt=_FICHA_EXTRACTION_SYSTEM_PROMPT,
+        )
+    except Exception:
+        logger.exception("Ficha web extraction failed for %r — returning sources only", query)
+        return {}, sources
     return fields, sources
 
 
@@ -742,9 +756,26 @@ def _sanitize_field_confidence(raw: object, result: SearchResult) -> dict[str, i
 def _clamp_confidence(raw: object) -> int:
     """Coerce a self-reported confidence into 0..100; non-numeric -> 0."""
     try:
-        return max(0, min(100, int(raw)))
+        return max(0, min(100, int(float(raw))))
     except (TypeError, ValueError):
         return 0
+
+
+def _coerce_optional_float(raw: object) -> float | None:
+    """Best-effort parse of a model-reported number into a float. Returns None for
+    blanks, booleans, and unit/symbol-laden strings ('3.84%', '50,000', 'N/A') — we
+    never GUESS a magnitude (stripping '%' off '3.84%' would store 384%), so the
+    admin fills those. A real number or a clean numeric string ('0.0384') passes."""
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return float(raw.strip())
+        except ValueError:
+            return None
+    return None
 
 
 def _suggested_series_options(web_data: dict) -> list[CatalogSeriesOption]:
@@ -764,12 +795,12 @@ def _suggested_series_options(web_data: dict) -> list[CatalogSeriesOption]:
         admins = [
             CatalogSeriesAdminOption(
                 administrator=(a.get("administrator") or "").strip(),
-                custody_fee=a.get("custody_fee"),
-                buy_commission=a.get("buy_commission"),
-                sell_commission=a.get("sell_commission"),
+                custody_fee=_coerce_optional_float(a.get("custody_fee")),
+                buy_commission=_coerce_optional_float(a.get("buy_commission")),
+                sell_commission=_coerce_optional_float(a.get("sell_commission")),
                 billing_currency=a.get("billing_currency") or "",
-                minimum_usd=a.get("minimum_usd"),
-                min_commission_usd=a.get("min_commission_usd"),
+                minimum_usd=_coerce_optional_float(a.get("minimum_usd")),
+                min_commission_usd=_coerce_optional_float(a.get("min_commission_usd")),
                 confidence=_clamp_confidence(a.get("confidence")),
             )
             for a in (s.get("administrators") or [])
@@ -778,11 +809,11 @@ def _suggested_series_options(web_data: dict) -> list[CatalogSeriesOption]:
         options.append(
             CatalogSeriesOption(
                 series=label,
-                management_fee_ter=s.get("management_fee_ter"),
-                flows_min=s.get("flows_min"),
-                flows_max=s.get("flows_max"),
-                return_min=s.get("return_min"),
-                return_max=s.get("return_max"),
+                management_fee_ter=_coerce_optional_float(s.get("management_fee_ter")),
+                flows_min=_coerce_optional_float(s.get("flows_min")),
+                flows_max=_coerce_optional_float(s.get("flows_max")),
+                return_min=_coerce_optional_float(s.get("return_min")),
+                return_max=_coerce_optional_float(s.get("return_max")),
                 administrators=admins,
                 confidence=_clamp_confidence(s.get("confidence")),
             )
