@@ -497,6 +497,101 @@ async def test_research_web_v2_field_confidence_empty_without_scores(monkeypatch
     assert result.field_confidence == {}
 
 
+async def test_research_web_v2_suggests_series_with_administrators(monkeypatch):
+    """The web research suggests series (with their administrators and numeric
+    commercial values) into `series_options`, each carrying a self-reported
+    confidence that marks it as a web suggestion (catalog series carry none)."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": 0.0384,
+                        "flows_min": None,
+                        "flows_max": None,
+                        "return_min": 0.05,
+                        "return_max": 0.08,
+                        "confidence": 70,
+                        "administrators": [
+                            {
+                                "administrator": "Admin Co",
+                                "custody_fee": 0.001,
+                                "buy_commission": None,
+                                "sell_commission": None,
+                                "billing_currency": "USD",
+                                "minimum_usd": 50000,
+                                "min_commission_usd": None,
+                                "confidence": 60,
+                            }
+                        ],
+                    }
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert [s.series for s in result.series_options] == ["A"]
+    series = result.series_options[0]
+    assert series.management_fee_ter == pytest.approx(0.0384)
+    assert series.return_min == pytest.approx(0.05)
+    assert series.return_max == pytest.approx(0.08)
+    # Confidence present -> marked as a web suggestion.
+    assert series.confidence == 70
+    assert [a.administrator for a in series.administrators] == ["Admin Co"]
+    admin = series.administrators[0]
+    assert admin.custody_fee == pytest.approx(0.001)
+    assert admin.minimum_usd == pytest.approx(50000)
+    assert admin.billing_currency == "USD"
+    assert admin.confidence == 60
+
+
+async def test_research_web_v2_no_series_when_web_returns_none(monkeypatch):
+    async def fake_web(query):
+        return {"name": "Researched Fund"}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert result.series_options == []
+
+
+async def test_research_web_v2_series_confidence_clamped_and_defaulted(monkeypatch):
+    """Series/admin confidence is clamped to 0..100; a series the model returns
+    without a confidence still becomes a suggestion (confidence defaults to 0,
+    i.e. 'present but unsure'), never None (None is reserved for catalog)."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "B",
+                        "confidence": 150,  # out of range -> clamped to 100
+                        "administrators": [{"administrator": "A1"}],  # no confidence
+                    }
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    series = result.series_options[0]
+    assert series.confidence == 100
+    assert series.administrators[0].confidence == 0
+
+
 def _incomplete_catalog_result():
     """A catalog hit missing `manager` (a gap L3 web can fill), with provenance
     recorded for the fields the catalog DID fill. Similarity 0.5 keeps the catalog
