@@ -30,8 +30,9 @@ minimums) WHEN present in the sources, each suggestion carrying a self-reported 
 > until the admin approves. Catalog-sourced series are unaffected.
 
 ## Scope
-- The explicit button path only: `POST /research` → `research_web_v2`. (The parse-time
-  `cascade_search_v2` is a possible follow-up; NOT in this change.)
+- `POST /research` → `research_web_v2` (the button), AND the parse-time
+  `cascade_search_v2` (T-3, user-requested follow-up). In both, the catalog stays
+  authoritative: the web only fills `series_options` when the catalog has none.
 
 ## Contract (already wired end-to-end — reuse it)
 `SearchResult.series_options: list[CatalogSeriesOption]` already serializes to the frontend
@@ -71,6 +72,18 @@ matching `getByTitle` assertions in `ficha-review-table.test.tsx`. THIS branch s
 uses the old "Confianza de Claude: N%" title. Merging both to main will reconcile that
 test file (take the Image#6 version of those assertions; the new series-badge test here
 is independent). Flagged for the user's merge step.
+
+- [x] **T-3 — Parse-time cascade also suggests series.** DONE (follow-up, user-requested
+  "que tambien sugiera series"). INLINE (TDD). `agent/search.py` `cascade_search_v2`:
+  the L3 web block now computes `_suggested_series_options(web_data)` and, AFTER
+  `_strip_unconfident_catalog_match`, fills `result.series_options` from it ONLY when no
+  catalog series remain — the catalog stays authoritative (a confident catalog match keeps
+  its own series; an unmatched/stripped product gets the web suggestion). No frontend change
+  needed: `toEditableRow` → `toEditableSeriesRows/toEditableAdminRows` already read
+  `confidence`, so a parsed ficha with web-suggested series renders the badge on load. TDD:
+  RED (empty series_options) → GREEN. 2 tests (web fills when catalog has none; web NEVER
+  overwrites catalog series). Checks: search+search_v2+ficha-routes 84 passed; ruff clean.
+  Commit: `<pending>`.
 
 ## Acceptance criteria
 - After "Buscar con Claude" on a product with no catalog match, the Series and

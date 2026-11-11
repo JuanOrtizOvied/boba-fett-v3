@@ -705,6 +705,90 @@ async def test_v2_field_confidence_empty_when_web_fills_nothing(monkeypatch):
     assert result.field_confidence == {}
 
 
+async def test_v2_web_suggests_series_when_catalog_has_none(monkeypatch):
+    """Parse-time cascade: when the catalog match carries no series, the L3 web
+    step suggests series (with administrators + confidence) into series_options."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()  # has no series_options
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {
+                "manager": "Web Manager",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": 0.02,
+                        "confidence": 65,
+                        "administrators": [
+                            {"administrator": "Admin Co", "confidence": 50}
+                        ],
+                    }
+                ],
+            },
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert [s.series for s in result.series_options] == ["A"]
+    assert result.series_options[0].confidence == 65
+    assert result.series_options[0].management_fee_ter == pytest.approx(0.02)
+    assert [a.administrator for a in result.series_options[0].administrators] == ["Admin Co"]
+    assert result.series_options[0].administrators[0].confidence == 50
+
+
+async def test_v2_web_series_never_overwrites_catalog_series(monkeypatch):
+    """The catalog is authoritative: when the matched product already carries its
+    own series, the web suggestion is ignored (catalog series kept, no confidence)."""
+    from db.models import CatalogSeriesAdminOption, CatalogSeriesOption, Source
+
+    def catalog_with_series():
+        r = _incomplete_catalog_result()
+        r.series_options = [
+            CatalogSeriesOption(
+                series="Cat-A",
+                management_fee_ter=0.01,
+                administrators=[CatalogSeriesAdminOption(administrator="Cat Admin")],
+            )
+        ]
+        return r
+
+    async def catalog(query, pool):
+        return catalog_with_series()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {"series": [{"series": "Web-X", "confidence": 90, "administrators": []}]},
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    # Catalog series kept; the web suggestion did NOT overwrite them.
+    assert [s.series for s in result.series_options] == ["Cat-A"]
+    # Catalog series carry no confidence (None) — not a web suggestion.
+    assert result.series_options[0].confidence is None
+
+
 def test_ficha_extraction_prompt_uses_the_ficha_asset_class_taxonomy():
     """The ficha web research must classify asset_class into the ficha select's
     taxonomy, not the portfolio one, so the review select auto-populates."""

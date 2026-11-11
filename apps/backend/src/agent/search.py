@@ -830,11 +830,13 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
 
     web_verified = False
     web_field_confidence: object = None
+    web_suggested_series: list[CatalogSeriesOption] = []
     if not _is_product_complete(result) or _is_low_confidence_catalog(result):
         web_data, web_sources = await _search_claude_web(query)
         if web_data:
             _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
             web_field_confidence = web_data.get("field_confidence")
+            web_suggested_series = _suggested_series_options(web_data)
         if web_sources:
             result.sources = web_sources
             web_verified = True
@@ -850,6 +852,11 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         result.similarity, has_data, web_verified=web_verified
     )
     _strip_unconfident_catalog_match(result)
+    # The catalog is authoritative for series: fill from the web suggestion ONLY
+    # when no catalog series remain (unmatched product, or a fuzzy hit whose
+    # identity was just stripped). A confident catalog match keeps its own series.
+    if not result.series_options and web_suggested_series:
+        result.series_options = web_suggested_series
     # Per-field self-reported confidence, kept only for the fields the web step
     # actually filled (provenance == "web_search"); catalog/claude fields never
     # carry a web score. Computed last so it reflects the final field set.
