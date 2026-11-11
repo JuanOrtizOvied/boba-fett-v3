@@ -245,62 +245,58 @@ export function SeriesTable({
       <span className="text-xs font-medium text-sabbi-neutral-500">
         Series (porcentajes en %)
       </span>
-      {series.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed border-collapse text-xs">
-            <thead>
-              <tr className="text-left text-sabbi-neutral-500">
-                <th className="px-1 py-1 font-medium">Serie</th>
-                {SERIES_COLUMNS.map((c) => (
-                  <th key={c.key} className="px-1 py-1 font-medium">
-                    {c.label}
-                  </th>
-                ))}
-                <th className="w-8 px-1 py-1" />
-              </tr>
-            </thead>
-            <tbody>
-              {series.map((s, i) => (
-                <tr key={i}>
-                  <td className="px-1 py-1">
-                    <div className="flex flex-col items-start gap-0.5">
-                      <input
-                        value={s.series}
-                        aria-label={`Nombre de la serie ${i + 1}`}
-                        onChange={(e) => update(i, { series: e.target.value })}
-                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
-                      />
-                      <SuggestedBadge confidence={s.suggestedConfidence} />
-                    </div>
-                  </td>
-                  {SERIES_COLUMNS.map((c) => (
-                    <td key={c.key} className="px-1 py-1">
-                      <input
-                        value={s[c.key]}
-                        aria-label={`${c.label} serie ${s.series}`}
-                        onChange={(e) => update(i, { [c.key]: e.target.value })}
-                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
-                      />
-                    </td>
-                  ))}
-                  <td className="px-1 py-1">
-                    <button
-                      type="button"
-                      onClick={() => remove(i)}
-                      className="rounded p-0.5 text-sabbi-neutral-400 hover:text-red-500"
-                      aria-label={`Eliminar serie ${i + 1}`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 6 6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {series.map((s, i) => (
+        <div
+          key={i}
+          className="flex flex-col gap-2 rounded-lg border border-sabbi-neutral-200 bg-sabbi-neutral-50/40 p-3"
+        >
+          <div className="flex items-end gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <label className="text-[11px] font-medium text-sabbi-neutral-500">
+                Serie
+              </label>
+              <input
+                value={s.series}
+                aria-label={`Nombre de la serie ${i + 1}`}
+                onChange={(e) => update(i, { series: e.target.value })}
+                className={inputClass + " font-medium"}
+              />
+            </div>
+            <SuggestedBadge confidence={s.suggestedConfidence} />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="mb-1 shrink-0 rounded p-1 text-sabbi-neutral-400 hover:text-red-500"
+              aria-label={`Eliminar serie ${i + 1}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {SERIES_COLUMNS.map((c) => (
+              <div
+                key={c.key}
+                className={
+                  "flex min-w-0 flex-col gap-1" +
+                  (c.key === "howCalculated" ? " col-span-2 sm:col-span-3" : "")
+                }
+              >
+                <label className="text-[11px] font-medium text-sabbi-neutral-500">
+                  {c.label}
+                </label>
+                <input
+                  value={s[c.key]}
+                  aria-label={`${c.label} serie ${s.series}`}
+                  onChange={(e) => update(i, { [c.key]: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      ))}
       <button
         type="button"
         onClick={add}
@@ -340,71 +336,63 @@ export function AdminTable({
       <span className="text-xs font-medium text-sabbi-neutral-500">
         Administradores
       </span>
-      {admins.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed border-collapse text-xs">
-            <thead>
-              <tr className="text-left text-sabbi-neutral-500">
-                <th className="px-1 py-1 font-medium">Administrador</th>
-                <th className="px-1 py-1 font-medium">Serie</th>
-                {ADMIN_COLUMNS.map((c) => (
-                  <th key={c.key} className="px-1 py-1 font-medium">
-                    {c.label}
-                  </th>
-                ))}
-                <th className="w-8 px-1 py-1" />
-              </tr>
-            </thead>
-            <tbody>
-              {admins.map((a, i) => (
-                <tr key={i}>
-                  <td className="px-1 py-1">
-                    <div className="flex flex-col items-start gap-0.5">
-                      <input
-                        value={a.administrator}
-                        aria-label={`Nombre del administrador ${i + 1}`}
-                        onChange={(e) => update(i, { administrator: e.target.value })}
-                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 font-medium outline-none focus:border-sabbi-primary"
-                      />
-                      <SuggestedBadge confidence={a.suggestedConfidence} />
-                    </div>
-                  </td>
-                  <td className="px-1 py-1">
-                    <input
-                      value={a.series}
-                      aria-label={`Serie del administrador ${i + 1}`}
-                      onChange={(e) => update(i, { series: e.target.value })}
-                      className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
-                    />
-                  </td>
-                  {ADMIN_COLUMNS.map((c) => (
-                    <td key={c.key} className="px-1 py-1">
-                      <input
-                        value={a[c.key]}
-                        aria-label={`${c.label} ${a.administrator} serie ${a.series}`}
-                        onChange={(e) => update(i, { [c.key]: e.target.value })}
-                        className="w-full min-w-0 rounded border border-sabbi-neutral-200 px-1.5 py-1 outline-none focus:border-sabbi-primary"
-                      />
-                    </td>
-                  ))}
-                  <td className="px-1 py-1">
-                    <button
-                      type="button"
-                      onClick={() => remove(i)}
-                      className="rounded p-0.5 text-sabbi-neutral-400 hover:text-red-500"
-                      aria-label={`Eliminar administrador ${i + 1}`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 6 6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {admins.map((a, i) => (
+        <div
+          key={i}
+          className="flex flex-col gap-2 rounded-lg border border-sabbi-neutral-200 bg-sabbi-neutral-50/40 p-3"
+        >
+          <div className="flex items-end gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <label className="text-[11px] font-medium text-sabbi-neutral-500">
+                Administrador
+              </label>
+              <input
+                value={a.administrator}
+                aria-label={`Nombre del administrador ${i + 1}`}
+                onChange={(e) => update(i, { administrator: e.target.value })}
+                className={inputClass + " font-medium"}
+              />
+            </div>
+            <SuggestedBadge confidence={a.suggestedConfidence} />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="mb-1 shrink-0 rounded p-1 text-sabbi-neutral-400 hover:text-red-500"
+              aria-label={`Eliminar administrador ${i + 1}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <label className="text-[11px] font-medium text-sabbi-neutral-500">
+                Serie
+              </label>
+              <input
+                value={a.series}
+                aria-label={`Serie del administrador ${i + 1}`}
+                onChange={(e) => update(i, { series: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+            {ADMIN_COLUMNS.map((c) => (
+              <div key={c.key} className="flex min-w-0 flex-col gap-1">
+                <label className="text-[11px] font-medium text-sabbi-neutral-500">
+                  {c.label}
+                </label>
+                <input
+                  value={a[c.key]}
+                  aria-label={`${c.label} ${a.administrator} serie ${a.series}`}
+                  onChange={(e) => update(i, { [c.key]: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      ))}
       <button
         type="button"
         onClick={add}

@@ -30,7 +30,7 @@ export default function BuscarProductoPage() {
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-sabbi-neutral-900">Buscar producto</h1>
         <p className="mt-1 text-sm text-sabbi-neutral-600">
