@@ -428,6 +428,21 @@ def _extract_sources(response: object) -> list[Source]:
     return sources
 
 
+# The grounded web-research instruction. It must ask for the SERIES / share
+# classes and their administrators too, or the extraction never sees them and the
+# ficha's series suggestion stays empty. The model is told to report only what the
+# sources support (the extraction step still enforces the no-fabricate rule).
+_WEB_RESEARCH_PROMPT = (
+    "Research this financial product and summarize its factual attributes from the "
+    "web: manager, currency, asset class, geographic focus, and underlying. ALSO "
+    "look for its series / share classes and, for each one, its administrators and "
+    "fees (management fee / TER, flows min/max, return min/max, custody fee, "
+    "buy/sell commission, minimum investment). Report ONLY what the sources "
+    "actually state — do not guess. Use web search and fetch sources as needed."
+    "\n\nProduct: {query}"
+)
+
+
 async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
     """Research a financial product with Claude's server-side web_search +
     web_fetch tools; return the grounded assistant text and the cited sources.
@@ -441,11 +456,7 @@ async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
             temperature=0,
             betas=[_WEB_FETCH_BETA],
         ).bind_tools(_WEB_TOOLS)
-        response = await llm.ainvoke(
-            "Research this financial product and summarize its factual "
-            "attributes (manager, currency, asset class, geographic focus, "
-            f"underlying). Use web search and fetch sources as needed.\n\nProduct: {query}"
-        )
+        response = await llm.ainvoke(_WEB_RESEARCH_PROMPT.format(query=query))
         text, sources = _blocks_to_text(response), _extract_sources(response)
         if not text and not sources:
             logger.warning(

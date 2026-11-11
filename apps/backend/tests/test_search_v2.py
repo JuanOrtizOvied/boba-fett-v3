@@ -893,6 +893,16 @@ async def test_v2_web_series_never_overwrites_catalog_series(monkeypatch):
     assert result.series_options[0].confidence is None
 
 
+def test_web_research_prompt_asks_for_series_and_administrators():
+    """The web-RESEARCH step (which gathers the grounded text) must ask Claude to
+    look for the product's series/share classes and their administrators — else the
+    extraction never sees them and `series_options` stays empty even when the data
+    is on the web."""
+    prompt = search_mod._WEB_RESEARCH_PROMPT.lower()
+    assert "series" in prompt
+    assert "administrator" in prompt
+
+
 def test_ficha_extraction_prompt_uses_the_ficha_asset_class_taxonomy():
     """The ficha web research must classify asset_class into the ficha select's
     taxonomy, not the portfolio one, so the review select auto-populates."""

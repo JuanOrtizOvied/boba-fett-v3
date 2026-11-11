@@ -114,5 +114,19 @@ is independent). Flagged for the user's merge step.
   extraction raise). Checks: full backend unit suite 408 passed; ruff clean. Commit:
   `<pending>`.
 
+- [x] **F-2 — Web-research step now asks for series + administrators.** DONE. INLINE (TDD).
+  User saw "Buscar con Claude" return near-empty (only `name`) with `series_options: []`.
+  Partly expected (obscure product, 1 thin source → no-fabricate leaves fields empty), but
+  a REAL gap surfaced: `_research_with_claude_web`'s instruction only asked for
+  manager/currency/asset_class/geo/underlying — never the SERIES/administrators — so the
+  grounded text fed to extraction rarely contained them and `series_options` stayed empty
+  even when the data exists online. Fix: extracted the instruction to `_WEB_RESEARCH_PROMPT`
+  and added series/share-classes + administrators + their fees (report only what sources
+  state). TDD: RED → GREEN. 1 test (prompt mentions series + administrator). Checks:
+  search + ficha-routes 73 passed; ruff clean. Commit: `<pending>`.
+  LIMITATION: improves the general case only; a product with no series data on the web
+  (like the reported bond) will still come back sparse. The extraction model is the small
+  `claude-haiku-4-5`; a stronger model would raise recall but costs more/slower (not changed).
+
 ## Next step
 Start T-1 (backend) with a RED test.
