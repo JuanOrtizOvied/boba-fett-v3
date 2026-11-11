@@ -592,6 +592,110 @@ async def test_research_web_v2_series_confidence_clamped_and_defaulted(monkeypat
     assert series.administrators[0].confidence == 0
 
 
+def test_extracted_product_tolerates_unparseable_series_numbers():
+    """A small model often returns fees as unit-laden strings ('3.84%'). The
+    extraction schema must NOT reject the whole payload over them — the series
+    label survives and the bad numeric is dropped, not fatal."""
+    ep = search_mod.ExtractedProduct(
+        name="Some Fund",
+        series=[
+            {
+                "series": "A",
+                "management_fee_ter": "3.84%",
+                "return_min": "5%",
+                "confidence": "high",  # non-numeric confidence must not blow up
+                "administrators": [{"administrator": "Admin Co", "custody_fee": "0.1%"}],
+            }
+        ],
+    )
+    assert ep.series[0].series == "A"
+
+
+def test_suggested_series_options_coerces_bad_numbers_to_null():
+    """`_suggested_series_options` never raises on unit/symbol-laden numbers: a
+    value that is not a clean number becomes None (admin fills it); the series
+    label and administrators are preserved."""
+    opts = search_mod._suggested_series_options(
+        {
+            "series": [
+                {
+                    "series": "A",
+                    "management_fee_ter": "3.84%",
+                    "return_min": "5%",
+                    "minimum_usd": "50,000",
+                    "confidence": 70,
+                    "administrators": [
+                        {"administrator": "Admin Co", "custody_fee": "0.1%", "confidence": 60}
+                    ],
+                }
+            ]
+        }
+    )
+    assert [s.series for s in opts] == ["A"]
+    assert opts[0].management_fee_ter is None
+    assert opts[0].return_min is None
+    assert opts[0].confidence == 70
+    assert [a.administrator for a in opts[0].administrators] == ["Admin Co"]
+    assert opts[0].administrators[0].custody_fee is None
+    assert opts[0].administrators[0].confidence == 60
+
+
+def test_suggested_series_options_keeps_clean_numbers():
+    opts = search_mod._suggested_series_options(
+        {"series": [{"series": "A", "management_fee_ter": "0.0384", "confidence": 70}]}
+    )
+    assert opts[0].management_fee_ter == pytest.approx(0.0384)
+
+
+async def test_research_web_v2_survives_messy_series_numbers(monkeypatch):
+    """The research endpoint must not 500 when the model reports series numbers
+    as unit-laden strings — it degrades them to null and still returns."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": "3.84%",
+                        "confidence": 65,
+                        "administrators": [{"administrator": "Admin Co", "custody_fee": "0.1%"}],
+                    }
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert [s.series for s in result.series_options] == ["A"]
+    assert result.series_options[0].management_fee_ter is None
+
+
+async def test_search_claude_web_degrades_when_extraction_raises(monkeypatch):
+    """`_search_claude_web` honors its 'never raises' contract: if the structured
+    extraction blows up, it returns ({}, sources) (sources-only) instead of
+    propagating a 500."""
+    from db.models import Source
+
+    async def fake_research(query):
+        return "some web context", [Source(url="https://x.com", title="X")]
+
+    async def boom(human_content, *, system_prompt=None):
+        raise ValueError("structured output blew up")
+
+    monkeypatch.setattr(search_mod, "_research_with_claude_web", fake_research)
+    monkeypatch.setattr(search_mod, "_run_extraction", boom)
+
+    fields, sources = await search_mod._search_claude_web("x")
+
+    assert fields == {}
+    assert [s.url for s in sources] == ["https://x.com"]
+
+
 def _incomplete_catalog_result():
     """A catalog hit missing `manager` (a gap L3 web can fill), with provenance
     recorded for the fields the catalog DID fill. Similarity 0.5 keeps the catalog
