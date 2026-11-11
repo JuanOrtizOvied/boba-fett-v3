@@ -70,7 +70,7 @@ catalog. No client/holding part (that only applies to the ficha).
   `{catalog_product_code, catalog_changes}`. `Depends(require_admin)` for `admin["id"]`
   (history changed_by). TDD: RED (404) → GREEN. 3 tests (curate branch, create branch, non-admin
   blocked). Checks: ficha-routes suite 42 passed; ruff clean. Commit: `<pending>`.
-- [ ] **T-4 — Frontend: extract shared form atoms.** INLINE (refactor, guarded by existing
+- [x] **T-4 — Frontend: extract shared form atoms.** DONE. INLINE (refactor, guarded by existing
   `ficha-review-table.test.tsx`). Move AllocationEditor/Field/ConfidenceTag/SuggestedBadge/
   SeriesTable/AdminTable/inputClass from `ReviewTable.tsx` into
   `components/admin/ficha-patrimonial/productFormFields.tsx`; `ReviewTable` imports them. No
