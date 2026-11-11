@@ -106,6 +106,9 @@ export interface CatalogSeriesAdminOption {
   billing_currency: string;
   minimum_usd: number | null;
   min_commission_usd: number | null;
+  /** Self-reported confidence (0..100) when this administrator was SUGGESTED by
+   * the web research. null/absent for catalog/manual admins. */
+  confidence?: number | null;
 }
 
 /**
@@ -120,6 +123,10 @@ export interface CatalogSeriesOption {
   return_min: number | null;
   return_max: number | null;
   administrators: CatalogSeriesAdminOption[];
+  /** Self-reported confidence (0..100) when this series was SUGGESTED by the web
+   * research ("Buscar con Claude"). null/absent for catalog series — the UI reads
+   * a number as "sugerido por Claude". */
+  confidence?: number | null;
 }
 
 /** Mirrors `db.catalog_curation.SeriesUpdateInput` — an edited series (fractions). */

@@ -51,15 +51,26 @@ and is already rendered via `toEditableSeriesRows` (Series table) / `toEditableA
   `research_web_v2` (sets `result.series_options`). TDD: RED (empty series_options) →
   GREEN. 3 new tests (suggests series+admins+confidence; none when web empty; clamp +
   default-0). Checks: search+search_v2+ficha-routes 82 passed; ruff clean. Commit: `<pending>`.
-- [ ] **T-2 — Frontend: render suggested series/admins from the web result.** INLINE (TDD).
-  `lib/portfolio-types.ts`: `confidence?: number | null` on `CatalogSeriesOption` +
-  `CatalogSeriesAdminOption`. `reviewTableShared.ts`: add `suggestedConfidence?: number`
-  to `EditableSeriesRow`/`EditableAdminRow`; set it in `toEditableSeriesRows`/
-  `toEditableAdminRows` from the option's `confidence`; `applyResearchToRow` now populates
-  `seriesOptions`/`editableSeries`/`editableAdmins` from `result.series_options`.
-  `ReviewTable.tsx`: show a "✨ NN%" suggested badge on rows that carry `suggestedConfidence`
-  in `SeriesTable`/`AdminTable`. Tests: `ficha-review-table-shared.test.ts` (+ component
-  test) RED→GREEN; `npx tsc --noEmit`.
+- [x] **T-2 — Frontend: render suggested series/admins from the web result.** DONE.
+  INLINE (TDD). `lib/portfolio-types.ts`: `confidence?: number | null` on
+  `CatalogSeriesOption` + `CatalogSeriesAdminOption`. `reviewTableShared.ts`: added
+  `suggestedConfidence?: number` to `EditableSeriesRow`/`EditableAdminRow`; set it in
+  `toEditableSeriesRows`/`toEditableAdminRows` from the option's `confidence` (undefined
+  for catalog → no badge); `applyResearchToRow` now populates `seriesOptions`/
+  `editableSeries`/`editableAdmins` from `result.series_options` (only when present —
+  never wipes an existing table). `ReviewTable.tsx`: new `SuggestedBadge` (✨ NN%,
+  green≥80/amber≥50/red, title "Sugerido por Claude (búsqueda web): N% de confianza")
+  rendered under the series-name and administrator-name inputs. TDD: RED (3 shared fails)
+  → GREEN. 5 new tests (2 shared mapping + 2 applyResearchToRow + 1 component badge).
+  Checks: full web suite 212 passed / 19 files; tsc clean. Commit: `<pending>`.
+
+## Note (cross-branch)
+The Image#6 fix on `fix/ficha-confidence-total-disambiguation` renamed the
+`ConfidenceTag` title to "Confianza de Claude (búsqueda web): N%" and updated the
+matching `getByTitle` assertions in `ficha-review-table.test.tsx`. THIS branch still
+uses the old "Confianza de Claude: N%" title. Merging both to main will reconcile that
+test file (take the Image#6 version of those assertions; the new series-badge test here
+is independent). Flagged for the user's merge step.
 
 ## Acceptance criteria
 - After "Buscar con Claude" on a product with no catalog match, the Series and
