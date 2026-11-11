@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 
 import asyncpg
 from langchain_anthropic import ChatAnthropic
@@ -428,6 +429,21 @@ def _extract_sources(response: object) -> list[Source]:
     return sources
 
 
+# The grounded web-research instruction. It must ask for the SERIES / share
+# classes and their administrators too, or the extraction never sees them and the
+# ficha's series suggestion stays empty. The model is told to report only what the
+# sources support (the extraction step still enforces the no-fabricate rule).
+_WEB_RESEARCH_PROMPT = (
+    "Research this financial product and summarize its factual attributes from the "
+    "web: manager, currency, asset class, geographic focus, and underlying. ALSO "
+    "look for its series / share classes and, for each one, its administrators and "
+    "fees (management fee / TER, flows min/max, return min/max, custody fee, "
+    "buy/sell commission, minimum investment). Report ONLY what the sources "
+    "actually state — do not guess. Use web search and fetch sources as needed."
+    "\n\nProduct: {query}"
+)
+
+
 async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
     """Research a financial product with Claude's server-side web_search +
     web_fetch tools; return the grounded assistant text and the cited sources.
@@ -441,11 +457,7 @@ async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
             temperature=0,
             betas=[_WEB_FETCH_BETA],
         ).bind_tools(_WEB_TOOLS)
-        response = await llm.ainvoke(
-            "Research this financial product and summarize its factual "
-            "attributes (manager, currency, asset class, geographic focus, "
-            f"underlying). Use web search and fetch sources as needed.\n\nProduct: {query}"
-        )
+        response = await llm.ainvoke(_WEB_RESEARCH_PROMPT.format(query=query))
         text, sources = _blocks_to_text(response), _extract_sources(response)
         if not text and not sources:
             logger.warning(
@@ -821,13 +833,54 @@ def _suggested_series_options(web_data: dict) -> list[CatalogSeriesOption]:
     return options
 
 
-async def research_web_v2(query: str) -> SearchResult:
-    """Force a Claude ``web_search`` + ``web_fetch`` research for one product —
-    the ficha review card's "Volver a investigar" action. Returns a web-grounded
-    ``SearchResult`` (product-level fields filled from the web plus the cited
-    sources), independent of the catalog. Confidence is always web-based ("baja"
-    with data, "sin_datos" without). Never raises; an empty result when
-    ``ANTHROPIC_API_KEY`` is unset or nothing is found."""
+def _has_useful_web_data(result: SearchResult) -> bool:
+    """True when the web research produced something BEYOND the echoed-back name:
+    any product field, allocation list, or a suggested series. The name alone (the
+    query reflected back) does not count — that is what the retry/notice keys off."""
+    return bool(
+        result.manager
+        or result.currency
+        or result.commission
+        or result.return_rate
+        or result.administrator
+        or result.liquidity
+        or result.asset_class
+        or result.geographic_focus
+        or result.underlying
+        or result.series_options
+    )
+
+
+# Issuer legal forms and emission/series tails that add noise to a product name —
+# stripped for the reformulated retry so the web search can match the core product
+# (e.g. "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión" ->
+# "BBVA Bonos BEST"). Best-effort only: the retry is used solely if it does better.
+_REFORMULATE_NOISE = re.compile(
+    r"sociedad\s+titulizadora"
+    r"|sociedad\s+administradora(\s+de\s+fondos?)?"
+    r"|administradora\s+general\s+de\s+fondos"
+    r"|fondo\s+de\s+inversi[oó]n"
+    r"|fondo\s+mutuo"
+    r"|\bs\.a\.(a\.|c\.)?"  # S.A., S.A.A., S.A.C. (with dots)
+    r"|(\S+\s+){0,2}emisi[oó]n",  # "... (Vigésimo Tercera) Emisión"
+    re.IGNORECASE,
+)
+
+
+def _reformulate_query(query: str) -> str | None:
+    """Produce a cleaner alternative name for a second web search, or None when
+    there is nothing worth stripping (so no pointless duplicate search runs)."""
+    cleaned = _REFORMULATE_NOISE.sub(" ", query)
+    cleaned = re.sub(r"[–—-]+", " ", cleaned)  # drop joining dashes
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.–—-")
+    if not cleaned or cleaned.casefold() == query.strip().casefold():
+        return None
+    return cleaned
+
+
+async def _research_web_once(query: str) -> SearchResult:
+    """One web-research pass: a web-grounded ``SearchResult`` (product fields +
+    suggested series + cited sources), independent of the catalog. Never raises."""
     result = SearchResult()
     web_data, web_sources = await _search_claude_web(query)
     if web_data:
@@ -845,6 +898,25 @@ async def research_web_v2(query: str) -> SearchResult:
     )
     # Per-field self-reported confidence, kept only for fields the web step filled.
     result.field_confidence = _sanitize_field_confidence(web_data.get("field_confidence"), result)
+    return result
+
+
+async def research_web_v2(query: str) -> SearchResult:
+    """Force a Claude ``web_search`` + ``web_fetch`` research for one product —
+    the ficha review card's "Volver a investigar" action. Returns a web-grounded
+    ``SearchResult`` independent of the catalog. When the first pass finds only the
+    name (or nothing), it retries ONCE with a reformulated (de-noised) name and
+    keeps whichever pass found useful data; if neither did, the result is flagged
+    ``web_search_insufficient`` so the UI can warn the admin. Never raises."""
+    query = query.strip()
+    result = await _research_web_once(query)
+    if not _has_useful_web_data(result):
+        alt = _reformulate_query(query)
+        if alt:
+            retry = await _research_web_once(alt)
+            if _has_useful_web_data(retry):
+                result = retry
+    result.web_search_insufficient = not _has_useful_web_data(result)
     return result
 
 

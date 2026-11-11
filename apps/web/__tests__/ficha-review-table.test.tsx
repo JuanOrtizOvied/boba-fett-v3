@@ -362,6 +362,74 @@ describe("ReviewTable re-investigate with web", () => {
     ).toBeInTheDocument();
   });
 
+  test("'Buscar con Claude' warns the admin when the web found nothing useful", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Bonos BEST",
+      manager: "",
+      currency: "",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "media",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: { name: "web_search" },
+      field_confidence: { name: 95 },
+      web_search_insufficient: true,
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/no se encontró información suficiente/i),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  test("'Buscar con Claude' shows no warning when the web found useful data", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Fondo Investigado",
+      manager: "Gestor Investigado",
+      currency: "USD",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+      web_search_insufficient: false,
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Gestor")).toHaveValue("Gestor Investigado"),
+    );
+    expect(
+      screen.queryByText(/no se encontró información suficiente/i),
+    ).toBeNull();
+  });
+
   test("does not show an asset-class % when the class did not map to a ficha key", async () => {
     vi.mocked(researchFichaLine).mockResolvedValue({
       name: "Fondo Investigado",

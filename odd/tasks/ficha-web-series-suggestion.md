@@ -114,5 +114,41 @@ is independent). Flagged for the user's merge step.
   extraction raise). Checks: full backend unit suite 408 passed; ruff clean. Commit:
   `<pending>`.
 
+- [x] **F-2 — Web-research step now asks for series + administrators.** DONE. INLINE (TDD).
+  User saw "Buscar con Claude" return near-empty (only `name`) with `series_options: []`.
+  Partly expected (obscure product, 1 thin source → no-fabricate leaves fields empty), but
+  a REAL gap surfaced: `_research_with_claude_web`'s instruction only asked for
+  manager/currency/asset_class/geo/underlying — never the SERIES/administrators — so the
+  grounded text fed to extraction rarely contained them and `series_options` stayed empty
+  even when the data exists online. Fix: extracted the instruction to `_WEB_RESEARCH_PROMPT`
+  and added series/share-classes + administrators + their fees (report only what sources
+  state). TDD: RED → GREEN. 1 test (prompt mentions series + administrator). Checks:
+  search + ficha-routes 73 passed; ruff clean. Commit: `<pending>`.
+  LIMITATION: improves the general case only; a product with no series data on the web
+  (like the reported bond) will still come back sparse. The extraction model is the small
+  `claude-haiku-4-5`; a stronger model would raise recall but costs more/slower (not changed).
+
+- [x] **F-3 — Backend: retry with a reformulated name, then flag insufficient.** DONE.
+  INLINE (TDD). User: "tenemos que avisar si no encuentra nada o hacer otra búsqueda" →
+  chose "reintentar y luego avisar". `agent/search.py`: `_has_useful_web_data` (name alone
+  ≠ useful); `_reformulate_query` strips issuer legal forms + emission/series tails (e.g.
+  "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión" → "BBVA Bonos BEST"),
+  returns None when nothing to strip (no pointless duplicate search); refactored the body
+  into `_research_web_once`; `research_web_v2` now retries ONCE with the reformulated name
+  when the first pass is thin and keeps whichever found useful data, then sets
+  `SearchResult.web_search_insufficient` (models.py) when neither did. Guardrail: the retry
+  is used only if it does better — never worse. TDD: RED (7) → GREEN. Tests: useful-data
+  gate, reformulate strip + none, retry-and-use, flag-when-both-empty, no-retry-when-useful,
+  no-retry-when-not-reformulable. Checks: full backend unit suite 416 passed; ruff clean.
+  Commit: `<pending>`.
+- [x] **F-4 — Frontend: warn the admin when `web_search_insufficient`.** DONE. INLINE (TDD).
+  `portfolio-types.ts` SearchResult += `web_search_insufficient?: boolean`. `ReviewTable`:
+  new `notice` state (amber `role="status"` banner, distinct from the red error banner);
+  `researchRow` sets it ("No se encontró información suficiente en la web para «{name}».
+  Revisá o completá los datos manualmente.") when the flag is set, and still applies the
+  sparse result so the name/source show. TDD: RED → GREEN. 2 tests (warns when insufficient;
+  no warning when useful data). Checks: full web suite 214 passed / 19 files; tsc clean.
+  Commit: `<pending>`.
+
 ## Next step
 Start T-1 (backend) with a RED test.
