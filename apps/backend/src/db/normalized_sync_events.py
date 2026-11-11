@@ -21,7 +21,13 @@ import asyncpg
 from pydantic import BaseModel
 
 LIMA_TZ = "America/Lima"
-ACTIONS = ("create", "update", "delete", "restore")
+
+# What a product did on a day, from the point of view of whoever reads the day. A
+# product counts once, under the first that applies: it is `deleted` when it is
+# soft-deleted now, `new` when its product row was created that day, `restored`
+# when the sync reactivated it that day, and `modified` otherwise (a changed value,
+# or a series or administrator that was added, changed or removed).
+PRODUCT_STATUSES = ("new", "modified", "deleted", "restored")
 
 
 class SyncEventRow(BaseModel):
@@ -42,11 +48,13 @@ class SyncEventRow(BaseModel):
 
 
 class ProductEvents(BaseModel):
-    """Events of one product on one day, in total and per action."""
+    """One product on one day: its status and how many events it had, in total and
+    per action (events of every level, product, series and administrator)."""
 
     product_code: str
     name: str
     deleted: bool
+    status: str
     events: int
     create: int
     update: int
@@ -55,6 +63,9 @@ class ProductEvents(BaseModel):
 
 
 class DaySummary(BaseModel):
+    """`totals` counts PRODUCTS per status (`PRODUCT_STATUSES`), each product once,
+    so they add up to `len(products)`. The events behind them are on each entry."""
+
     date: datetime.date
     totals: dict[str, int]
     products: list[ProductEvents]
@@ -113,12 +124,25 @@ _DAY_PRODUCTS = f"""
            count(*) FILTER (WHERE d.action = 'create') AS create_count,
            count(*) FILTER (WHERE d.action = 'update') AS update_count,
            count(*) FILTER (WHERE d.action = 'delete') AS delete_count,
-           count(*) FILTER (WHERE d.action = 'restore') AS restore_count
+           count(*) FILTER (WHERE d.action = 'restore') AS restore_count,
+           count(*) FILTER (WHERE d.level = 'product' AND d.action = 'create') AS product_created,
+           count(*) FILTER (WHERE d.level = 'product' AND d.action = 'restore') AS product_restored
     FROM day_events d
     LEFT JOIN catalog_product p ON p.code = d.product_code
     GROUP BY d.product_code, p.name, p.is_deleted
     ORDER BY d.product_code
 """
+
+
+def _status(deleted: bool, created: bool, restored: bool) -> str:
+    """The status of a product for the day (see `PRODUCT_STATUSES`)."""
+    if deleted:
+        return "deleted"
+    if created:
+        return "new"
+    if restored:
+        return "restored"
+    return "modified"
 
 
 class NormalizedSyncEventRepository:
@@ -143,8 +167,8 @@ class NormalizedSyncEventRepository:
         return ProductHistory(total=total, events=[_event_from_record(r) for r in rows])
 
     async def day_summary(self, day: datetime.date | None = None) -> DaySummary:
-        """What changed on `day` (today in Lima when None): the totals per action
-        and one entry per product with events that day."""
+        """What changed on `day` (today in Lima when None): one entry per product
+        with events that day, and the number of products per status."""
         if day is None:
             day = await self._pool.fetchval("SELECT (now() AT TIME ZONE 'America/Lima')::date")
         rows = await self._pool.fetch(_DAY_PRODUCTS, day)
@@ -153,6 +177,7 @@ class NormalizedSyncEventRepository:
                 product_code=r["product_code"],
                 name=r["name"],
                 deleted=r["deleted"],
+                status=_status(r["deleted"], r["product_created"] > 0, r["product_restored"] > 0),
                 events=r["events"],
                 create=r["create_count"],
                 update=r["update_count"],
@@ -161,5 +186,5 @@ class NormalizedSyncEventRepository:
             )
             for r in rows
         ]
-        totals = {action: sum(getattr(p, action) for p in products) for action in ACTIONS}
+        totals = {s: sum(1 for p in products if p.status == s) for s in PRODUCT_STATUSES}
         return DaySummary(date=day, totals=totals, products=products)

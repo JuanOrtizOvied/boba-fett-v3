@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import {
-  changeCountLabel,
+  productDayLabel,
   formatDay,
-  totalEvents,
+  totalProducts,
   totalsLabel,
   type DaySummary,
 } from "@/lib/normalized-sync-events";
@@ -54,7 +54,7 @@ export default function ChangesPanel({
   const [open, setOpen] = useState(false);
   const [expandedDeleted, setExpandedDeleted] = useState<string | null>(null);
 
-  const hasEvents = summary !== null && totalEvents(summary.totals) > 0;
+  const hasEvents = summary !== null && totalProducts(summary.totals) > 0;
   const title =
     selectedDate === null ? "Cambios de hoy" : `Cambios del ${formatDay(selectedDate)}`;
   const status = error
@@ -139,7 +139,7 @@ export default function ChangesPanel({
                       </>
                     )}
                     <span className="text-xs text-sabbi-neutral-600">
-                      {changeCountLabel(p.events)}
+                      {productDayLabel(p)}
                     </span>
                   </button>
                   {isOpen && (
