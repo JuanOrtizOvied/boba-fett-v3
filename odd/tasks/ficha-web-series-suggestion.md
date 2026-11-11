@@ -128,5 +128,22 @@ is independent). Flagged for the user's merge step.
   (like the reported bond) will still come back sparse. The extraction model is the small
   `claude-haiku-4-5`; a stronger model would raise recall but costs more/slower (not changed).
 
+- [x] **F-3 — Backend: retry with a reformulated name, then flag insufficient.** DONE.
+  INLINE (TDD). User: "tenemos que avisar si no encuentra nada o hacer otra búsqueda" →
+  chose "reintentar y luego avisar". `agent/search.py`: `_has_useful_web_data` (name alone
+  ≠ useful); `_reformulate_query` strips issuer legal forms + emission/series tails (e.g.
+  "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión" → "BBVA Bonos BEST"),
+  returns None when nothing to strip (no pointless duplicate search); refactored the body
+  into `_research_web_once`; `research_web_v2` now retries ONCE with the reformulated name
+  when the first pass is thin and keeps whichever found useful data, then sets
+  `SearchResult.web_search_insufficient` (models.py) when neither did. Guardrail: the retry
+  is used only if it does better — never worse. TDD: RED (7) → GREEN. Tests: useful-data
+  gate, reformulate strip + none, retry-and-use, flag-when-both-empty, no-retry-when-useful,
+  no-retry-when-not-reformulable. Checks: full backend unit suite 416 passed; ruff clean.
+  Commit: `<pending>`.
+- [ ] **F-4 — Frontend: warn the admin when `web_search_insufficient`.** `portfolio-types.ts`
+  += `web_search_insufficient?: boolean`; `ReviewTable.researchRow` shows a clear notice
+  when the flag is set (still applies the sparse result so name/source show). Tests + tsc.
+
 ## Next step
 Start T-1 (backend) with a RED test.

@@ -475,3 +475,7 @@ class SearchResult(BaseModel):
     # empty for catalog/chat/parse-time results. The Claude web_search tool emits
     # citations (`sources`), not a numeric score, so this is a model self-estimate.
     field_confidence: dict[str, int] = Field(default_factory=dict)
+    # True when the "Buscar con Claude" web research (incl. one reformulated retry)
+    # found no useful product/series data — only the name echoed back, or nothing.
+    # The UI uses it to warn the admin ("no se encontró información suficiente").
+    web_search_insufficient: bool = False

@@ -893,6 +893,118 @@ async def test_v2_web_series_never_overwrites_catalog_series(monkeypatch):
     assert result.series_options[0].confidence is None
 
 
+def test_has_useful_web_data_requires_more_than_a_name():
+    """Only the echoed-back name (or nothing) is NOT useful data — the retry/notice
+    logic keys off real product/series fields, not the name."""
+    from db.models import AssetAllocation, SearchResult
+
+    assert search_mod._has_useful_web_data(SearchResult(name="Some Fund")) is False
+    assert search_mod._has_useful_web_data(SearchResult()) is False
+    assert search_mod._has_useful_web_data(SearchResult(name="X", manager="Mgr")) is True
+    assert (
+        search_mod._has_useful_web_data(
+            SearchResult(asset_class=[AssetAllocation(name="x", percentage=100)])
+        )
+        is True
+    )
+
+
+def test_reformulate_query_strips_issuer_and_emission():
+    alt = search_mod._reformulate_query(
+        "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión"
+    )
+    assert alt is not None
+    low = alt.lower()
+    assert "bbva" in low and "best" in low
+    assert "titulizadora" not in low
+    assert "emisión" not in low and "emision" not in low
+
+
+def test_reformulate_query_returns_none_when_nothing_to_strip():
+    assert search_mod._reformulate_query("iShares Core MSCI World") is None
+
+
+async def test_research_web_v2_retries_with_reformulated_name_and_uses_it(monkeypatch):
+    """A first search that yields only the name triggers ONE retry with the
+    reformulated name; when the retry finds useful data it is used, and the result
+    is not flagged insufficient."""
+    from db.models import Source
+
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        if "Titulizadora" in query:  # the original, noisy name -> thin
+            return {"name": "Bonos BEST"}, [Source(url="https://a.com", title="A")]
+        return (  # the reformulated name -> useful
+            {"name": "Bonos BEST", "manager": "BBVA Asset Mgmt"},
+            [Source(url="https://b.com", title="B")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2(
+        "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión"
+    )
+
+    assert len(calls) == 2  # retried once
+    assert result.manager == "BBVA Asset Mgmt"
+    assert result.web_search_insufficient is False
+
+
+async def test_research_web_v2_flags_insufficient_when_retry_also_empty(monkeypatch):
+    """When neither the first search nor the reformulated retry find useful data,
+    the result is flagged so the UI can warn the admin (the name/source are kept)."""
+    from db.models import Source
+
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        return {"name": "Bonos BEST"}, [Source(url="https://a.com", title="A")]
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2(
+        "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión"
+    )
+
+    assert len(calls) == 2  # tried the reformulated name too
+    assert result.web_search_insufficient is True
+    assert result.name == "Bonos BEST"
+    assert len(result.sources) == 1
+
+
+async def test_research_web_v2_no_retry_when_first_is_useful(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        return {"name": "Fund", "manager": "Mgr"}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("BBVA Sociedad Titulizadora Bonos Emisión")
+
+    assert len(calls) == 1  # no retry needed
+    assert result.web_search_insufficient is False
+
+
+async def test_research_web_v2_no_retry_when_name_not_reformulable(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        return {"name": "iShares Core MSCI World"}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("iShares Core MSCI World")
+
+    assert len(calls) == 1  # nothing to reformulate -> no second search
+    assert result.web_search_insufficient is True
+
+
 def test_web_research_prompt_asks_for_series_and_administrators():
     """The web-RESEARCH step (which gathers the grounded text) must ask Claude to
     look for the product's series/share classes and their administrators — else the
