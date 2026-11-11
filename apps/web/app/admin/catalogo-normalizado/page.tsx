@@ -87,7 +87,7 @@ function NormalizedCatalogContent() {
       const res = await fetchWithAuth(`${BASE}/products${qs}`, { signal });
       if (!res.ok) {
         throw new Error(
-          await readApiError(res, "No se pudo cargar el catálogo normalizado"),
+          await readApiError(res, "No se pudo cargar el catálogo"),
         );
       }
       setProducts(await res.json());
@@ -246,7 +246,7 @@ function NormalizedCatalogContent() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-sabbi-neutral-900">
-        Catálogo normalizado
+        Catálogo
       </h1>
 
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
@@ -273,7 +273,7 @@ function NormalizedCatalogContent() {
             <p className="text-sm text-sabbi-neutral-600">
               {isSearchMode
                 ? "No se encontraron productos."
-                : "No hay productos en el catálogo normalizado."}
+                : "No hay productos en el catálogo."}
             </p>
           ) : (
             <ul className="max-h-[70vh] divide-y divide-sabbi-neutral-200 overflow-auto rounded-xl border border-sabbi-neutral-200 bg-white">

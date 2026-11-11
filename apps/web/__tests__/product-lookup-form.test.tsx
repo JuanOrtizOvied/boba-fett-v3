@@ -1,0 +1,89 @@
+import { describe, expect, test, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { SearchResult } from "@/lib/portfolio-types";
+
+vi.mock("@/lib/catalogLookupApi", () => ({ saveProductToCatalog: vi.fn() }));
+vi.mock("@/lib/fichaApi", () => ({ researchFichaLine: vi.fn() }));
+// CatalogHistory / CatalogProductPicker hit the network on mount — not under test.
+vi.mock("@/components/admin/ficha-patrimonial/CatalogHistory", () => ({
+  default: () => null,
+}));
+
+import ProductLookupForm from "@/components/admin/ProductLookupForm";
+import { saveProductToCatalog } from "@/lib/catalogLookupApi";
+import { researchFichaLine } from "@/lib/fichaApi";
+
+function result(overrides: Partial<SearchResult> = {}): SearchResult {
+  return {
+    name: "Latam Credit Fund",
+    manager: "Acme Manager",
+    currency: "USD",
+    commission: "",
+    administrator: "",
+    liquidity: "",
+    return_rate: "",
+    asset_class: [{ name: "mercados_privados", percentage: 100 }],
+    geographic_focus: [],
+    underlying: [],
+    catalog_product_id: null,
+    catalog_product_code: "BD-00155",
+    catalog_matched: true,
+    sources: [],
+    confidence: "alta",
+    primary_source: "catalog",
+    provenance: {},
+    series_options: [],
+  } as unknown as SearchResult;
+}
+
+describe("ProductLookupForm", () => {
+  beforeEach(() => {
+    vi.mocked(saveProductToCatalog).mockReset();
+    vi.mocked(researchFichaLine).mockReset();
+  });
+
+  test("renders the result as an editable form with the origin badge", () => {
+    render(<ProductLookupForm result={result()} />);
+
+    // The product name is both a heading and an editable field.
+    expect(screen.getByRole("heading", { name: "Latam Credit Fund" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Latam Credit Fund")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Acme Manager")).toBeInTheDocument();
+    expect(screen.getByText("Catálogo")).toBeInTheDocument();
+  });
+
+  test("saves the edited product to the catalog", async () => {
+    vi.mocked(saveProductToCatalog).mockResolvedValue({
+      catalog_product_code: "BD-00155",
+      catalog_changes: { name: { old: "Latam Credit Fund", new: "Latam Credit Fund II" } },
+    });
+    const user = userEvent.setup();
+    render(<ProductLookupForm result={result()} />);
+
+    const nameInput = screen.getByDisplayValue("Latam Credit Fund");
+    await user.type(nameInput, " II");
+    await user.click(screen.getByRole("button", { name: /guardar en catálogo/i }));
+
+    await waitFor(() => expect(saveProductToCatalog).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(saveProductToCatalog).mock.calls[0][0];
+    expect(payload.catalog_product_code).toBe("BD-00155");
+    expect(payload.catalog_update.name).toBe("Latam Credit Fund II");
+    // A confirmation is shown.
+    await waitFor(() =>
+      expect(screen.getByText(/guardado en el catálogo/i)).toBeInTheDocument(),
+    );
+  });
+
+  test("shows an error when the save fails", async () => {
+    vi.mocked(saveProductToCatalog).mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<ProductLookupForm result={result()} />);
+
+    await user.click(screen.getByRole("button", { name: /guardar en catálogo/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/no se pudo guardar/i)).toBeInTheDocument(),
+    );
+  });
+});

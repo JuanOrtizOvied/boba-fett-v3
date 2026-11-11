@@ -808,6 +808,77 @@ async def research_ficha_line(data: FichaResearchRequest) -> SearchResult:
     return await research_web_v2(data.name.strip())
 
 
+class ProductLookupRequest(BaseModel):
+    name: str
+
+
+@router.post("/product-lookup")
+async def product_lookup(
+    data: ProductLookupRequest,
+    product_repo: ProductRepository = Depends(_product_repo),
+) -> SearchResult | None:
+    """Look up ONE product by name with the same enrichment cascade the ficha
+    uses (`cascade_search_v2`: normalized catalog first; Claude knowledge + web
+    search fill the gaps). Returns the enriched SearchResult, or null when the
+    cascade finds nothing anywhere. A blank name short-circuits to null with no
+    DB/LLM call. Read-only — curating/creating happens elsewhere."""
+    name = data.name.strip()
+    if not name:
+        return None
+    return await cascade_search_v2(name, product_repo.pool)
+
+
+class ProductLookupSaveRequest(BaseModel):
+    """Save a looked-up product into the normalized catalog: curate the matched
+    product (when `catalog_product_code` is set) or create it from the reviewed
+    form. This is the same catalog write the ficha `approve` uses, but without a
+    `ProductCreate` (a lookup has no client amount) — it never writes a holding."""
+
+    name: str = ""
+    catalog_product_code: str = ""
+    catalog_update: NormalizedProductUpdate = Field(default_factory=NormalizedProductUpdate)
+    series: list[SeriesUpdateInput] = Field(default_factory=list)
+    admins: list[AdminUpdateInput] = Field(default_factory=list)
+
+
+@router.post("/product-lookup/save", status_code=201)
+async def product_lookup_save(
+    data: ProductLookupSaveRequest,
+    admin: dict = Depends(require_admin),
+    catalog_repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+    history_repo: CatalogHistoryRepository = Depends(_history_repo),
+) -> dict:
+    """Persist the admin-reviewed lookup form into the V2 catalog — update the
+    matched product (+ history) or create it when it is not in the catalog yet.
+    Authorized by the admin session; no client is involved, so this never writes
+    a portfolio holding."""
+    if data.catalog_product_code:
+        code = data.catalog_product_code
+        catalog_changes = await apply_catalog_curation(
+            catalog_repo,
+            history_repo,
+            code,
+            data.catalog_update,
+            data.series,
+            data.admins,
+            admin["id"],
+        )
+    else:
+        created = await create_catalog_product_from_ficha(
+            catalog_repo,
+            history_repo,
+            data.catalog_update,
+            data.series,
+            data.admins,
+            data.catalog_update.name or data.name,
+            admin["id"],
+        )
+        code = created.code
+        catalog_changes = {"created": created.code}
+
+    return {"catalog_product_code": code, "catalog_changes": catalog_changes}
+
+
 @router.get("/ficha-patrimonial/catalog-product/{code}")
 async def get_ficha_catalog_product(
     code: str,
