@@ -9,8 +9,7 @@ const NAV_LINKS = [
   { href: "/admin", label: "Usuarios" },
   { href: "/admin/users/create", label: "Crear usuario" },
   { href: "/admin/portfolios", label: "Portafolios" },
-  { href: "/admin/catalog", label: "Catálogo" },
-  { href: "/admin/catalogo-normalizado", label: "Catálogo normalizado" },
+  { href: "/admin/catalogo-normalizado", label: "Catálogo" },
   { href: "/admin/ficha-patrimonial", label: "Ficha Patrimonial" },
   { href: "/admin/threads", label: "Chats" },
 ];

@@ -30,14 +30,30 @@ describe("AdminLayout navigation", () => {
     expect(link).toHaveAttribute("href", "/admin/ficha-patrimonial");
   });
 
-  test("includes a Catálogo normalizado link to /admin/catalogo-normalizado", () => {
+  test("exposes the normalized catalog as a single 'Catálogo' link", () => {
     render(
       <AdminLayout>
         <div>content</div>
       </AdminLayout>,
     );
 
-    const link = screen.getByRole("link", { name: "Catálogo normalizado" });
+    const link = screen.getByRole("link", { name: "Catálogo" });
     expect(link).toHaveAttribute("href", "/admin/catalogo-normalizado");
+  });
+
+  test("drops the old flat catalog section and the 'normalizado' label", () => {
+    render(
+      <AdminLayout>
+        <div>content</div>
+      </AdminLayout>,
+    );
+
+    // The "normalizado" wording is gone...
+    expect(screen.queryByText("Catálogo normalizado")).toBeNull();
+    // ...and there is no longer a link to the old flat catalog route.
+    const flatLink = screen
+      .getAllByRole("link")
+      .find((a) => a.getAttribute("href") === "/admin/catalog");
+    expect(flatLink).toBeUndefined();
   });
 });
