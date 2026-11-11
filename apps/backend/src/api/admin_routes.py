@@ -78,6 +78,7 @@ from db.models import (
     SearchResult,
 )
 from db.normalized_sync_events import DaySummary, NormalizedSyncEventRepository, ProductHistory
+from db.normalized_sync_issues import IssueDayReport, IssueRow, NormalizedSyncIssueRepository
 from db.repository import ProductRepository
 from db.versioning import VersioningRepository
 
@@ -106,6 +107,10 @@ def _normalized_catalog_repo(request: Request) -> NormalizedCatalogRepository:
 
 def _sync_events_repo(request: Request) -> NormalizedSyncEventRepository:
     return request.app.state.normalized_sync_events_repo
+
+
+def _sync_issues_repo(request: Request) -> NormalizedSyncIssueRepository:
+    return request.app.state.normalized_sync_issues_repo
 
 
 def _ficha_repo(request: Request) -> FichaRepository:
@@ -929,6 +934,27 @@ async def normalized_changes_summary(
     product with its status, and the number of products per status (new, modified,
     deleted, restored). Today when `date` is left out."""
     return await repo.day_summary(date)
+
+
+@router.get("/normalized-catalog/sync-issues")
+async def list_normalized_sync_issues(
+    repo: NormalizedSyncIssueRepository = Depends(_sync_issues_repo),
+) -> list[IssueRow]:
+    """The rows of the workbook that the sync could not apply and that are still
+    unread, the most recent first. Each one lists its bad cells and who saved the
+    workbook when it was first seen."""
+    return await repo.list_open()
+
+
+@router.get("/normalized-catalog/sync-issues/day")
+async def normalized_sync_issues_day(
+    date: datetime.date | None = None,
+    repo: NormalizedSyncIssueRepository = Depends(_sync_issues_repo),
+) -> IssueDayReport:
+    """The unread rows on one day (00:00 to 24:00, Lima time): the ones that opened,
+    the ones that were resolved, and the ones still open when the day ended. Today
+    when `date` is left out."""
+    return await repo.day_report(date)
 
 
 @router.get("/normalized-catalog/products/{code}/changes")
