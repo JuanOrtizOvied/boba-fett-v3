@@ -21,6 +21,12 @@ from catalog_normalized_sync.author import UNKNOWN_AUTHOR, fetch_last_editor
 from catalog_normalized_sync.config import NormalizedSettings
 from catalog_normalized_sync.diff import ChangeSet, diff_workbook
 from catalog_normalized_sync.history import events_from_changeset
+from catalog_normalized_sync.issues import (
+    describe,
+    diff_issues,
+    issues_from_run,
+    load_open_issues,
+)
 from catalog_normalized_sync.parser import ParsedWorkbook, parse_workbook
 from catalog_sync.config import Settings
 from catalog_sync.graph import GraphClient, GraphConfigError
@@ -75,11 +81,14 @@ AuthorProvider = Callable[[], Awaitable[str | None]]
 """Says who saved the workbook the run read: an email, `UNKNOWN_AUTHOR`, or None."""
 
 
-async def _author_of(provider: AuthorProvider | None, changeset: ChangeSet) -> str | None:
-    """Who saved the workbook, asked only when the run is going to store events (a
-    skipped run or an empty change set makes no lookup). Never raises: whatever
+async def _author_of(
+    provider: AuthorProvider | None, changeset: ChangeSet, issues_changed: bool = False
+) -> str | None:
+    """Who saved the workbook, asked only when the run is going to store something
+    that records it: history events, or an unread row that opens or resolves (a
+    skipped run, or a run with neither, makes no lookup). Never raises: whatever
     goes wrong, the changes still apply and the author is `UNKNOWN_AUTHOR`."""
-    if provider is None or not events_from_changeset(changeset):
+    if provider is None or not (events_from_changeset(changeset) or issues_changed):
         return None
     try:
         return await provider()
@@ -111,8 +120,17 @@ async def _run_locked(
         logger.warning(
             "Normalized catalog sync held back its deletes: %s", changeset.deletes_blocked
         )
-    changed_by = await _author_of(author_provider, changeset)
-    await apply_changeset(pool, changeset, trigger=trigger, changed_by=changed_by)
+    unread = issues_from_run(parsed, changeset)
+    if unread:
+        logger.warning(
+            "Normalized catalog sync could not read %d row(s) of the workbook; the "
+            "database keeps what it had for them: %s",
+            len(unread),
+            describe(unread),
+        )
+    issues = diff_issues(await load_open_issues(pool), unread)
+    changed_by = await _author_of(author_provider, changeset, issues.changes_state)
+    await apply_changeset(pool, changeset, trigger=trigger, changed_by=changed_by, issues=issues)
     await _store_hash(pool, content_hash)
     return RunReport(content_hash=content_hash, skipped=False, parsed=parsed, changeset=changeset)
 
