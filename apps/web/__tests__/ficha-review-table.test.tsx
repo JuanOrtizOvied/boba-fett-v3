@@ -291,10 +291,10 @@ describe("ReviewTable re-investigate with web", () => {
     await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
 
     await waitFor(() =>
-      expect(screen.getByTitle("Confianza de Claude: 92%")).toHaveTextContent("92%"),
+      expect(screen.getByTitle("Confianza de Claude (búsqueda web): 92%")).toHaveTextContent("92%"),
     );
-    expect(screen.getByTitle("Confianza de Claude: 70%")).toBeInTheDocument();
-    expect(screen.getByTitle("Confianza de Claude: 88%")).toBeInTheDocument();
+    expect(screen.getByTitle("Confianza de Claude (búsqueda web): 70%")).toBeInTheDocument();
+    expect(screen.getByTitle("Confianza de Claude (búsqueda web): 88%")).toBeInTheDocument();
   });
 
   test("does not show an asset-class % when the class did not map to a ficha key", async () => {
@@ -327,10 +327,10 @@ describe("ReviewTable re-investigate with web", () => {
 
     // The name % still shows...
     await waitFor(() =>
-      expect(screen.getByTitle("Confianza de Claude: 95%")).toBeInTheDocument(),
+      expect(screen.getByTitle("Confianza de Claude (búsqueda web): 95%")).toBeInTheDocument(),
     );
     // ...but the unmapped asset-class % does not.
-    expect(screen.queryByTitle("Confianza de Claude: 37%")).toBeNull();
+    expect(screen.queryByTitle("Confianza de Claude (búsqueda web): 37%")).toBeNull();
   });
 });
 
