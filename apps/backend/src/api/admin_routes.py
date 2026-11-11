@@ -808,6 +808,26 @@ async def research_ficha_line(data: FichaResearchRequest) -> SearchResult:
     return await research_web_v2(data.name.strip())
 
 
+class ProductLookupRequest(BaseModel):
+    name: str
+
+
+@router.post("/product-lookup")
+async def product_lookup(
+    data: ProductLookupRequest,
+    product_repo: ProductRepository = Depends(_product_repo),
+) -> SearchResult | None:
+    """Look up ONE product by name with the same enrichment cascade the ficha
+    uses (`cascade_search_v2`: normalized catalog first; Claude knowledge + web
+    search fill the gaps). Returns the enriched SearchResult, or null when the
+    cascade finds nothing anywhere. A blank name short-circuits to null with no
+    DB/LLM call. Read-only — curating/creating happens elsewhere."""
+    name = data.name.strip()
+    if not name:
+        return None
+    return await cascade_search_v2(name, product_repo.pool)
+
+
 @router.get("/ficha-patrimonial/catalog-product/{code}")
 async def get_ficha_catalog_product(
     code: str,

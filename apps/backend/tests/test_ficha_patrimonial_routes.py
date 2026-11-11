@@ -639,6 +639,74 @@ def test_research_endpoint_requires_admin(app_client):
 
 
 # ---------------------------------------------------------------------------
+# POST /admin/product-lookup — single-name catalog->web cascade lookup
+# ---------------------------------------------------------------------------
+
+
+def test_product_lookup_returns_cascade_result(app_client, monkeypatch):
+    app, client = _admin_client(app_client)
+    pool_seen = {}
+
+    async def fake_cascade(query, pool):
+        pool_seen["query"] = query
+        pool_seen["pool"] = pool
+        return SearchResult(name="Latam Credit Fund", manager="Acme", primary_source="catalog")
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+
+    response = client.post("/admin/product-lookup", json={"name": "  Latam Credit  "})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Latam Credit Fund"
+    assert body["manager"] == "Acme"
+    assert body["primary_source"] == "catalog"
+    # Name is trimmed and the product repo pool is passed through.
+    assert pool_seen["query"] == "Latam Credit"
+    assert pool_seen["pool"] is app.state.repo.pool
+
+
+def test_product_lookup_returns_null_when_nothing_found(app_client, monkeypatch):
+    _app, client = _admin_client(app_client)
+
+    async def fake_cascade(query, pool):
+        return None
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+
+    response = client.post("/admin/product-lookup", json={"name": "unknown product"})
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_product_lookup_blank_name_short_circuits(app_client, monkeypatch):
+    _app, client = _admin_client(app_client)
+    called = {"n": 0}
+
+    async def fake_cascade(query, pool):
+        called["n"] += 1
+        return SearchResult(name="x")
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+
+    response = client.post("/admin/product-lookup", json={"name": "   "})
+
+    assert response.status_code == 200
+    assert response.json() is None
+    assert called["n"] == 0  # no cascade / DB / LLM call for a blank name
+
+
+def test_product_lookup_requires_admin(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.post("/admin/product-lookup", json={"name": "x"})
+
+    assert response.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
 # GET /admin/ficha-patrimonial/catalog-product/{code}
 # ---------------------------------------------------------------------------
 
