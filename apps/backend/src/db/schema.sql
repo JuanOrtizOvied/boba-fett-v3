@@ -813,3 +813,38 @@ CREATE INDEX IF NOT EXISTS normalized_sync_event_occurred_idx
 -- runs started from a local file). A separate statement so databases that already
 -- have the table get the column too.
 ALTER TABLE normalized_sync_event ADD COLUMN IF NOT EXISTS changed_by TEXT;
+
+-- ---------------------------------------------------------------------------
+-- Rows of the workbook that the normalized catalog sync could not apply
+-- (migrations/versions/d2f6a8c1b937_add_normalized_sync_issue.py): a skipped row (a
+-- number column with text, a blank required cell, a repeated key) or a row whose
+-- product or series parent was not found. One issue per row, kept until the
+-- workbook is fixed, so it is a condition that lasts and not an event of one run.
+-- `problems` lists the row's bad cells as of the last run; the issue is resolved
+-- (not deleted) when a run no longer finds the row among the unread ones.
+-- `first_seen_by` and `resolved_by` hold who saved the workbook at those moments.
+-- No FK, so it survives any delete.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS normalized_sync_issue (
+    id BIGSERIAL PRIMARY KEY,
+    sheet TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('product', 'series', 'admin')),
+    row_key TEXT NOT NULL,
+    product_code TEXT,
+    series TEXT,
+    administrator TEXT,
+    row_number INTEGER NOT NULL,
+    problems JSONB NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ,
+    first_seen_by TEXT,
+    resolved_by TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS normalized_sync_issue_open_idx
+    ON normalized_sync_issue (sheet, row_key) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS normalized_sync_issue_seen_idx
+    ON normalized_sync_issue (first_seen_at);
+CREATE INDEX IF NOT EXISTS normalized_sync_issue_resolved_idx
+    ON normalized_sync_issue (resolved_at);

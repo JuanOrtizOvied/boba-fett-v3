@@ -25,6 +25,7 @@ from catalog_normalized_sync.config import (
 )
 from catalog_normalized_sync.diff import ChangeSet
 from catalog_normalized_sync.history import events_from_changeset, store_events
+from catalog_normalized_sync.issues import IssueDelta, write_issue_delta
 
 _TABLES = {
     LEVEL_PRODUCT: "catalog_product",
@@ -84,12 +85,16 @@ async def apply_changeset(
     run_id: uuid.UUID | None = None,
     trigger: str = "manual",
     changed_by: str | None = None,
+    issues: IssueDelta | None = None,
 ) -> None:
     """Write `changeset` in a single transaction, and with it one history event per
-    change (`catalog_normalized_sync.history`), so either everything lands or
-    nothing does. `trigger` says what started the run; `run_id` groups its events
-    and is generated when not given; `changed_by` is who saved the workbook the run
-    read (see `catalog_normalized_sync.author`), stored on every event."""
+    change (`catalog_normalized_sync.history`) and the run's unread rows
+    (`catalog_normalized_sync.issues`), so either everything lands or nothing does.
+    `trigger` says what started the run; `run_id` groups its events and is
+    generated when not given; `changed_by` is who saved the workbook the run read
+    (see `catalog_normalized_sync.author`), stored on every event and on the issues
+    the run opens or resolves. The issues are written even when the change set is
+    empty: the only change in the workbook may be a bad cell."""
     run_id = run_id or uuid.uuid4()
     async with pool.acquire() as conn, conn.transaction():
         for restore in changeset.restores:
@@ -115,3 +120,5 @@ async def apply_changeset(
             trigger=trigger,
             changed_by=changed_by,
         )
+        if issues:
+            await write_issue_delta(conn, issues, changed_by=changed_by)

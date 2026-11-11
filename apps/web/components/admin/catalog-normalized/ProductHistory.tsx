@@ -125,7 +125,7 @@ function ChangeLines({ event }: { event: SyncEvent }) {
 /** Who saved the workbook. A name is a violet tag after a gray "por"; "Desconocido" is
  * an amber tag like the observations, because it may mean someone edited without
  * a corporate account. Nothing when there is no data. */
-function Author({ changedBy }: { changedBy: string | null | undefined }) {
+export function Author({ changedBy }: { changedBy: string | null | undefined }) {
   const author = authorLabel(changedBy);
   if (!author) return null;
   if (author.kind === "unknown") {
