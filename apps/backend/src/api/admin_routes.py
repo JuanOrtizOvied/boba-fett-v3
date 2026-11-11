@@ -828,6 +828,57 @@ async def product_lookup(
     return await cascade_search_v2(name, product_repo.pool)
 
 
+class ProductLookupSaveRequest(BaseModel):
+    """Save a looked-up product into the normalized catalog: curate the matched
+    product (when `catalog_product_code` is set) or create it from the reviewed
+    form. This is the same catalog write the ficha `approve` uses, but without a
+    `ProductCreate` (a lookup has no client amount) — it never writes a holding."""
+
+    name: str = ""
+    catalog_product_code: str = ""
+    catalog_update: NormalizedProductUpdate = Field(default_factory=NormalizedProductUpdate)
+    series: list[SeriesUpdateInput] = Field(default_factory=list)
+    admins: list[AdminUpdateInput] = Field(default_factory=list)
+
+
+@router.post("/product-lookup/save", status_code=201)
+async def product_lookup_save(
+    data: ProductLookupSaveRequest,
+    admin: dict = Depends(require_admin),
+    catalog_repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+    history_repo: CatalogHistoryRepository = Depends(_history_repo),
+) -> dict:
+    """Persist the admin-reviewed lookup form into the V2 catalog — update the
+    matched product (+ history) or create it when it is not in the catalog yet.
+    Authorized by the admin session; no client is involved, so this never writes
+    a portfolio holding."""
+    if data.catalog_product_code:
+        code = data.catalog_product_code
+        catalog_changes = await apply_catalog_curation(
+            catalog_repo,
+            history_repo,
+            code,
+            data.catalog_update,
+            data.series,
+            data.admins,
+            admin["id"],
+        )
+    else:
+        created = await create_catalog_product_from_ficha(
+            catalog_repo,
+            history_repo,
+            data.catalog_update,
+            data.series,
+            data.admins,
+            data.catalog_update.name or data.name,
+            admin["id"],
+        )
+        code = created.code
+        catalog_changes = {"created": created.code}
+
+    return {"catalog_product_code": code, "catalog_changes": catalog_changes}
+
+
 @router.get("/ficha-patrimonial/catalog-product/{code}")
 async def get_ficha_catalog_product(
     code: str,

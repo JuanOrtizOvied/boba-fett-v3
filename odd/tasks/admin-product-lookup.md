@@ -43,11 +43,54 @@ no approve/create/edit.
   (search shows result + origin badge; null → not-found; insufficient → warning). Checks: full
   web suite 218 passed / 20 files; tsc clean. Commit: `<pending>`.
 
+## Extension (2026-11-11): editable form + save to catalog
+
+User request: *"el resultado del producto en /admin/buscar-producto tambien debe mostrarse en un
+formulario como aparece en ficha patrimonial"*. Scope confirmed via AskUserQuestion:
+**"Editable + guardar al catálogo"** — the lookup result is shown in the SAME editable form the
+ficha uses (field grid + Series/Administradores tables) and can be SAVED to the normalized
+catalog. No client/holding part (that only applies to the ficha).
+
+### Design / reuse
+- The catalog write already exists and is client-free: `apply_catalog_curation` (update an
+  existing product) and `create_catalog_product_from_ficha` (create a new one), both in
+  `db/catalog_curation.py`, used today by `POST /ficha-patrimonial/approve`.
+- `/approve` cannot be reused directly: `FichaApproveRequest.product: ProductCreate` and
+  `ProductCreate.amount = Field(gt=0)` force a positive amount a lookup does not have, and the
+  catalog write never uses `product.amount`. So a dedicated endpoint without `ProductCreate`.
+- The ficha form atoms (AllocationEditor/Field/ConfidenceTag/SuggestedBadge/SeriesTable/
+  AdminTable/inputClass) were private inside `ReviewTable.tsx` → extract to a shared module so
+  the lookup form reuses them instead of duplicating ~370 lines.
+
+### Tasks
+- [x] **T-3 — Backend: `POST /admin/product-lookup/save`.** DONE. INLINE (TDD). New
+  `ProductLookupSaveRequest {name, catalog_product_code, catalog_update, series, admins}` +
+  `product_lookup_save` endpoint: branch `code → apply_catalog_curation`, else
+  `create_catalog_product_from_ficha(name_fallback=catalog_update.name or name)`; returns
+  `{catalog_product_code, catalog_changes}`. `Depends(require_admin)` for `admin["id"]`
+  (history changed_by). TDD: RED (404) → GREEN. 3 tests (curate branch, create branch, non-admin
+  blocked). Checks: ficha-routes suite 42 passed; ruff clean. Commit: `<pending>`.
+- [ ] **T-4 — Frontend: extract shared form atoms.** INLINE (refactor, guarded by existing
+  `ficha-review-table.test.tsx`). Move AllocationEditor/Field/ConfidenceTag/SuggestedBadge/
+  SeriesTable/AdminTable/inputClass from `ReviewTable.tsx` into
+  `components/admin/ficha-patrimonial/productFormFields.tsx`; `ReviewTable` imports them. No
+  behavior change.
+- [ ] **T-5 — Frontend: editable `ProductLookupForm` + save + wire page.** INLINE (TDD).
+  `reviewTableShared.ts`: `searchResultToEditableRow(result)` + `buildCatalogSaveRequest(row)`
+  (reuse the series/admin fraction mapping, drop `product`/`user_id`). `catalogLookupApi.ts`:
+  `saveProductToCatalog(req)`. New `components/admin/ProductLookupForm.tsx` (editable fields +
+  Series/Admin tables + origin/confidence/Fuentes + "Guardar en catálogo"). Wire into
+  `buscar-producto/page.tsx` (replaces the read-only `ProductLookupResult`, which is deleted).
+  Update `buscar-producto-page.test.tsx`; new `product-lookup-form.test.tsx`.
+
 ## Acceptance criteria
 - A "Buscar producto" admin section runs the catalog→web cascade on the entered name and shows
   the enriched result read-only, with its origin (catalog/web), confidence, series and sources.
 - Not-found (null) and insufficient-web results are clearly messaged.
-- Backend + web suites green; no change to the ficha flow or the cascade logic itself.
+- (Extension) The result is shown in the ficha-style EDITABLE form and can be saved to the
+  normalized catalog (update existing or create new) via `POST /admin/product-lookup/save`,
+  with no client/holding involved.
+- Backend + web suites green; no behavior change to the ficha flow or the cascade logic itself.
 
 ## Next step
-T-1 backend endpoint (RED test first).
+T-3 backend save endpoint (RED test first).
