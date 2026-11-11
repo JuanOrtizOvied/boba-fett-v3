@@ -776,18 +776,19 @@ export function buildCatalogSaveRequest(row: EditableFichaRow): CatalogSaveReque
 }
 
 /**
- * Builds an editable review row from a standalone lookup `SearchResult` (no
- * ficha line behind it) by synthesizing the minimal `FichaEnrichedRow` that
- * `toEditableRow` consumes. There is no declared/raw Excel line, so that rail is
- * empty and the editable form is seeded entirely from the enrichment.
+ * Synthesizes the minimal `FichaEnrichedRow` behind a standalone lookup
+ * `SearchResult` (there is no Excel ficha line). The declared/raw rail carries
+ * only the looked-up name; the enrichment drives the editable form. `raw_*`
+ * numeric/currency fields stay empty so the declared summary is hidden and the
+ * editable fields fall back to the enrichment.
  */
-export function searchResultToEditableRow(result: SearchResult): EditableFichaRow {
-  const synthetic: FichaEnrichedRow = {
+export function searchResultToFichaRow(result: SearchResult): FichaEnrichedRow {
+  return {
     excel_row: 0,
     raw_name: result.name,
     raw_tipo_activo: "",
     raw_amount: 0,
-    raw_currency: result.currency ?? "",
+    raw_currency: "",
     raw_return_rate: "",
     raw_pertenencia: "",
     mapped_asset_class: null,
@@ -795,5 +796,9 @@ export function searchResultToEditableRow(result: SearchResult): EditableFichaRo
     enriched: result,
     enrichment_failed: false,
   };
-  return toEditableRow(synthetic);
+}
+
+/** Builds the editable review row for a standalone lookup `SearchResult`. */
+export function searchResultToEditableRow(result: SearchResult): EditableFichaRow {
+  return toEditableRow(searchResultToFichaRow(result));
 }

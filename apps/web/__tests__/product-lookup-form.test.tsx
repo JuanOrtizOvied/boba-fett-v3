@@ -43,14 +43,18 @@ describe("ProductLookupForm", () => {
     vi.mocked(researchFichaLine).mockReset();
   });
 
-  test("renders the result as an editable form with the origin badge", () => {
+  test("renders the result in the ficha-style editable card with the origin badge", () => {
     render(<ProductLookupForm result={result()} />);
 
-    // The product name is both a heading and an editable field.
-    expect(screen.getByRole("heading", { name: "Latam Credit Fund" })).toBeInTheDocument();
+    // Same card as ficha: the declared name on the left rail + editable fields.
+    expect(screen.getByText(/Latam Credit Fund/)).toBeInTheDocument();
     expect(screen.getByDisplayValue("Latam Credit Fund")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Acme Manager")).toBeInTheDocument();
     expect(screen.getByText("Catálogo")).toBeInTheDocument();
+    // The ficha-only "Buscar con Claude" action is part of the shared card.
+    expect(
+      screen.getByRole("button", { name: /buscar con claude/i }),
+    ).toBeInTheDocument();
   });
 
   test("saves the edited product to the catalog", async () => {

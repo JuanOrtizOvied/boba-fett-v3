@@ -96,3 +96,20 @@ catalog. No client/holding part (that only applies to the ficha).
 
 ## Next step
 T-3 backend save endpoint (RED test first).
+
+## Follow-up (2026-11-11): identical card design to Ficha Patrimonial
+
+User: *"el diseño de buscar producto debe ser igual al de ficha patrimonial"*. The first
+version used a bespoke single-column layout. To make the design truly identical (not just
+similar), the ficha `ProductCard` itself was extracted into the shared module as
+`ProductReviewCard` and is now rendered by BOTH the ficha review table and the lookup form.
+
+- [x] **T-6 — Share the ficha `ProductCard` as `ProductReviewCard`.** DONE. INLINE (refactor,
+  guarded by `ficha-review-table.test.tsx`). Moved `ProductCard` out of `ReviewTable.tsx` into
+  `productFormFields.tsx` as `ProductReviewCard`, parameterized with `footer` (action bar) and
+  `showClientSelection` (the client Serie/Administrador block). `ReviewTable` passes its
+  Aprobar/Descartar footer; `ProductLookupForm` renders the same card with
+  `showClientSelection={false}` and a "Guardar en catálogo" footer. `reviewTableShared.ts`:
+  split `searchResultToFichaRow` out of `searchResultToEditableRow` so the lookup has both the
+  synthetic `rawRow` and the editable row. Checks: full web suite 221 passed / 21 files; tsc +
+  eslint clean. Commit: `a74c47b`.
