@@ -43,11 +43,9 @@ describe("BuscarProductoPage", () => {
 
     expect(lookupProduct).toHaveBeenCalledWith("latam credit");
     await waitFor(() =>
-      expect(
-        screen.getByRole("heading", { name: "Latam Credit Fund" }),
-      ).toBeInTheDocument(),
+      expect(screen.getByText(/Latam Credit Fund/)).toBeInTheDocument(),
     );
-    // The enriched product is shown in the editable form (manager as a field).
+    // The enriched product is shown in the editable ficha-style card.
     expect(screen.getByDisplayValue("Acme Manager")).toBeInTheDocument();
     // Origin badge (catalog) is shown.
     expect(screen.getByText("Catálogo")).toBeInTheDocument();

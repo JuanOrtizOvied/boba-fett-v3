@@ -324,10 +324,12 @@ describe("ReviewTable re-investigate with web", () => {
           return_min: null,
           return_max: null,
           confidence: 70,
+          field_confidence: { management_fee_ter: 88 },
           administrators: [
             {
               administrator: "Admin Sugerido",
-              custody_fee: null,
+              field_confidence: { custody_fee: 66 },
+              custody_fee: 0.001,
               buy_commission: null,
               sell_commission: null,
               billing_currency: "",
@@ -355,10 +357,17 @@ describe("ReviewTable re-investigate with web", () => {
     );
     // ...each marked as a Claude suggestion with its confidence.
     expect(
-      screen.getByTitle("Sugerido por Claude (búsqueda web): 70% de confianza"),
+      screen.getByTitle("Confianza de Claude (búsqueda web): 70%"),
     ).toBeInTheDocument();
     expect(
-      screen.getByTitle("Sugerido por Claude (búsqueda web): 55% de confianza"),
+      screen.getByTitle("Confianza de Claude (búsqueda web): 55%"),
+    ).toBeInTheDocument();
+    // ...and each filled numeric field carries its OWN confidence.
+    expect(
+      screen.getByTitle("Confianza de Claude (búsqueda web): 88%"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Confianza de Claude (búsqueda web): 66%"),
     ).toBeInTheDocument();
   });
 

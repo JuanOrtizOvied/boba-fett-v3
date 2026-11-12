@@ -1,35 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import CatalogHistory from "./CatalogHistory";
 import { extractErrorDetail } from "./fichaUploadShared";
+import { ProductReviewCard, inputClass } from "./productFormFields";
 import {
-  AdminTable,
-  AllocationEditor,
-  CatalogProductPicker,
-  Field,
-  SeriesTable,
-  inputClass,
-} from "./productFormFields";
-import {
-  ASSET_CLASS_LABELS,
-  SOURCE_BADGES,
   applyResearchToRow,
-  applyCatalogSelectionToRow,
-  applySeriesAdminSelection,
   buildApproveRequest,
   buildConfirmProducts,
-  formatDeclaredSummary,
-  formatSimilarityPercent,
-  nameDifferenceWords,
-  resolveConfidence,
   selectApprovedRows,
   toEditableRow,
   type EditableFichaRow,
-  type FichaAssetClassKey,
   type FichaLineStatus,
 } from "./reviewTableShared";
-import { GEOGRAPHIC_FOCUS_GROUPS, UNDERLYING_GROUPS } from "@/lib/allocationOptions";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { researchFichaLine } from "@/lib/fichaApi";
 import type { FichaApproveRequest, FichaEnrichedRow } from "@/lib/portfolio-types";
@@ -46,340 +28,6 @@ interface ReviewTableProps {
   onApprove?: (request: FichaApproveRequest) => void;
 }
 
-// -- Product card -------------------------------------------------------------
-
-
-function ProductCard({
-  row,
-  rawRow,
-  onUpdate,
-  onApproveLine,
-  onResearch,
-  researching,
-}: {
-  row: EditableFichaRow;
-  rawRow: FichaEnrichedRow;
-  onUpdate: (patch: Partial<EditableFichaRow>) => void;
-  onApproveLine: () => void;
-  onResearch: () => void;
-  researching: boolean;
-}) {
-  const isUnmapped = row.assetClass === "";
-  // Enriched-derived display reads the EDITABLE copy (`row.enriched`/`row.source`)
-  // so a web re-investigation updates the badge, confidence, and Fuentes live;
-  // the left rail (declared/raw values) stays on `rawRow`.
-  const effectiveRow: FichaEnrichedRow = { ...rawRow, enriched: row.enriched };
-  const badge = SOURCE_BADGES[row.source];
-  const confidence = resolveConfidence(effectiveRow);
-  const declaredSummary = formatDeclaredSummary(rawRow);
-  const similarity = formatSimilarityPercent(row.enriched?.similarity);
-  // Color band for the similarity pill, aligned with the catalog-match tiers
-  // (>=0.6 strong, >=0.4 acceptable, below weak) so a bad match is visually loud.
-  const similarityValue = row.enriched?.similarity ?? 0;
-  const similarityBand =
-    similarityValue >= 0.6
-      ? "bg-green-100 text-green-800 ring-green-300"
-      : similarityValue >= 0.4
-        ? "bg-amber-100 text-amber-800 ring-amber-300"
-        : "bg-red-100 text-red-700 ring-red-300";
-  // Words that differ between the declared name and the matched catalog name —
-  // the "argument" for why the similarity is below 100%.
-  const similarityDiff = similarity
-    ? nameDifferenceWords(rawRow.raw_name, rawRow.enriched?.name ?? "")
-    : [];
-  const catalogMatched = row.enriched?.catalog_matched ?? false;
-  const dataAsof = row.enriched?.data_asof || "—";
-  // Per-field self-reported confidence from "Buscar con Claude" (keyed by the
-  // backend field name); absent for catalog/parse results.
-  const fc = row.enriched?.field_confidence ?? {};
-
-  return (
-    <div
-      className={`rounded-xl border p-4 ${
-        isUnmapped
-          ? "border-amber-300 bg-amber-50/50"
-          : "border-sabbi-neutral-200 bg-white"
-      }`}
-    >
-      <div className="flex flex-col gap-4 md:flex-row">
-        {/* Left rail: declared (raw) product — read-only */}
-        <div className="flex w-full flex-col gap-2 md:w-80 md:shrink-0">
-          <p className="text-sm font-medium italic text-sabbi-neutral-900">
-            “{rawRow.raw_name}”
-          </p>
-          {declaredSummary && (
-            <p className="text-xs text-sabbi-neutral-600">{declaredSummary}</p>
-          )}
-          <span
-            className={`self-start rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
-          >
-            {badge.label}
-          </span>
-          {similarity && (
-            <span
-              title="Similitud del match con el catálogo"
-              className={`self-start rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${similarityBand}`}
-            >
-              Similitud {similarity}
-            </span>
-          )}
-          {similarityDiff.length > 0 && (
-            <span
-              className="text-[11px] text-sabbi-neutral-500"
-              title={`“${rawRow.raw_name}” vs “${rawRow.enriched?.name ?? ""}”`}
-            >
-              se diferencia por:{" "}
-              <span className="font-medium text-sabbi-neutral-700">
-                {similarityDiff.join(", ")}
-              </span>
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={onResearch}
-            disabled={researching}
-            title="Investiga el producto con la búsqueda web de Claude"
-            className="mt-1 inline-flex items-center gap-1.5 self-start rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-violet-700 hover:to-indigo-700 disabled:opacity-60"
-          >
-            <span aria-hidden="true">✨</span>
-            {researching ? "Buscando…" : "Buscar con Claude"}
-          </button>
-
-          <CatalogProductPicker
-            emphasize={confidence.level === "baja"}
-            onSelect={(result) => onUpdate(applyCatalogSelectionToRow(row, result))}
-          />
-
-          {(row.enriched?.sources?.length ?? 0) > 0 && (
-            <div className="mt-1 flex flex-col gap-1 rounded-lg border border-sabbi-neutral-200 bg-sabbi-neutral-50 p-2">
-              <span className="text-xs font-semibold text-sabbi-neutral-600">
-                Fuentes ({row.enriched?.sources?.length})
-              </span>
-              <ol className="list-decimal pl-4 text-xs text-sabbi-neutral-600">
-                {row.enriched?.sources?.map((source, i) => (
-                  <li key={`${source.url}-${i}`} className="break-words">
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sabbi-primary underline hover:no-underline"
-                    >
-                      {source.title || source.url}
-                    </a>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </div>
-
-        {/* Right panel: enriched (editable) product */}
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          {/* Confidence + status line */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${confidence.className}`}
-            >
-              {confidence.label}
-            </span>
-            <span className="text-xs text-sabbi-neutral-500">
-              {catalogMatched ? "Producto existente" : "Producto nuevo"} · dato al{" "}
-              {dataAsof}
-            </span>
-          </div>
-
-          {/* Enriched fields */}
-          <div className="flex flex-col gap-3">
-            <Field label="Código del producto">
-              <input
-                value={row.enriched?.catalog_product_code ?? ""}
-                aria-label="Código del producto"
-                readOnly
-                placeholder="Se asignará al crear el producto"
-                className={inputClass + " bg-sabbi-neutral-50"}
-              />
-            </Field>
-
-            <Field label="Nombre del producto" confidence={fc.name}>
-              <input
-                value={row.name}
-                aria-label="Nombre del producto"
-                onChange={(e) => onUpdate({ name: e.target.value })}
-                className={inputClass}
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Gestor" confidence={fc.manager}>
-                <input
-                  value={row.manager}
-                  aria-label="Gestor"
-                  onChange={(e) => onUpdate({ manager: e.target.value })}
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Ticker / ISIN">
-                <input
-                  value={row.enriched?.ticker_isin ?? ""}
-                  aria-label="Ticker / ISIN"
-                  readOnly
-                  className={inputClass + " bg-sabbi-neutral-50"}
-                />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Moneda" confidence={fc.currency}>
-                <input
-                  value={row.currency}
-                  aria-label="Moneda"
-                  onChange={(e) => onUpdate({ currency: e.target.value })}
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Horizonte">
-                <input
-                  value={row.enriched?.investment_horizon ?? ""}
-                  aria-label="Horizonte"
-                  readOnly
-                  className={inputClass + " bg-sabbi-neutral-50"}
-                />
-              </Field>
-            </div>
-
-            <Field
-              label="Clase de activo"
-              confidence={row.assetClass ? fc.asset_class : undefined}
-            >
-              <select
-                value={row.assetClass}
-                onChange={(e) =>
-                  onUpdate({ assetClass: e.target.value as FichaAssetClassKey | "" })
-                }
-                className={inputClass + (isUnmapped ? " border-amber-400" : "")}
-              >
-                <option value="">Seleccionar…</option>
-                {(Object.keys(ASSET_CLASS_LABELS) as FichaAssetClassKey[]).map((key) => (
-                  <option key={key} value={key}>
-                    {ASSET_CLASS_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-              {isUnmapped && (
-                <p className="text-[11px] text-amber-700">
-                  Sin mapear — seleccioná una clase de activo
-                </p>
-              )}
-            </Field>
-
-            <div className="grid grid-cols-2 gap-4">
-              <AllocationEditor
-                label="Foco geográfico"
-                allocations={row.geographicFocus}
-                onChange={(next) => onUpdate({ geographicFocus: next })}
-                confidence={fc.geographic_focus}
-                optionGroups={GEOGRAPHIC_FOCUS_GROUPS}
-              />
-              <AllocationEditor
-                label="Subyacente"
-                allocations={row.underlying}
-                onChange={(next) => onUpdate({ underlying: next })}
-                confidence={fc.underlying}
-                optionGroups={UNDERLYING_GROUPS}
-              />
-            </div>
-          </div>
-
-          <SeriesTable
-            series={row.editableSeries}
-            onChange={(next) => onUpdate({ editableSeries: next })}
-          />
-
-          <AdminTable
-            admins={row.editableAdmins}
-            onChange={(next) => onUpdate({ editableAdmins: next })}
-          />
-
-          {row.seriesOptions.length > 0 && (
-            <div className="grid grid-cols-2 gap-3 rounded-lg bg-sabbi-neutral-50 p-2">
-              <Field label="Serie del cliente">
-                <select
-                  value={row.selectedSeries}
-                  aria-label="Serie"
-                  onChange={(e) =>
-                    onUpdate(applySeriesAdminSelection(row, e.target.value, ""))
-                  }
-                  className={inputClass}
-                >
-                  <option value="">Seleccionar…</option>
-                  {row.seriesOptions.map((s) => (
-                    <option key={s.series} value={s.series}>
-                      {s.series}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Administrador del cliente">
-                <select
-                  value={row.selectedAdministrator}
-                  aria-label="Administrador del catálogo"
-                  disabled={!row.selectedSeries}
-                  onChange={(e) =>
-                    onUpdate(
-                      applySeriesAdminSelection(row, row.selectedSeries, e.target.value),
-                    )
-                  }
-                  className={inputClass + (!row.selectedSeries ? " opacity-60" : "")}
-                >
-                  <option value="">Seleccionar…</option>
-                  {(
-                    row.seriesOptions.find((s) => s.series === row.selectedSeries)
-                      ?.administrators ?? []
-                  ).map((a) => (
-                    <option key={a.administrator} value={a.administrator}>
-                      {a.administrator}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          )}
-
-          {rawRow.enriched?.catalog_product_code && (
-            <CatalogHistory code={rawRow.enriched.catalog_product_code} />
-          )}
-
-          {/* Per-line actions */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-sabbi-neutral-100 pt-3">
-            <button
-              type="button"
-              onClick={onApproveLine}
-              disabled={isUnmapped}
-              className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
-            >
-              {catalogMatched
-                ? "Es un producto existente"
-                : "Aprobar y crear producto"}
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdate({ lineStatus: "discarded" })}
-              className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
-            >
-              Descartar línea
-            </button>
-            {row.lineStatus === "approved" && (
-              <span className="text-xs font-medium text-green-700">Aprobada</span>
-            )}
-            {row.lineStatus === "discarded" && (
-              <span className="text-xs font-medium text-red-600">Descartada</span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // -- Main review component ----------------------------------------------------
 
@@ -516,17 +164,47 @@ export default function ReviewTable({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto pr-1">
-        {editableRows.map((row, index) => (
-          <ProductCard
-            key={row.excelRow}
-            row={row}
-            rawRow={rows[index]}
-            onUpdate={(patch) => updateRow(index, patch)}
-            onApproveLine={() => approveRow(index)}
-            onResearch={() => researchRow(index)}
-            researching={researchingIndex === index}
-          />
-        ))}
+        {editableRows.map((row, index) => {
+          const catalogMatched = row.enriched?.catalog_matched ?? false;
+          const isUnmapped = row.assetClass === "";
+          return (
+            <ProductReviewCard
+              key={row.excelRow}
+              row={row}
+              rawRow={rows[index]}
+              onUpdate={(patch) => updateRow(index, patch)}
+              onResearch={() => researchRow(index)}
+              researching={researchingIndex === index}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => approveRow(index)}
+                    disabled={isUnmapped}
+                    className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-60"
+                  >
+                    {catalogMatched
+                      ? "Es un producto existente"
+                      : "Aprobar y crear producto"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateRow(index, { lineStatus: "discarded" })}
+                    className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    Descartar línea
+                  </button>
+                  {row.lineStatus === "approved" && (
+                    <span className="text-xs font-medium text-green-700">Aprobada</span>
+                  )}
+                  {row.lineStatus === "discarded" && (
+                    <span className="text-xs font-medium text-red-600">Descartada</span>
+                  )}
+                </>
+              }
+            />
+          );
+        })}
       </div>
 
       {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}

@@ -120,6 +120,14 @@ export interface EditableSeriesRow {
    * the card shows a "sugerido por Claude" badge with this %. Absent for
    * catalog/manual rows. */
   suggestedConfidence?: number;
+  /** Per-field confidence (0..100) for the numeric fields the web research
+   * filled; absent for catalog/manual rows. */
+  fieldConfidence?: Partial<
+    Record<
+      "ter" | "flowsMin" | "flowsMax" | "returnMin" | "returnMax" | "minimumUsd",
+      number
+    >
+  >;
 }
 
 /**
@@ -138,6 +146,11 @@ export interface EditableAdminRow {
    * the card shows a "sugerido por Claude" badge with this %. Absent for
    * catalog/manual rows. */
   suggestedConfidence?: number;
+  /** Per-field confidence (0..100) for the numeric fields the web research
+   * filled; absent for catalog/manual rows. */
+  fieldConfidence?: Partial<
+    Record<"custody" | "buy" | "sell" | "minimumUsd", number>
+  >;
 }
 
 /**
@@ -336,6 +349,37 @@ export function parseAllocations(text: string): AssetAllocation[] {
  * the fraction fields as plain percent values. `minimumUsd`/`howCalculated`
  * have no series-level source yet and start blank.
  */
+/** Remaps a backend `field_confidence` map onto editable-row keys, keeping only
+ * known, numeric entries. Returns undefined when nothing applies. */
+function remapFieldConfidence<K extends string>(
+  raw: Record<string, number> | null | undefined,
+  keyMap: Record<string, K>,
+): Partial<Record<K, number>> | undefined {
+  if (!raw) return undefined;
+  const out: Partial<Record<K, number>> = {};
+  for (const [backendKey, target] of Object.entries(keyMap)) {
+    const value = raw[backendKey];
+    if (typeof value === "number" && Number.isFinite(value)) out[target] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+const SERIES_FIELD_CONFIDENCE_KEYS = {
+  management_fee_ter: "ter",
+  flows_min: "flowsMin",
+  flows_max: "flowsMax",
+  return_min: "returnMin",
+  return_max: "returnMax",
+  minimum_usd: "minimumUsd",
+} as const;
+
+const ADMIN_FIELD_CONFIDENCE_KEYS = {
+  custody_fee: "custody",
+  buy_commission: "buy",
+  sell_commission: "sell",
+  minimum_usd: "minimumUsd",
+} as const;
+
 export function toEditableSeriesRows(
   options: CatalogSeriesOption[],
 ): EditableSeriesRow[] {
@@ -349,6 +393,10 @@ export function toEditableSeriesRows(
     minimumUsd: "",
     howCalculated: "",
     suggestedConfidence: s.confidence ?? undefined,
+    fieldConfidence: remapFieldConfidence(
+      s.field_confidence,
+      SERIES_FIELD_CONFIDENCE_KEYS,
+    ),
   }));
 }
 
@@ -369,6 +417,10 @@ export function toEditableAdminRows(
       sell: formatFractionValue(a.sell_commission),
       minimumUsd: formatPlainNumber(a.minimum_usd),
       suggestedConfidence: a.confidence ?? undefined,
+      fieldConfidence: remapFieldConfidence(
+        a.field_confidence,
+        ADMIN_FIELD_CONFIDENCE_KEYS,
+      ),
     })),
   );
 }
@@ -776,18 +828,19 @@ export function buildCatalogSaveRequest(row: EditableFichaRow): CatalogSaveReque
 }
 
 /**
- * Builds an editable review row from a standalone lookup `SearchResult` (no
- * ficha line behind it) by synthesizing the minimal `FichaEnrichedRow` that
- * `toEditableRow` consumes. There is no declared/raw Excel line, so that rail is
- * empty and the editable form is seeded entirely from the enrichment.
+ * Synthesizes the minimal `FichaEnrichedRow` behind a standalone lookup
+ * `SearchResult` (there is no Excel ficha line). The declared/raw rail carries
+ * only the looked-up name; the enrichment drives the editable form. `raw_*`
+ * numeric/currency fields stay empty so the declared summary is hidden and the
+ * editable fields fall back to the enrichment.
  */
-export function searchResultToEditableRow(result: SearchResult): EditableFichaRow {
-  const synthetic: FichaEnrichedRow = {
+export function searchResultToFichaRow(result: SearchResult): FichaEnrichedRow {
+  return {
     excel_row: 0,
     raw_name: result.name,
     raw_tipo_activo: "",
     raw_amount: 0,
-    raw_currency: result.currency ?? "",
+    raw_currency: "",
     raw_return_rate: "",
     raw_pertenencia: "",
     mapped_asset_class: null,
@@ -795,5 +848,9 @@ export function searchResultToEditableRow(result: SearchResult): EditableFichaRo
     enriched: result,
     enrichment_failed: false,
   };
-  return toEditableRow(synthetic);
+}
+
+/** Builds the editable review row for a standalone lookup `SearchResult`. */
+export function searchResultToEditableRow(result: SearchResult): EditableFichaRow {
+  return toEditableRow(searchResultToFichaRow(result));
 }

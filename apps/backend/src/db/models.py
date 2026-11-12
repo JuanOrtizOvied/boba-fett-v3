@@ -402,6 +402,9 @@ class CatalogSeriesAdminOption(BaseModel):
     # the web research ("Buscar con Claude"). None for catalog/manual admins —
     # that None is what the frontend reads as "not a web suggestion".
     confidence: int | None = None
+    # Per-field confidence (0..100) for the numeric values the web research filled
+    # (keys = field names, e.g. "custody_fee"). Empty for catalog/manual admins.
+    field_confidence: dict[str, int] = Field(default_factory=dict)
 
 
 class CatalogSeriesOption(BaseModel):
@@ -421,6 +424,9 @@ class CatalogSeriesOption(BaseModel):
     # research. None for catalog series (the frontend reads None as "from catalog,
     # not a web suggestion"); a number marks it "sugerido por Claude".
     confidence: int | None = None
+    # Per-field confidence (0..100) for the numeric values the web research filled
+    # (e.g. "management_fee_ter"). Empty for catalog series.
+    field_confidence: dict[str, int] = Field(default_factory=dict)
 
 
 class Source(BaseModel):

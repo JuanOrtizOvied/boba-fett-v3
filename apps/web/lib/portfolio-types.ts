@@ -109,6 +109,9 @@ export interface CatalogSeriesAdminOption {
   /** Self-reported confidence (0..100) when this administrator was SUGGESTED by
    * the web research. null/absent for catalog/manual admins. */
   confidence?: number | null;
+  /** Per-field confidence (0..100) keyed by backend field name (custody_fee…);
+   * only for values the web research filled. */
+  field_confidence?: Record<string, number> | null;
 }
 
 /**
@@ -127,6 +130,9 @@ export interface CatalogSeriesOption {
    * research ("Buscar con Claude"). null/absent for catalog series — the UI reads
    * a number as "sugerido por Claude". */
   confidence?: number | null;
+  /** Per-field confidence (0..100) keyed by backend field name
+   * (management_fee_ter…); only for values the web research filled. */
+  field_confidence?: Record<string, number> | null;
 }
 
 /** Mirrors `db.catalog_curation.SeriesUpdateInput` — an edited series (fractions). */
