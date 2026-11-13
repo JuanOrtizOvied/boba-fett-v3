@@ -15,6 +15,8 @@ export type AssetClass =
 export interface AssetAllocation {
   name: string;
   percentage: number;
+  /** Server-computed kebab-case slugs derived from `name` (catalog allocations only). */
+  slugs?: string[];
 }
 
 export interface Product {

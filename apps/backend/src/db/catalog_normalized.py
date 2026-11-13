@@ -12,12 +12,14 @@ comes back.
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import asyncpg
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from db.models import AssetAllocation
 
@@ -26,9 +28,37 @@ def _to_float(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
-def _allocations(raw: Any) -> list[AssetAllocation]:
+def slugify_name(name: str) -> str:
+    """Kebab-case slug: unaccented, lowercase, non-alphanumeric runs -> '-'."""
+    decomposed = unicodedata.normalize("NFKD", name)
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "-", stripped.lower()).strip("-")
+
+
+class CatalogAllocation(AssetAllocation):
+    """Catalog allocation item; `slugs` is server-computed from `name`
+    (client-supplied values are ignored)."""
+
+    slugs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_shared_allocation(cls, data: Any) -> Any:
+        # Accept the shared AssetAllocation (e.g. built from a ficha) too.
+        if isinstance(data, AssetAllocation) and not isinstance(data, cls):
+            return data.model_dump()
+        return data
+
+    @model_validator(mode="after")
+    def _compute_slugs(self) -> CatalogAllocation:
+        slug = slugify_name(self.name)
+        self.slugs = [slug] if slug else []
+        return self
+
+
+def _allocations(raw: Any) -> list[CatalogAllocation]:
     data = json.loads(raw) if isinstance(raw, str) else (raw or [])
-    return [AssetAllocation(**item) for item in data]
+    return [CatalogAllocation(**item) for item in data]
 
 
 class CatalogProductSeriesAdmin(BaseModel):
@@ -66,9 +96,9 @@ class CatalogProductRow(BaseModel):
     name: str
     ticker_isin: str = ""
     manager: str = ""
-    asset_class: list[AssetAllocation] = Field(default_factory=list)
-    geographic_focus: list[AssetAllocation] = Field(default_factory=list)
-    underlying: list[AssetAllocation] = Field(default_factory=list)
+    asset_class: list[CatalogAllocation] = Field(default_factory=list)
+    geographic_focus: list[CatalogAllocation] = Field(default_factory=list)
+    underlying: list[CatalogAllocation] = Field(default_factory=list)
     currency: str = ""
     investment_horizon: str = ""
     is_deleted: bool = False
@@ -157,9 +187,9 @@ class CatalogProductCreate(BaseModel):
     name: str
     ticker_isin: str = ""
     manager: str = ""
-    asset_class: list[AssetAllocation] = Field(default_factory=list)
-    geographic_focus: list[AssetAllocation] = Field(default_factory=list)
-    underlying: list[AssetAllocation] = Field(default_factory=list)
+    asset_class: list[CatalogAllocation] = Field(default_factory=list)
+    geographic_focus: list[CatalogAllocation] = Field(default_factory=list)
+    underlying: list[CatalogAllocation] = Field(default_factory=list)
     currency: str = ""
     investment_horizon: str = ""
 
@@ -170,9 +200,9 @@ class CatalogProductUpdate(BaseModel):
     name: str | None = None
     ticker_isin: str | None = None
     manager: str | None = None
-    asset_class: list[AssetAllocation] | None = None
-    geographic_focus: list[AssetAllocation] | None = None
-    underlying: list[AssetAllocation] | None = None
+    asset_class: list[CatalogAllocation] | None = None
+    geographic_focus: list[CatalogAllocation] | None = None
+    underlying: list[CatalogAllocation] | None = None
     currency: str | None = None
     investment_horizon: str | None = None
 
