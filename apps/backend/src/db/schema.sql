@@ -663,6 +663,9 @@ CREATE TABLE IF NOT EXISTS catalog_product (
     name TEXT NOT NULL,
     ticker_isin TEXT DEFAULT '',
     manager TEXT DEFAULT '',
+    -- asset_class / geographic_focus / underlying: each JSON item is
+    -- {name, percentage, slugs}; `slugs` is a server-computed kebab-case array
+    -- derived from `name` (documentation only, no DDL).
     asset_class JSONB DEFAULT '[]',
     geographic_focus JSONB DEFAULT '[]',
     underlying JSONB DEFAULT '[]',
