@@ -676,6 +676,56 @@ CREATE TABLE IF NOT EXISTS catalog_product (
     deleted_at TIMESTAMPTZ
 );
 
+-- Mirrors migrations/versions/a9c1e3f5b7d2_backfill_catalog_allocation_slugs.py.
+-- Each JSON item of asset_class/geographic_focus/underlying carries a
+-- server-computed kebab-case `slugs` array derived from `name`. The SQL slug
+-- mirrors db/catalog_normalized.py `slugify_name`: normalize_catalog_text
+-- (lower + unaccent), then non-alphanumeric runs collapse to a single '-',
+-- edges trimmed. The backfill below is guarded, so re-applying this schema is a
+-- no-op once rows carry slugs.
+CREATE OR REPLACE FUNCTION catalog_allocation_with_slugs(items jsonb)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT COALESCE(
+        jsonb_agg(
+            elem || jsonb_build_object(
+                'slugs',
+                CASE
+                    WHEN slug = '' THEN '[]'::jsonb
+                    ELSE jsonb_build_array(slug)
+                END
+            )
+            ORDER BY ord
+        ),
+        '[]'::jsonb
+    )
+    FROM jsonb_array_elements(items) WITH ORDINALITY AS t(elem, ord),
+    LATERAL (
+        SELECT trim(both '-' from regexp_replace(
+            normalize_catalog_text(COALESCE(elem->>'name', '')),
+            '[^a-z0-9]+', '-', 'g'
+        )) AS slug
+    ) s;
+$$;
+
+UPDATE catalog_product
+SET asset_class = catalog_allocation_with_slugs(asset_class)
+WHERE EXISTS (
+    SELECT 1 FROM jsonb_array_elements(asset_class) e WHERE NOT (e ? 'slugs')
+);
+UPDATE catalog_product
+SET geographic_focus = catalog_allocation_with_slugs(geographic_focus)
+WHERE EXISTS (
+    SELECT 1 FROM jsonb_array_elements(geographic_focus) e WHERE NOT (e ? 'slugs')
+);
+UPDATE catalog_product
+SET underlying = catalog_allocation_with_slugs(underlying)
+WHERE EXISTS (
+    SELECT 1 FROM jsonb_array_elements(underlying) e WHERE NOT (e ? 'slugs')
+);
+
 CREATE TABLE IF NOT EXISTS catalog_product_series (
     id SERIAL PRIMARY KEY,
     product_code TEXT NOT NULL REFERENCES catalog_product(code) ON DELETE CASCADE,

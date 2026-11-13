@@ -66,6 +66,14 @@ payloads and break `test_models.py`, excel export, comparison views).
       clean. (No UI change; typing only.)
 - [x] T-3 schema.sql: documented the per-item `slugs` convention in a comment
       above the `catalog_product` JSONB columns (no DDL).
+- [x] T-4 DB backfill: Alembic migration a9c1e3f5b7d2 (down_revision
+      f8a9b0c1d2e3) creates `catalog_allocation_with_slugs(jsonb)` and backfills
+      the three JSONB columns; downgrade strips the key + drops the function.
+      schema.sql carries a guarded, idempotent mirror (test DB). APPLIED to the
+      dev DB: 516 rows, 0 allocation items left without slugs; downgrade→upgrade
+      round-trip clean. SQL slug parity with Python `slugify_name` confirmed on
+      en-dash/parens/accents (e.g. "Bonos ... (AAA–BBB)" →
+      "bonos-corporativos-investment-grade-aaa-bbb").
 
 ## Acceptance
 - [x] A created/updated normalized product returns each allocation item with
