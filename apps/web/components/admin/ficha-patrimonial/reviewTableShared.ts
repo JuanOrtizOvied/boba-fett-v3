@@ -14,6 +14,7 @@ import type {
   CatalogSeriesUpdate,
   FichaApproveRequest,
   FichaEnrichedRow,
+  SearchResult,
 } from "@/lib/portfolio-types";
 
 export type FichaAssetClassKey =
@@ -115,6 +116,18 @@ export interface EditableSeriesRow {
   returnMax: string;
   minimumUsd: string;
   howCalculated: string;
+  /** Present (0..100) only when this row was SUGGESTED by the web research —
+   * the card shows a "sugerido por Claude" badge with this %. Absent for
+   * catalog/manual rows. */
+  suggestedConfidence?: number;
+  /** Per-field confidence (0..100) for the numeric fields the web research
+   * filled; absent for catalog/manual rows. */
+  fieldConfidence?: Partial<
+    Record<
+      "ter" | "flowsMin" | "flowsMax" | "returnMin" | "returnMax" | "minimumUsd",
+      number
+    >
+  >;
 }
 
 /**
@@ -129,6 +142,15 @@ export interface EditableAdminRow {
   buy: string;
   sell: string;
   minimumUsd: string;
+  /** Present (0..100) only when this row was SUGGESTED by the web research —
+   * the card shows a "sugerido por Claude" badge with this %. Absent for
+   * catalog/manual rows. */
+  suggestedConfidence?: number;
+  /** Per-field confidence (0..100) for the numeric fields the web research
+   * filled; absent for catalog/manual rows. */
+  fieldConfidence?: Partial<
+    Record<"custody" | "buy" | "sell" | "minimumUsd", number>
+  >;
 }
 
 /**
@@ -327,6 +349,37 @@ export function parseAllocations(text: string): AssetAllocation[] {
  * the fraction fields as plain percent values. `minimumUsd`/`howCalculated`
  * have no series-level source yet and start blank.
  */
+/** Remaps a backend `field_confidence` map onto editable-row keys, keeping only
+ * known, numeric entries. Returns undefined when nothing applies. */
+function remapFieldConfidence<K extends string>(
+  raw: Record<string, number> | null | undefined,
+  keyMap: Record<string, K>,
+): Partial<Record<K, number>> | undefined {
+  if (!raw) return undefined;
+  const out: Partial<Record<K, number>> = {};
+  for (const [backendKey, target] of Object.entries(keyMap)) {
+    const value = raw[backendKey];
+    if (typeof value === "number" && Number.isFinite(value)) out[target] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+const SERIES_FIELD_CONFIDENCE_KEYS = {
+  management_fee_ter: "ter",
+  flows_min: "flowsMin",
+  flows_max: "flowsMax",
+  return_min: "returnMin",
+  return_max: "returnMax",
+  minimum_usd: "minimumUsd",
+} as const;
+
+const ADMIN_FIELD_CONFIDENCE_KEYS = {
+  custody_fee: "custody",
+  buy_commission: "buy",
+  sell_commission: "sell",
+  minimum_usd: "minimumUsd",
+} as const;
+
 export function toEditableSeriesRows(
   options: CatalogSeriesOption[],
 ): EditableSeriesRow[] {
@@ -339,6 +392,11 @@ export function toEditableSeriesRows(
     returnMax: formatFractionValue(s.return_max),
     minimumUsd: "",
     howCalculated: "",
+    suggestedConfidence: s.confidence ?? undefined,
+    fieldConfidence: remapFieldConfidence(
+      s.field_confidence,
+      SERIES_FIELD_CONFIDENCE_KEYS,
+    ),
   }));
 }
 
@@ -358,6 +416,11 @@ export function toEditableAdminRows(
       buy: formatFractionValue(a.buy_commission),
       sell: formatFractionValue(a.sell_commission),
       minimumUsd: formatPlainNumber(a.minimum_usd),
+      suggestedConfidence: a.confidence ?? undefined,
+      fieldConfidence: remapFieldConfidence(
+        a.field_confidence,
+        ADMIN_FIELD_CONFIDENCE_KEYS,
+      ),
     })),
   );
 }
@@ -494,6 +557,14 @@ export function applyResearchToRow(
     // clear the field (""), so the select shows "Sin mapear" and no stale value
     // is left behind (the per-field % is then hidden by the card's guard).
     patch.assetClass = normalizeAssetClass(result.asset_class[0].name);
+  }
+  // Web-SUGGESTED series (with their administrators) populate the Series and
+  // Administradores tables, each row carrying its confidence (shown as "sugerido
+  // por Claude"). Only when the web found some — never wipe an existing table.
+  if (result.series_options?.length) {
+    patch.seriesOptions = result.series_options;
+    patch.editableSeries = toEditableSeriesRows(result.series_options);
+    patch.editableAdmins = toEditableAdminRows(result.series_options);
   }
   return patch;
 }
@@ -720,4 +791,66 @@ export function buildApproveRequest(
     series,
     admins,
   };
+}
+
+/** Mirrors `api.admin_routes.ProductLookupSaveRequest` — persist a looked-up
+ * product into the normalized catalog, with no client/holding. */
+export interface CatalogSaveRequest {
+  name: string;
+  catalog_product_code: string;
+  catalog_update: {
+    name?: string;
+    manager?: string;
+    currency?: string;
+    asset_class?: AssetAllocation[];
+    geographic_focus?: AssetAllocation[];
+    underlying?: AssetAllocation[];
+  };
+  series: CatalogSeriesUpdate[];
+  admins: CatalogAdminUpdate[];
+}
+
+/**
+ * Builds the catalog-save payload for the standalone "Buscar producto" form.
+ * Reuses `buildApproveRequest`'s product/series/admin mapping (single source of
+ * truth) and drops the ficha-only `product`/`user_id` — the lookup never writes
+ * a client holding, so there is no amount.
+ */
+export function buildCatalogSaveRequest(row: EditableFichaRow): CatalogSaveRequest {
+  const approve = buildApproveRequest(row, "");
+  return {
+    name: row.name,
+    catalog_product_code: approve.catalog_product_code,
+    catalog_update: approve.catalog_update,
+    series: approve.series,
+    admins: approve.admins,
+  };
+}
+
+/**
+ * Synthesizes the minimal `FichaEnrichedRow` behind a standalone lookup
+ * `SearchResult` (there is no Excel ficha line). The declared/raw rail carries
+ * only the looked-up name; the enrichment drives the editable form. `raw_*`
+ * numeric/currency fields stay empty so the declared summary is hidden and the
+ * editable fields fall back to the enrichment.
+ */
+export function searchResultToFichaRow(result: SearchResult): FichaEnrichedRow {
+  return {
+    excel_row: 0,
+    raw_name: result.name,
+    raw_tipo_activo: "",
+    raw_amount: 0,
+    raw_currency: "",
+    raw_return_rate: "",
+    raw_pertenencia: "",
+    mapped_asset_class: null,
+    normalized_return_rate: "",
+    enriched: result,
+    enrichment_failed: false,
+  };
+}
+
+/** Builds the editable review row for a standalone lookup `SearchResult`. */
+export function searchResultToEditableRow(result: SearchResult): EditableFichaRow {
+  return toEditableRow(searchResultToFichaRow(result));
 }
