@@ -12,6 +12,9 @@ import SeriesFormModal from "@/components/admin/catalog-normalized/SeriesFormMod
 import AdminFormModal from "@/components/admin/catalog-normalized/AdminFormModal";
 import ChangesPanel from "@/components/admin/catalog-normalized/ChangesPanel";
 import ProductHistory from "@/components/admin/catalog-normalized/ProductHistory";
+import SyncIssuesPanel, {
+  SyncIssuesNotice,
+} from "@/components/admin/catalog-normalized/SyncIssuesPanel";
 import {
   ConfirmDeleteDialog,
   formatFraction,
@@ -41,7 +44,15 @@ import {
   type DaySummary,
 } from "@/lib/normalized-sync-events";
 
+import {
+  issuesByProduct,
+  parseSyncIssues,
+  unreadBadgeLabel,
+  type SyncIssue,
+} from "@/lib/normalized-sync-issues";
+
 const SUMMARY_ERROR = "No se pudieron cargar los cambios";
+const ISSUES_ERROR = "No se pudieron cargar las filas no leídas";
 
 const BASE = "/api/admin/normalized-catalog";
 
@@ -226,6 +237,34 @@ function NormalizedCatalogContent() {
   );
   const filterActive = onlyChanged && summary !== null;
 
+  // Rows of the workbook the sync could not apply. Independent of the search and of
+  // the selected product; a failed load only marks its own panel.
+  const [unreadRows, setUnreadRows] = useState<SyncIssue[] | null>(null);
+  const [unreadError, setUnreadError] = useState<string | null>(null);
+  const [unreadAttempt, setUnreadAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setUnreadError(null);
+    (async () => {
+      const res = await fetchWithAuth(`${BASE}/sync-issues`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(await readApiError(res, ISSUES_ERROR));
+      const parsed = parseSyncIssues(await res.json());
+      if (!parsed) throw new Error(ISSUES_ERROR);
+      if (!controller.signal.aborted) setUnreadRows(parsed);
+    })().catch((err: unknown) => {
+      if (controller.signal.aborted) return;
+      if (err instanceof Error && err.name === "AbortError") return;
+      setUnreadRows(null);
+      setUnreadError(err instanceof Error ? err.message : ISSUES_ERROR);
+    });
+    return () => controller.abort();
+  }, [unreadAttempt]);
+
+  const unreadByCode = issuesByProduct(unreadRows ?? []);
+
   const refetchDetail = useCallback(async () => {
     if (selectedCode) await loadDetail(selectedCode);
     await loadObservations();
@@ -317,6 +356,13 @@ function NormalizedCatalogContent() {
         onRetry={() => setSummaryAttempt((n) => n + 1)}
       />
 
+      <SyncIssuesPanel
+        issues={unreadRows}
+        error={unreadError}
+        onSelectProduct={setSelectedCode}
+        onRetry={() => setUnreadAttempt((n) => n + 1)}
+      />
+
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
         {/* -- Master: product list ------------------------------------ */}
         <section className="flex flex-col gap-3">
@@ -358,6 +404,7 @@ function NormalizedCatalogContent() {
                 const observationCount = observations.get(p.code)?.length ?? 0;
                 const dayProduct = changesByCode.get(p.code);
                 const changeLabel = dayProduct ? productDayLabel(dayProduct) : "";
+                const unreadCount = unreadByCode.get(p.code)?.length ?? 0;
                 return (
                   <li key={p.code}>
                     <button
@@ -378,6 +425,14 @@ function NormalizedCatalogContent() {
                         {changeLabel && (
                           <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap text-sky-800 uppercase">
                             {changeLabel}
+                          </span>
+                        )}
+                        {unreadCount > 0 && (
+                          <span
+                            title="El sync no pudo leer una fila de este producto en el Excel"
+                            className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap text-orange-800 uppercase"
+                          >
+                            {unreadBadgeLabel(unreadCount)}
                           </span>
                         )}
                       </span>
@@ -405,6 +460,7 @@ function NormalizedCatalogContent() {
             <ProductDetail
               product={detail}
               observations={observations.get(detail.code) ?? []}
+              unreadRows={unreadByCode.get(detail.code) ?? []}
               historyDay={filterActive && summary ? summary.date : null}
               onEditProduct={() => setModal({ kind: "product", product: detail })}
               onDeleteProduct={() =>
@@ -555,6 +611,7 @@ const linkButtonClass =
 function ProductDetail({
   product,
   observations,
+  unreadRows,
   historyDay,
   onEditProduct,
   onDeleteProduct,
@@ -567,6 +624,8 @@ function ProductDetail({
 }: {
   product: CatalogProductRow;
   observations: CatalogObservation[];
+  /** Rows of this product the sync could not apply (open issues). */
+  unreadRows: SyncIssue[];
   /** Lima day whose events the history highlights (the filter of changed
    * products is on), or null. */
   historyDay: string | null;
@@ -585,6 +644,7 @@ function ProductDetail({
 
   return (
     <div className="flex flex-col gap-5">
+      <SyncIssuesNotice issues={unreadRows} />
       <div className="rounded-xl border border-sabbi-neutral-200 bg-white p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>

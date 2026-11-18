@@ -51,6 +51,7 @@ from db.encryption import get_serde
 from db.ficha_repository import FichaRepository
 from db.models import ProductCreate, ProductUpdate, SnapshotCreate
 from db.normalized_sync_events import NormalizedSyncEventRepository
+from db.normalized_sync_issues import NormalizedSyncIssueRepository
 from db.portfolio_template_export import (
     build_portfolio_template_workbook,
     template_export_filename,
@@ -105,6 +106,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.catalog_repo = CatalogRepository(pool)
     app.state.normalized_catalog_repo = NormalizedCatalogRepository(pool)
     app.state.normalized_sync_events_repo = NormalizedSyncEventRepository(pool)
+    app.state.normalized_sync_issues_repo = NormalizedSyncIssueRepository(pool)
     app.state.ficha_repo = FichaRepository(pool)
     app.state.history_repo = CatalogHistoryRepository(pool)
 
