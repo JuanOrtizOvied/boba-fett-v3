@@ -1006,6 +1006,14 @@ async def create_normalized_product(
         raise HTTPException(status_code=409, detail="Ya existe un producto con ese código")
 
 
+@router.post("/normalized-catalog/backfill-slugs")
+async def backfill_normalized_allocation_slugs(
+    repo: NormalizedCatalogRepository = Depends(_normalized_catalog_repo),
+) -> dict:
+    updated = await repo.backfill_allocation_slugs()
+    return {"updated": updated, "total": sum(updated.values())}
+
+
 @router.patch("/normalized-catalog/products/{code}")
 async def update_normalized_product(
     code: str,

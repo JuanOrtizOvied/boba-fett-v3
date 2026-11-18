@@ -369,3 +369,30 @@ def test_admin_view_thread_graph_not_initialized_returns_503(app_client):
     response = client.get("/admin/threads/th_1")
 
     assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Normalized catalog — backfill allocation slugs
+# ---------------------------------------------------------------------------
+
+
+def test_admin_backfills_normalized_allocation_slugs(app_client):
+    app, client = app_client
+    repo = AsyncMock()
+    repo.backfill_allocation_slugs.return_value = {
+        "asset_class": 2,
+        "geographic_focus": 0,
+        "underlying": 1,
+    }
+    app.state.normalized_catalog_repo = repo
+
+    client.cookies.set("sabbi_access", _admin_token())
+
+    resp = client.post("/admin/normalized-catalog/backfill-slugs")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "updated": {"asset_class": 2, "geographic_focus": 0, "underlying": 1},
+        "total": 3,
+    }
+    repo.backfill_allocation_slugs.assert_awaited_once_with()

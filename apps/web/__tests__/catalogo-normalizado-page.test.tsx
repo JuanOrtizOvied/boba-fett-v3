@@ -17,8 +17,9 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/catalogo-normalizado",
 }));
 
+const toastMock = vi.hoisted(() => vi.fn());
 vi.mock("@/components/ui/Toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: toastMock }),
 }));
 
 const LIST_ROW: CatalogProductRow = {
@@ -72,6 +73,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("NormalizedCatalogPage", () => {
   beforeEach(() => {
     vi.mocked(fetchWithAuth).mockReset();
+    toastMock.mockReset();
     vi.mocked(fetchWithAuth).mockImplementation(async (url) => {
       const u = String(url);
       if (u.startsWith("/api/admin/normalized-catalog/products/FND-1")) {
@@ -134,5 +136,84 @@ describe("NormalizedCatalogPage", () => {
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText("Comisión de gestión (TER)"), "0.0384");
     expect(within(dialog).getByText("= 3.84%")).toBeInTheDocument();
+  });
+
+  describe("backfill slugs button", () => {
+    const BACKFILL_URL = "/api/admin/normalized-catalog/backfill-slugs";
+
+    function mockBackfill(body: unknown, status = 200) {
+      const base = vi.mocked(fetchWithAuth).getMockImplementation()!;
+      vi.mocked(fetchWithAuth).mockImplementation(async (url, init) => {
+        if (String(url) === BACKFILL_URL) return jsonResponse(body, status);
+        return base(url, init);
+      });
+    }
+
+    test("POSTs the backfill, toasts the total and refetches the list", async () => {
+      mockBackfill({
+        updated: { asset_class: 2, geographic_focus: 0, underlying: 1 },
+        total: 3,
+      });
+      const user = userEvent.setup();
+      render(<NormalizedCatalogPage />);
+      await screen.findByText("Fondo Uno");
+      const listCalls = () =>
+        vi
+          .mocked(fetchWithAuth)
+          .mock.calls.filter(
+            ([u]) => String(u) === "/api/admin/normalized-catalog/products",
+          ).length;
+      const before = listCalls();
+
+      await user.click(
+        screen.getByRole("button", { name: /Generar slugs faltantes/ }),
+      );
+
+      await waitFor(() => {
+        expect(fetchWithAuth).toHaveBeenCalledWith(
+          BACKFILL_URL,
+          expect.objectContaining({ method: "POST" }),
+        );
+      });
+      await waitFor(() => {
+        expect(toastMock).toHaveBeenCalledWith(
+          expect.stringContaining("Slugs generados: 3"),
+          "success",
+        );
+      });
+      await waitFor(() => expect(listCalls()).toBeGreaterThan(before));
+    });
+
+    test("toasts that nothing was missing when total is 0", async () => {
+      mockBackfill({
+        updated: { asset_class: 0, geographic_focus: 0, underlying: 0 },
+        total: 0,
+      });
+      const user = userEvent.setup();
+      render(<NormalizedCatalogPage />);
+      await screen.findByText("Fondo Uno");
+
+      await user.click(
+        screen.getByRole("button", { name: /Generar slugs faltantes/ }),
+      );
+
+      await waitFor(() => {
+        expect(toastMock).toHaveBeenCalledWith("No faltaban slugs", "success");
+      });
+    });
+
+    test("shows an error toast when the request fails", async () => {
+      mockBackfill({ detail: "boom" }, 500);
+      const user = userEvent.setup();
+      render(<NormalizedCatalogPage />);
+      await screen.findByText("Fondo Uno");
+
+      await user.click(
+        screen.getByRole("button", { name: /Generar slugs faltantes/ }),
+      );
+
+      await waitFor(() => expect(toastMock).toHaveBeenCalled());
+      expect(toastMock.mock.calls[0][0]).toContain("boom");
+    });
   });
 });
