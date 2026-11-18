@@ -291,10 +291,152 @@ describe("ReviewTable re-investigate with web", () => {
     await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
 
     await waitFor(() =>
-      expect(screen.getByTitle("Confianza de Claude: 92%")).toHaveTextContent("92%"),
+      expect(screen.getByTitle("Confianza de Claude (búsqueda web): 92%")).toHaveTextContent("92%"),
     );
-    expect(screen.getByTitle("Confianza de Claude: 70%")).toBeInTheDocument();
-    expect(screen.getByTitle("Confianza de Claude: 88%")).toBeInTheDocument();
+    expect(screen.getByTitle("Confianza de Claude (búsqueda web): 70%")).toBeInTheDocument();
+    expect(screen.getByTitle("Confianza de Claude (búsqueda web): 88%")).toBeInTheDocument();
+  });
+
+  test("'Buscar con Claude' suggests series + administrators with a confidence badge", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Fondo Investigado",
+      manager: "Gestor Investigado",
+      currency: "USD",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+      series_options: [
+        {
+          series: "A",
+          management_fee_ter: 0.0384,
+          flows_min: null,
+          flows_max: null,
+          return_min: null,
+          return_max: null,
+          confidence: 70,
+          field_confidence: { management_fee_ter: 88 },
+          administrators: [
+            {
+              administrator: "Admin Sugerido",
+              field_confidence: { custody_fee: 66 },
+              custody_fee: 0.001,
+              buy_commission: null,
+              sell_commission: null,
+              billing_currency: "",
+              minimum_usd: null,
+              min_commission_usd: null,
+              confidence: 55,
+            },
+          ],
+        },
+      ],
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    // MAPPED_ROW has no catalog series → the web suggestion fills the tables.
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    // The Series table is populated with the suggested series + its TER...
+    await waitFor(() =>
+      expect(screen.getByLabelText("Nombre de la serie 1")).toHaveValue("A"),
+    );
+    expect(screen.getByLabelText("Nombre del administrador 1")).toHaveValue(
+      "Admin Sugerido",
+    );
+    // ...each marked as a Claude suggestion with its confidence.
+    expect(
+      screen.getByTitle("Confianza de Claude (búsqueda web): 70%"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Confianza de Claude (búsqueda web): 55%"),
+    ).toBeInTheDocument();
+    // ...and each filled numeric field carries its OWN confidence.
+    expect(
+      screen.getByTitle("Confianza de Claude (búsqueda web): 88%"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Confianza de Claude (búsqueda web): 66%"),
+    ).toBeInTheDocument();
+  });
+
+  test("'Buscar con Claude' warns the admin when the web found nothing useful", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Bonos BEST",
+      manager: "",
+      currency: "",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "media",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: { name: "web_search" },
+      field_confidence: { name: 95 },
+      web_search_insufficient: true,
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/no se encontró información suficiente/i),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  test("'Buscar con Claude' shows no warning when the web found useful data", async () => {
+    vi.mocked(researchFichaLine).mockResolvedValue({
+      name: "Fondo Investigado",
+      manager: "Gestor Investigado",
+      currency: "USD",
+      asset_class: [],
+      geographic_focus: [],
+      underlying: [],
+      commission: "",
+      administrator: "",
+      liquidity: "",
+      return_rate: "",
+      catalog_product_id: null,
+      sources: [{ url: "https://x.com", title: "X" }],
+      confidence: "baja",
+      catalog_matched: false,
+      primary_source: "web_search",
+      provenance: {},
+      web_search_insufficient: false,
+    } as unknown as FichaEnrichedRow["enriched"] as never);
+
+    const user = userEvent.setup();
+    render(<ReviewTable rows={[MAPPED_ROW]} userId="user-1" onConfirmed={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /buscar con claude/i }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Gestor")).toHaveValue("Gestor Investigado"),
+    );
+    expect(
+      screen.queryByText(/no se encontró información suficiente/i),
+    ).toBeNull();
   });
 
   test("does not show an asset-class % when the class did not map to a ficha key", async () => {
@@ -327,10 +469,10 @@ describe("ReviewTable re-investigate with web", () => {
 
     // The name % still shows...
     await waitFor(() =>
-      expect(screen.getByTitle("Confianza de Claude: 95%")).toBeInTheDocument(),
+      expect(screen.getByTitle("Confianza de Claude (búsqueda web): 95%")).toBeInTheDocument(),
     );
     // ...but the unmapped asset-class % does not.
-    expect(screen.queryByTitle("Confianza de Claude: 37%")).toBeNull();
+    expect(screen.queryByTitle("Confianza de Claude (búsqueda web): 37%")).toBeNull();
   });
 });
 

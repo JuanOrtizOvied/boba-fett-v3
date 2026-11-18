@@ -1,7 +1,7 @@
 """add_normalized_sync_event
 
 Revision ID: c4e8a1b7d205
-Revises: f8a9b0c1d2e3
+Revises: a9c1e3f5b7d2
 Create Date: 2026-11-10 00:00:00.000000
 
 Change history of the normalized catalog sync: one row per create, update,
@@ -17,7 +17,7 @@ EXISTS), because a deployed backend runs `alembic upgrade head`, not
 from alembic import op
 
 revision = "c4e8a1b7d205"
-down_revision = "f8a9b0c1d2e3"
+down_revision = "a9c1e3f5b7d2"
 branch_labels = None
 depends_on = None
 

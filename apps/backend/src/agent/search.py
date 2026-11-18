@@ -16,6 +16,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
+import unicodedata
 
 import asyncpg
 from langchain_anthropic import ChatAnthropic
@@ -124,21 +126,104 @@ evidence you were given. Include a key ONLY for fields you actually filled with 
 non-empty value; omit every field you left empty. Use the field names as keys
 (e.g. {"name": 95, "manager": 70, "asset_class": 60}). Be honest: a value well
 supported by the sources is high (80-100); a plausible-but-weakly-supported value
-is low (30-60)."""
+is low (30-60).
+
+`series` is a list of the product's SHARE CLASSES / series you can identify, each
+with its administrators. For each series provide: `series` (the class label, e.g.
+"A", "I", "Clean"), the fractions `management_fee_ter`, `flows_min`, `flows_max`,
+`return_min`, `return_max` (0.0384 = 3.84%; use null for any you cannot find), and
+`administrators` — a list of {administrator, custody_fee, buy_commission,
+sell_commission, billing_currency, minimum_usd, min_commission_usd} where the
+fee/commission values are fractions and minimums are plain USD amounts (null when
+unknown). Each series and each administrator also has a `confidence` (integer
+0-100) for how sure you are THIS series/administrator exists for this product.
+Only list a series or administrator you actually found evidence for — NEVER invent
+a class label or an administrator name. Additionally, for each series AND each
+administrator include a `field_confidence` object mapping each numeric field name
+you filled (`management_fee_ter`, `flows_min`, `flows_max`, `return_min`,
+`return_max` for a series; `custody_fee`, `buy_commission`, `sell_commission`,
+`minimum_usd` for an administrator) to an integer 0-100 for how sure you are of THAT
+value; omit the key for any value that is null or unknown. Return an empty list if you find none. It
+is fine to return a series with every numeric value null when you only know it
+exists."""
 
 
-def _build_extraction_system_prompt(asset_class_names: str) -> str:
-    return _EXTRACTION_PROMPT_TEMPLATE.replace("__ASSET_CLASSES__", asset_class_names)
+# Ficha-only: asset_class is a CLASSIFICATION, not a fact to find stated in the
+# sources, so the ficha review select is never left blank for a found product.
+# This intentionally overrides the shared prompt's "leave empty if unsure" rule
+# for asset_class ONLY — every other field keeps the no-fabricate rule.
+_ALWAYS_CLASSIFY_ASSET_CLASS = (
+    "ASSET CLASS IS MANDATORY. asset_class is a CLASSIFICATION decision, not a "
+    "fact you must find stated in the sources: every investment product belongs "
+    "to exactly one of the asset classes listed above. ALWAYS return exactly one "
+    "asset_class entry (name = the single best-fitting class from that list, "
+    "percentage = 100). NEVER leave asset_class empty — if you are unsure, choose "
+    "the closest class from the evidence you do have (the product type, its name, "
+    "its underlying holdings, its geographic focus). This overrides the "
+    "empty-list guidance for asset_class ONLY; every other field still follows "
+    "the no-fabricate rule above."
+)
+
+
+def _build_extraction_system_prompt(
+    asset_class_names: str, *, always_classify: bool = False
+) -> str:
+    prompt = _EXTRACTION_PROMPT_TEMPLATE.replace("__ASSET_CLASSES__", asset_class_names)
+    if always_classify:
+        prompt = f"{prompt}\n\n{_ALWAYS_CLASSIFY_ASSET_CLASS}"
+    return prompt
 
 
 _EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(_PORTFOLIO_ASSET_CLASSES)
-# Ficha web research classifies into the ficha select's taxonomy.
-_FICHA_EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(_FICHA_ASSET_CLASSES)
+# Ficha web research classifies into the ficha select's taxonomy and must always
+# assign a class (the admin can still override it in the review card).
+_FICHA_EXTRACTION_SYSTEM_PROMPT = _build_extraction_system_prompt(
+    _FICHA_ASSET_CLASSES, always_classify=True
+)
 
 
 class _ExtractedAllocation(BaseModel):
     name: str = ""
     percentage: float = 0
+
+
+# The small extraction model often reports numbers as unit/symbol-laden strings
+# ("3.84%", "50,000", "N/A"). These schema fields therefore accept `str` too, so a
+# messy value never makes Pydantic reject the WHOLE extraction; the real parsing
+# (clean number or None) happens later in `_suggested_series_options`.
+_LooseNumber = float | int | str | None
+
+
+class _ExtractedSeriesAdmin(BaseModel):
+    """A SUGGESTED series administrator from the web research. Numeric values are
+    fractions (0.001 = 0.1%), left null when not found. `confidence` is the
+    model's 0..100 self-estimate for this administrator suggestion."""
+
+    administrator: str = ""
+    custody_fee: _LooseNumber = None
+    buy_commission: _LooseNumber = None
+    sell_commission: _LooseNumber = None
+    billing_currency: str = ""
+    minimum_usd: _LooseNumber = None
+    min_commission_usd: _LooseNumber = None
+    confidence: _LooseNumber = 0
+    field_confidence: dict[str, int] = Field(default_factory=dict)
+
+
+class _ExtractedSeries(BaseModel):
+    """A SUGGESTED series (share class) from the web research, with its
+    administrators. Numeric values are fractions, left null when not found.
+    `confidence` is the model's 0..100 self-estimate for this series suggestion."""
+
+    series: str = ""
+    management_fee_ter: _LooseNumber = None
+    flows_min: _LooseNumber = None
+    flows_max: _LooseNumber = None
+    return_min: _LooseNumber = None
+    return_max: _LooseNumber = None
+    administrators: list[_ExtractedSeriesAdmin] = Field(default_factory=list)
+    confidence: _LooseNumber = 0
+    field_confidence: dict[str, int] = Field(default_factory=dict)
 
 
 class ExtractedProduct(BaseModel):
@@ -159,6 +244,10 @@ class ExtractedProduct(BaseModel):
     # keyed by field name (e.g. {"name": 92, "manager": 78}). Omit fields left
     # empty. Surfaced only on the web-research path (see `_sanitize_field_confidence`).
     field_confidence: dict[str, int] = Field(default_factory=dict)
+    # SUGGESTED series (share classes) with their administrators, filled only on
+    # the web-research path. Mapped into `SearchResult.series_options` with each
+    # suggestion's confidence (see `_suggested_series_options`).
+    series: list[_ExtractedSeries] = Field(default_factory=list)
 
 
 def _merge_fields(
@@ -373,6 +462,21 @@ def _extract_sources(response: object) -> list[Source]:
     return sources
 
 
+# The grounded web-research instruction. It must ask for the SERIES / share
+# classes and their administrators too, or the extraction never sees them and the
+# ficha's series suggestion stays empty. The model is told to report only what the
+# sources support (the extraction step still enforces the no-fabricate rule).
+_WEB_RESEARCH_PROMPT = (
+    "Research this financial product and summarize its factual attributes from the "
+    "web: manager, currency, asset class, geographic focus, and underlying. ALSO "
+    "look for its series / share classes and, for each one, its administrators and "
+    "fees (management fee / TER, flows min/max, return min/max, custody fee, "
+    "buy/sell commission, minimum investment). Report ONLY what the sources "
+    "actually state — do not guess. Use web search and fetch sources as needed."
+    "\n\nProduct: {query}"
+)
+
+
 async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
     """Research a financial product with Claude's server-side web_search +
     web_fetch tools; return the grounded assistant text and the cited sources.
@@ -386,11 +490,7 @@ async def _research_with_claude_web(query: str) -> tuple[str, list[Source]]:
             temperature=0,
             betas=[_WEB_FETCH_BETA],
         ).bind_tools(_WEB_TOOLS)
-        response = await llm.ainvoke(
-            "Research this financial product and summarize its factual "
-            "attributes (manager, currency, asset class, geographic focus, "
-            f"underlying). Use web search and fetch sources as needed.\n\nProduct: {query}"
-        )
+        response = await llm.ainvoke(_WEB_RESEARCH_PROMPT.format(query=query))
         text, sources = _blocks_to_text(response), _extract_sources(response)
         if not text and not sources:
             logger.warning(
@@ -414,13 +514,20 @@ async def _search_claude_web(query: str) -> tuple[dict[str, str], list[Source]]:
     if not context:
         return {}, sources
     # Classify asset_class into the FICHA taxonomy so the ficha review select
-    # auto-populates (the portfolio taxonomy would not map onto it).
-    fields = await _run_extraction(
-        f"Product to research: {query}\n\nWeb research:\n{context}\n\n"
-        "Extract fields ONLY from the web research above — do not use outside "
-        "knowledge.",
-        system_prompt=_FICHA_EXTRACTION_SYSTEM_PROMPT,
-    )
+    # auto-populates (the portfolio taxonomy would not map onto it). Guard the
+    # structured extraction: a malformed model payload must degrade to
+    # sources-only, never 500 the "Buscar con Claude" endpoint (this honors the
+    # "never raises" contract and logs the traceback for diagnosis).
+    try:
+        fields = await _run_extraction(
+            f"Product to research: {query}\n\nWeb research:\n{context}\n\n"
+            "Extract fields ONLY from the web research above — do not use outside "
+            "knowledge.",
+            system_prompt=_FICHA_EXTRACTION_SYSTEM_PROMPT,
+        )
+    except Exception:
+        logger.exception("Ficha web extraction failed for %r — returning sources only", query)
+        return {}, sources
     return fields, sources
 
 
@@ -499,6 +606,87 @@ def _classify(result: SearchResult) -> None:
     del group_name, leaf
     result.asset_class = [AssetAllocation(name=asset_class_key, percentage=100)]
     result.provenance["asset_class"] = result.primary_source
+
+
+# --- Ficha asset-class taxonomy (reviewTableShared.ts `ASSET_CLASS_LABELS`) ---
+# The ficha review select uses a 7-class taxonomy that SPLITS public markets into
+# fijo/variable, unlike the portfolio `ASSET_CLASSES`. The ficha enrichment keeps
+# asset_class in THIS taxonomy so the select auto-populates; the portfolio
+# `_sanitize_taxonomy`/`_classify` would drop a correct ficha label as "invalid".
+_FICHA_ASSET_CLASS_BY_KEY: dict[str, str] = {
+    "inmobiliario_directo": "Inmobiliario Directo",
+    "mercados_publicos_fijo": "Mercados Publicos - Fijo",
+    "mercados_publicos_variable": "Mercados Publicos - Variable",
+    "mercados_privados": "Mercados Privados",
+    "club_deal": "Club Deal",
+    "commodities_y_criptos": "Commodities y Criptos",
+    "cash_y_otros": "Cash y Otros",
+}
+
+
+def _ficha_asset_class_label(name: str) -> str:
+    """Map a free-form asset-class name to the canonical ficha label, or "" when
+    it does not fit the ficha taxonomy. Mirrors `normalizeAssetClass` in
+    reviewTableShared.ts, plus a few model-wording synonyms, so whatever the
+    extraction returns ("Mercados Publicos - Variable", "Renta Variable",
+    "equity", "mercados_publicos_variable") canonicalizes to the one ficha class
+    the review select maps. The ambiguous portfolio value "mercados_publicos"
+    (no fijo/variable) does not fit and is dropped."""
+    n = unicodedata.normalize("NFD", name.lower())
+    n = "".join(c for c in n if unicodedata.category(c) != "Mn")
+    n = re.sub(r"[–—]", "-", n).strip()
+    # Order matters: the more specific classes win over the generic public-markets
+    # synonyms (e.g. "Private Equity" is mercados_privados, not public variable).
+    if "inmobiliario" in n or "inversiones directa" in n or "real estate directo" in n:
+        key = "inmobiliario_directo"
+    elif "club" in n:
+        key = "club_deal"
+    elif "privado" in n or "private" in n:
+        key = "mercados_privados"
+    elif "commodit" in n or "cripto" in n or "crypto" in n or "bitcoin" in n:
+        key = "commodities_y_criptos"
+    elif "cash" in n or "efectivo" in n or "money market" in n or "deposito" in n:
+        key = "cash_y_otros"
+    elif (
+        ("publico" in n and "fijo" in n)
+        or "renta fija" in n
+        or "fixed income" in n
+        or "bond" in n
+        or "bono" in n
+    ):
+        key = "mercados_publicos_fijo"
+    elif (
+        ("publico" in n and "variable" in n)
+        or "renta variable" in n
+        or "equity" in n
+        or "accion" in n
+        or "stock" in n
+    ):
+        key = "mercados_publicos_variable"
+    else:
+        key = ""
+    return _FICHA_ASSET_CLASS_BY_KEY.get(key, "")
+
+
+def _sanitize_taxonomy_ficha(result: SearchResult) -> None:
+    """Keep `asset_class` in the FICHA taxonomy. Catalog-sourced values are
+    trusted as-is (an admin already reviewed them). Any other allocation name is
+    canonicalized to its ficha label; names that do not fit the ficha taxonomy
+    (e.g. the ambiguous portfolio "mercados_publicos", or "Diversificado") are
+    dropped so the select stays blank rather than showing an unmappable value —
+    and, in the cascade, so a later level can refine it."""
+    if not result.asset_class:
+        return
+    if result.provenance.get("asset_class") == "catalog":
+        return
+    canonical: list[AssetAllocation] = []
+    for a in result.asset_class:
+        label = _ficha_asset_class_label(a.name)
+        if label:
+            canonical.append(AssetAllocation(name=label, percentage=a.percentage))
+    result.asset_class = canonical
+    if not canonical:
+        result.provenance.pop("asset_class", None)
 
 
 async def cascade_search(query: str, pool: asyncpg.Pool) -> SearchResult | None:
@@ -668,14 +856,20 @@ _CONFIDENCE_FIELDS = PRODUCT_FIELD_NAMES + ("asset_class", "geographic_focus", "
 
 def _sanitize_field_confidence(raw: object, result: SearchResult) -> dict[str, int]:
     """Clean the web extraction's self-reported ``field_confidence``: keep only
-    integer scores clamped to 0..100, for fields actually populated on ``result``.
-    Drops unknown keys, empty fields, and non-numeric values — the score is a
-    model self-estimate, so its shape is never trusted blindly."""
+    integer scores clamped to 0..100, for fields actually populated on ``result``
+    AND whose value came from the web (``provenance[field] == "web_search"``).
+    The provenance gate matters in the mixed ficha cascade, where the web may
+    report a score for a field the catalog already owns — that field is catalog-
+    sourced and must never carry a web score. Drops unknown keys, empty fields,
+    non-web-sourced fields, and non-numeric values — the score is a model
+    self-estimate, so its shape is never trusted blindly."""
     if not isinstance(raw, dict):
         return {}
     cleaned: dict[str, int] = {}
     for field in _CONFIDENCE_FIELDS:
         if field not in raw or not getattr(result, field, None):
+            continue
+        if result.provenance.get(field) != "web_search":
             continue
         try:
             score = int(raw[field])
@@ -685,27 +879,194 @@ def _sanitize_field_confidence(raw: object, result: SearchResult) -> dict[str, i
     return cleaned
 
 
-async def research_web_v2(query: str) -> SearchResult:
-    """Force a Claude ``web_search`` + ``web_fetch`` research for one product —
-    the ficha review card's "Volver a investigar" action. Returns a web-grounded
-    ``SearchResult`` (product-level fields filled from the web plus the cited
-    sources), independent of the catalog. Confidence is always web-based ("baja"
-    with data, "sin_datos" without). Never raises; an empty result when
-    ``ANTHROPIC_API_KEY`` is unset or nothing is found."""
+def _clamp_confidence(raw: object) -> int:
+    """Coerce a self-reported confidence into 0..100; non-numeric -> 0."""
+    try:
+        return max(0, min(100, int(float(raw))))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _clamp_field_confidence(raw: object, filled_keys: set[str]) -> dict[str, int]:
+    """Sanitize a model-reported per-field confidence map: keep only keys whose
+    value was actually filled (`filled_keys`) and whose score coerces to an int,
+    clamped to 0..100. Anything malformed -> {}."""
+    if not isinstance(raw, dict):
+        return {}
+    cleaned: dict[str, int] = {}
+    for key, score in raw.items():
+        if key not in filled_keys or isinstance(score, bool):
+            continue
+        try:
+            cleaned[key] = max(0, min(100, int(float(score))))
+        except (TypeError, ValueError):
+            continue
+    return cleaned
+
+
+def _filled_keys(values: dict[str, float | None]) -> set[str]:
+    return {k for k, v in values.items() if v is not None}
+
+
+def _coerce_optional_float(raw: object) -> float | None:
+    """Best-effort parse of a model-reported number into a float. Returns None for
+    blanks, booleans, and unit/symbol-laden strings ('3.84%', '50,000', 'N/A') — we
+    never GUESS a magnitude (stripping '%' off '3.84%' would store 384%), so the
+    admin fills those. A real number or a clean numeric string ('0.0384') passes."""
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return float(raw.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _suggested_series_options(web_data: dict) -> list[CatalogSeriesOption]:
+    """Map the web extraction's `series` suggestions into `CatalogSeriesOption`s,
+    carrying each series/admin `confidence` (which marks it "sugerido por Claude"
+    on the card — catalog series leave `confidence` None). A suggestion with a
+    blank series label is dropped; numeric values pass through as-is (null when
+    the model could not find them). Never raises on a malformed shape."""
+    raw_series = web_data.get("series") or []
+    options: list[CatalogSeriesOption] = []
+    for s in raw_series:
+        if not isinstance(s, dict):
+            continue
+        label = (s.get("series") or "").strip()
+        if not label:
+            continue
+        admins = []
+        for a in s.get("administrators") or []:
+            if not isinstance(a, dict) or not (a.get("administrator") or "").strip():
+                continue
+            a_vals = {
+                "custody_fee": _coerce_optional_float(a.get("custody_fee")),
+                "buy_commission": _coerce_optional_float(a.get("buy_commission")),
+                "sell_commission": _coerce_optional_float(a.get("sell_commission")),
+                "minimum_usd": _coerce_optional_float(a.get("minimum_usd")),
+            }
+            admins.append(
+                CatalogSeriesAdminOption(
+                    administrator=(a.get("administrator") or "").strip(),
+                    billing_currency=a.get("billing_currency") or "",
+                    min_commission_usd=_coerce_optional_float(a.get("min_commission_usd")),
+                    confidence=_clamp_confidence(a.get("confidence")),
+                    field_confidence=_clamp_field_confidence(
+                        a.get("field_confidence"), _filled_keys(a_vals)
+                    ),
+                    **a_vals,
+                )
+            )
+        s_vals = {
+            "management_fee_ter": _coerce_optional_float(s.get("management_fee_ter")),
+            "flows_min": _coerce_optional_float(s.get("flows_min")),
+            "flows_max": _coerce_optional_float(s.get("flows_max")),
+            "return_min": _coerce_optional_float(s.get("return_min")),
+            "return_max": _coerce_optional_float(s.get("return_max")),
+        }
+        options.append(
+            CatalogSeriesOption(
+                series=label,
+                administrators=admins,
+                confidence=_clamp_confidence(s.get("confidence")),
+                field_confidence=_clamp_field_confidence(
+                    s.get("field_confidence"), _filled_keys(s_vals)
+                ),
+                **s_vals,
+            )
+        )
+    return options
+
+
+def _has_useful_web_data(result: SearchResult) -> bool:
+    """True when the web research produced something BEYOND the echoed-back name:
+    any product field, allocation list, or a suggested series. The name alone (the
+    query reflected back) does not count — that is what the retry/notice keys off."""
+    return bool(
+        result.manager
+        or result.currency
+        or result.commission
+        or result.return_rate
+        or result.administrator
+        or result.liquidity
+        or result.asset_class
+        or result.geographic_focus
+        or result.underlying
+        or result.series_options
+    )
+
+
+# Issuer legal forms and emission/series tails that add noise to a product name —
+# stripped for the reformulated retry so the web search can match the core product
+# (e.g. "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión" ->
+# "BBVA Bonos BEST"). Best-effort only: the retry is used solely if it does better.
+_REFORMULATE_NOISE = re.compile(
+    r"sociedad\s+titulizadora"
+    r"|sociedad\s+administradora(\s+de\s+fondos?)?"
+    r"|administradora\s+general\s+de\s+fondos"
+    r"|fondo\s+de\s+inversi[oó]n"
+    r"|fondo\s+mutuo"
+    r"|\bs\.a\.(a\.|c\.)?"  # S.A., S.A.A., S.A.C. (with dots)
+    r"|(\S+\s+){0,2}emisi[oó]n",  # "... (Vigésimo Tercera) Emisión"
+    re.IGNORECASE,
+)
+
+
+def _reformulate_query(query: str) -> str | None:
+    """Produce a cleaner alternative name for a second web search, or None when
+    there is nothing worth stripping (so no pointless duplicate search runs)."""
+    cleaned = _REFORMULATE_NOISE.sub(" ", query)
+    cleaned = re.sub(r"[–—-]+", " ", cleaned)  # drop joining dashes
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.–—-")
+    if not cleaned or cleaned.casefold() == query.strip().casefold():
+        return None
+    return cleaned
+
+
+async def _research_web_once(query: str) -> SearchResult:
+    """One web-research pass: a web-grounded ``SearchResult`` (product fields +
+    suggested series + cited sources), independent of the catalog. Never raises."""
     result = SearchResult()
     web_data, web_sources = await _search_claude_web(query)
     if web_data:
         _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
+        # Suggested series/administrators (with per-suggestion confidence) — the
+        # catalog has none here, so the web suggestion owns `series_options`.
+        result.series_options = _suggested_series_options(web_data)
     if web_sources:
         result.sources = web_sources
 
-    _sanitize_taxonomy(result)
-    _classify(result)
+    # Ficha taxonomy: keep the model's ficha class (the portfolio sanitize/classify
+    # would drop a correct ficha label like "Mercados Publicos - Variable").
+    _sanitize_taxonomy_ficha(result)
     result.confidence, result.catalog_matched = _classify_match(
         0.0, _has_any_data(result), web_verified=bool(web_sources)
     )
     # Per-field self-reported confidence, kept only for fields the web step filled.
     result.field_confidence = _sanitize_field_confidence(web_data.get("field_confidence"), result)
+    return result
+
+
+async def research_web_v2(query: str) -> SearchResult:
+    """Force a Claude ``web_search`` + ``web_fetch`` research for one product —
+    the ficha review card's "Volver a investigar" action. Returns a web-grounded
+    ``SearchResult`` independent of the catalog. When the first pass finds only the
+    name (or nothing), it retries ONCE with a reformulated (de-noised) name and
+    keeps whichever pass found useful data; if neither did, the result is flagged
+    ``web_search_insufficient`` so the UI can warn the admin. Never raises."""
+    query = query.strip()
+    result = await _research_web_once(query)
+    if not _has_useful_web_data(result):
+        alt = _reformulate_query(query)
+        if alt:
+            retry = await _research_web_once(alt)
+            if _has_useful_web_data(retry):
+                result = retry
+    result.web_search_insufficient = not _has_useful_web_data(result)
     return result
 
 
@@ -720,17 +1081,28 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         if claude_data:
             _merge_fields(result, claude_data, "claude_knowledge", fields=PRODUCT_FIELD_NAMES)
 
+    # Drop an ambiguous/non-ficha asset_class from L1/L2 (e.g. the portfolio
+    # "mercados_publicos") BEFORE the L3 gate, so the product counts as
+    # incomplete and the web step can refine the class into the ficha taxonomy
+    # instead of being skipped. Catalog-sourced classes are kept untouched.
+    _sanitize_taxonomy_ficha(result)
+
     web_verified = False
+    web_field_confidence: object = None
+    web_suggested_series: list[CatalogSeriesOption] = []
     if not _is_product_complete(result) or _is_low_confidence_catalog(result):
         web_data, web_sources = await _search_claude_web(query)
         if web_data:
             _merge_fields(result, web_data, "web_search", fields=PRODUCT_FIELD_NAMES)
+            web_field_confidence = web_data.get("field_confidence")
+            web_suggested_series = _suggested_series_options(web_data)
         if web_sources:
             result.sources = web_sources
             web_verified = True
 
-    _sanitize_taxonomy(result)
-    _classify(result)
+    # Final pass in the ficha taxonomy (keeps the web-refined ficha class; the
+    # portfolio sanitize/classify would drop it).
+    _sanitize_taxonomy_ficha(result)
 
     has_data = _has_any_data(result)
     if not has_data:
@@ -740,4 +1112,13 @@ async def cascade_search_v2(query: str, pool: asyncpg.Pool) -> SearchResult | No
         result.similarity, has_data, web_verified=web_verified
     )
     _strip_unconfident_catalog_match(result)
+    # The catalog is authoritative for series: fill from the web suggestion ONLY
+    # when no catalog series remain (unmatched product, or a fuzzy hit whose
+    # identity was just stripped). A confident catalog match keeps its own series.
+    if not result.series_options and web_suggested_series:
+        result.series_options = web_suggested_series
+    # Per-field self-reported confidence, kept only for the fields the web step
+    # actually filled (provenance == "web_search"); catalog/claude fields never
+    # carry a web score. Computed last so it reflects the final field set.
+    result.field_confidence = _sanitize_field_confidence(web_field_confidence, result)
     return result

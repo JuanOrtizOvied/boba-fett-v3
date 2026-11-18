@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+
 import asyncpg
 import pytest
 
@@ -166,3 +168,25 @@ async def test_search_for_enrichment_empty_query_returns_none(test_pool):
 async def test_next_product_code_increments_max(test_pool):
     await _product(test_pool, "BD-09999", "Some Fund")
     assert await NormalizedCatalogRepository(test_pool).next_product_code() == "BD-10000"
+
+
+async def test_backfill_allocation_slugs_fills_missing_and_is_idempotent(test_pool):
+    await _product(test_pool)
+    await test_pool.execute(
+        "UPDATE catalog_product SET "
+        "asset_class = '[{\"name\":\"Renta Fija\",\"percentage\":100}]'::jsonb "
+        "WHERE code = 'BD-00001'"
+    )
+    repo = NormalizedCatalogRepository(test_pool)
+
+    counts = await repo.backfill_allocation_slugs()
+
+    assert counts["asset_class"] == 1
+    stored = await test_pool.fetchval(
+        "SELECT asset_class FROM catalog_product WHERE code = 'BD-00001'"
+    )
+    items = json.loads(stored) if isinstance(stored, str) else stored
+    assert items[0]["slugs"] == ["renta-fija"]
+
+    again = await repo.backfill_allocation_slugs()
+    assert again["asset_class"] == 0

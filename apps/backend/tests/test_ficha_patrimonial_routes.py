@@ -639,6 +639,156 @@ def test_research_endpoint_requires_admin(app_client):
 
 
 # ---------------------------------------------------------------------------
+# POST /admin/product-lookup — single-name catalog->web cascade lookup
+# ---------------------------------------------------------------------------
+
+
+def test_product_lookup_returns_cascade_result(app_client, monkeypatch):
+    app, client = _admin_client(app_client)
+    pool_seen = {}
+
+    async def fake_cascade(query, pool):
+        pool_seen["query"] = query
+        pool_seen["pool"] = pool
+        return SearchResult(name="Latam Credit Fund", manager="Acme", primary_source="catalog")
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+
+    response = client.post("/admin/product-lookup", json={"name": "  Latam Credit  "})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Latam Credit Fund"
+    assert body["manager"] == "Acme"
+    assert body["primary_source"] == "catalog"
+    # Name is trimmed and the product repo pool is passed through.
+    assert pool_seen["query"] == "Latam Credit"
+    assert pool_seen["pool"] is app.state.repo.pool
+
+
+def test_product_lookup_returns_null_when_nothing_found(app_client, monkeypatch):
+    _app, client = _admin_client(app_client)
+
+    async def fake_cascade(query, pool):
+        return None
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+
+    response = client.post("/admin/product-lookup", json={"name": "unknown product"})
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_product_lookup_blank_name_short_circuits(app_client, monkeypatch):
+    _app, client = _admin_client(app_client)
+    called = {"n": 0}
+
+    async def fake_cascade(query, pool):
+        called["n"] += 1
+        return SearchResult(name="x")
+
+    monkeypatch.setattr(admin_routes, "cascade_search_v2", fake_cascade)
+
+    response = client.post("/admin/product-lookup", json={"name": "   "})
+
+    assert response.status_code == 200
+    assert response.json() is None
+    assert called["n"] == 0  # no cascade / DB / LLM call for a blank name
+
+
+def test_product_lookup_requires_admin(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.post("/admin/product-lookup", json={"name": "x"})
+
+    assert response.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/product-lookup/save — curate/create the looked-up product in the
+# normalized catalog (no client/holding — same catalog write the ficha uses)
+# ---------------------------------------------------------------------------
+
+
+def test_product_lookup_save_curates_existing_product(app_client, monkeypatch):
+    app, client = _admin_client(app_client)
+    seen = {}
+
+    async def fake_curation(catalog_repo, history_repo, code, update, series, admins, changed_by):
+        seen["code"] = code
+        seen["update_name"] = update.name
+        seen["series"] = series
+        seen["admins"] = admins
+        return {"name": {"old": "A", "new": "B"}}
+
+    monkeypatch.setattr(admin_routes, "apply_catalog_curation", fake_curation)
+
+    body = {
+        "name": "Latam Credit Fund",
+        "catalog_product_code": "BD-00155",
+        "catalog_update": {"name": "B"},
+        "series": [{"series": "A", "management_fee_ter": 0.0384}],
+        "admins": [{"series": "A", "administrator": "Sabbi AGF", "custody_fee": 0.001}],
+    }
+    response = client.post("/admin/product-lookup/save", json=body)
+
+    assert response.status_code == 201
+    assert response.json()["catalog_product_code"] == "BD-00155"
+    assert response.json()["catalog_changes"]["name"]["new"] == "B"
+    assert seen["code"] == "BD-00155"
+    assert seen["update_name"] == "B"
+    assert len(seen["series"]) == 1 and len(seen["admins"]) == 1
+    # Pure catalog write — never touches a portfolio holding.
+    app.state.repo.create.assert_not_awaited()
+
+
+def test_product_lookup_save_creates_new_product(app_client, monkeypatch):
+    from types import SimpleNamespace
+
+    app, client = _admin_client(app_client)
+    seen = {}
+
+    async def fake_create(
+        catalog_repo, history_repo, fields, series, admins, name_fallback, changed_by
+    ):
+        seen["name_fallback"] = name_fallback
+        seen["fields_name"] = fields.name
+        return SimpleNamespace(id=9, code="BD-00099")
+
+    monkeypatch.setattr(admin_routes, "create_catalog_product_from_ficha", fake_create)
+
+    body = {
+        "name": "Latam Credit Fund",
+        "catalog_product_code": "",
+        "catalog_update": {},
+        "series": [],
+        "admins": [],
+    }
+    response = client.post("/admin/product-lookup/save", json=body)
+
+    assert response.status_code == 201
+    assert response.json()["catalog_product_code"] == "BD-00099"
+    assert response.json()["catalog_changes"] == {"created": "BD-00099"}
+    # Falls back to the looked-up name when catalog_update has no name.
+    assert seen["name_fallback"] == "Latam Credit Fund"
+    app.state.repo.create.assert_not_awaited()
+
+
+def test_product_lookup_save_requires_admin(app_client):
+    _app, client = app_client
+    client.cookies.set("sabbi_access", _user_token())
+
+    response = client.post(
+        "/admin/product-lookup/save",
+        json={"name": "x", "catalog_product_code": "", "catalog_update": {}},
+    )
+
+    assert response.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
 # GET /admin/ficha-patrimonial/catalog-product/{code}
 # ---------------------------------------------------------------------------
 

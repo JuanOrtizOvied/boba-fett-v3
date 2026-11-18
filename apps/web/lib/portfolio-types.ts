@@ -15,6 +15,8 @@ export type AssetClass =
 export interface AssetAllocation {
   name: string;
   percentage: number;
+  /** Server-computed kebab-case slugs derived from `name` (catalog allocations only). */
+  slugs?: string[];
 }
 
 export interface Product {
@@ -106,6 +108,12 @@ export interface CatalogSeriesAdminOption {
   billing_currency: string;
   minimum_usd: number | null;
   min_commission_usd: number | null;
+  /** Self-reported confidence (0..100) when this administrator was SUGGESTED by
+   * the web research. null/absent for catalog/manual admins. */
+  confidence?: number | null;
+  /** Per-field confidence (0..100) keyed by backend field name (custody_fee…);
+   * only for values the web research filled. */
+  field_confidence?: Record<string, number> | null;
 }
 
 /**
@@ -120,6 +128,13 @@ export interface CatalogSeriesOption {
   return_min: number | null;
   return_max: number | null;
   administrators: CatalogSeriesAdminOption[];
+  /** Self-reported confidence (0..100) when this series was SUGGESTED by the web
+   * research ("Buscar con Claude"). null/absent for catalog series — the UI reads
+   * a number as "sugerido por Claude". */
+  confidence?: number | null;
+  /** Per-field confidence (0..100) keyed by backend field name
+   * (management_fee_ter…); only for values the web research filled. */
+  field_confidence?: Record<string, number> | null;
 }
 
 /** Mirrors `db.catalog_curation.SeriesUpdateInput` — an edited series (fractions). */
@@ -216,6 +231,9 @@ export interface SearchResult {
    * Only present on web-research results; the web_search tool gives no numeric
    * score, so this is the extraction model's self-estimate. */
   field_confidence?: Record<string, number>;
+  /** True when "Buscar con Claude" (incl. one reformulated retry) found no useful
+   * product/series data — only the name, or nothing. The card warns the admin. */
+  web_search_insufficient?: boolean;
   primary_source: FieldSource;
   provenance: ProvenanceMap;
 }

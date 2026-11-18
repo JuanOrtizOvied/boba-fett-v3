@@ -229,11 +229,16 @@ async def test_v2_returns_none_when_no_data(monkeypatch):
     async def nothing(query):
         return {}
 
+    # The ficha cascade's L3 is Claude web (not Tavily); with no web data the
+    # whole cascade finds nothing and returns None.
+    async def no_web(query):
+        return {}, []
+
     monkeypatch.setattr(
         search_mod.NormalizedCatalogRepository, "search_for_enrichment", no_match
     )
     monkeypatch.setattr(search_mod, "_extract_from_claude", nothing)
-    monkeypatch.setattr(search_mod, "_search_tavily", nothing)
+    monkeypatch.setattr(search_mod, "_search_claude_web", no_web)
 
     result = await search_mod.cascade_search_v2("nothing at all", object())
     assert result is None
@@ -315,6 +320,9 @@ def _complete_result(similarity: float):
         underlying=[AssetAllocation(name="Acciones", percentage=100)],
         catalog_product_code="BD-00001",
         similarity=similarity,
+        # A real catalog match: its asset_class is catalog-sourced, so the ficha
+        # taxonomy pass trusts it as-is (does not drop/re-derive it).
+        provenance={"asset_class": "catalog"},
     )
 
 
@@ -467,7 +475,7 @@ async def test_research_web_v2_surfaces_self_reported_field_confidence(monkeypat
             {
                 "name": "Researched Fund",
                 "manager": "Web Manager",
-                "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
+                "asset_class": [{"name": "Mercados Publicos - Variable", "percentage": 100}],
                 "field_confidence": {
                     "name": 92,
                     "manager": 150,  # out of range -> clamped to 100
@@ -495,6 +503,524 @@ async def test_research_web_v2_field_confidence_empty_without_scores(monkeypatch
     result = await search_mod.research_web_v2("x")
 
     assert result.field_confidence == {}
+
+
+async def test_research_web_v2_suggests_series_with_administrators(monkeypatch):
+    """The web research suggests series (with their administrators and numeric
+    commercial values) into `series_options`, each carrying a self-reported
+    confidence that marks it as a web suggestion (catalog series carry none)."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": 0.0384,
+                        "flows_min": None,
+                        "flows_max": None,
+                        "return_min": 0.05,
+                        "return_max": 0.08,
+                        "confidence": 70,
+                        "administrators": [
+                            {
+                                "administrator": "Admin Co",
+                                "custody_fee": 0.001,
+                                "buy_commission": None,
+                                "sell_commission": None,
+                                "billing_currency": "USD",
+                                "minimum_usd": 50000,
+                                "min_commission_usd": None,
+                                "confidence": 60,
+                            }
+                        ],
+                    }
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert [s.series for s in result.series_options] == ["A"]
+    series = result.series_options[0]
+    assert series.management_fee_ter == pytest.approx(0.0384)
+    assert series.return_min == pytest.approx(0.05)
+    assert series.return_max == pytest.approx(0.08)
+    # Confidence present -> marked as a web suggestion.
+    assert series.confidence == 70
+    assert [a.administrator for a in series.administrators] == ["Admin Co"]
+    admin = series.administrators[0]
+    assert admin.custody_fee == pytest.approx(0.001)
+    assert admin.minimum_usd == pytest.approx(50000)
+    assert admin.billing_currency == "USD"
+    assert admin.confidence == 60
+
+
+async def test_research_web_v2_no_series_when_web_returns_none(monkeypatch):
+    async def fake_web(query):
+        return {"name": "Researched Fund"}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert result.series_options == []
+
+
+async def test_research_web_v2_series_confidence_clamped_and_defaulted(monkeypatch):
+    """Series/admin confidence is clamped to 0..100; a series the model returns
+    without a confidence still becomes a suggestion (confidence defaults to 0,
+    i.e. 'present but unsure'), never None (None is reserved for catalog)."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "B",
+                        "confidence": 150,  # out of range -> clamped to 100
+                        "administrators": [{"administrator": "A1"}],  # no confidence
+                    }
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    series = result.series_options[0]
+    assert series.confidence == 100
+    assert series.administrators[0].confidence == 0
+
+
+def test_extracted_product_tolerates_unparseable_series_numbers():
+    """A small model often returns fees as unit-laden strings ('3.84%'). The
+    extraction schema must NOT reject the whole payload over them — the series
+    label survives and the bad numeric is dropped, not fatal."""
+    ep = search_mod.ExtractedProduct(
+        name="Some Fund",
+        series=[
+            {
+                "series": "A",
+                "management_fee_ter": "3.84%",
+                "return_min": "5%",
+                "confidence": "high",  # non-numeric confidence must not blow up
+                "administrators": [{"administrator": "Admin Co", "custody_fee": "0.1%"}],
+            }
+        ],
+    )
+    assert ep.series[0].series == "A"
+
+
+def test_suggested_series_options_coerces_bad_numbers_to_null():
+    """`_suggested_series_options` never raises on unit/symbol-laden numbers: a
+    value that is not a clean number becomes None (admin fills it); the series
+    label and administrators are preserved."""
+    opts = search_mod._suggested_series_options(
+        {
+            "series": [
+                {
+                    "series": "A",
+                    "management_fee_ter": "3.84%",
+                    "return_min": "5%",
+                    "minimum_usd": "50,000",
+                    "confidence": 70,
+                    "administrators": [
+                        {"administrator": "Admin Co", "custody_fee": "0.1%", "confidence": 60}
+                    ],
+                }
+            ]
+        }
+    )
+    assert [s.series for s in opts] == ["A"]
+    assert opts[0].management_fee_ter is None
+    assert opts[0].return_min is None
+    assert opts[0].confidence == 70
+    assert [a.administrator for a in opts[0].administrators] == ["Admin Co"]
+    assert opts[0].administrators[0].custody_fee is None
+    assert opts[0].administrators[0].confidence == 60
+
+
+def test_suggested_series_options_keeps_clean_numbers():
+    opts = search_mod._suggested_series_options(
+        {"series": [{"series": "A", "management_fee_ter": "0.0384", "confidence": 70}]}
+    )
+    assert opts[0].management_fee_ter == pytest.approx(0.0384)
+
+
+async def test_research_web_v2_survives_messy_series_numbers(monkeypatch):
+    """The research endpoint must not 500 when the model reports series numbers
+    as unit-laden strings — it degrades them to null and still returns."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": "3.84%",
+                        "confidence": 65,
+                        "administrators": [{"administrator": "Admin Co", "custody_fee": "0.1%"}],
+                    }
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    assert [s.series for s in result.series_options] == ["A"]
+    assert result.series_options[0].management_fee_ter is None
+
+
+async def test_search_claude_web_degrades_when_extraction_raises(monkeypatch):
+    """`_search_claude_web` honors its 'never raises' contract: if the structured
+    extraction blows up, it returns ({}, sources) (sources-only) instead of
+    propagating a 500."""
+    from db.models import Source
+
+    async def fake_research(query):
+        return "some web context", [Source(url="https://x.com", title="X")]
+
+    async def boom(human_content, *, system_prompt=None):
+        raise ValueError("structured output blew up")
+
+    monkeypatch.setattr(search_mod, "_research_with_claude_web", fake_research)
+    monkeypatch.setattr(search_mod, "_run_extraction", boom)
+
+    fields, sources = await search_mod._search_claude_web("x")
+
+    assert fields == {}
+    assert [s.url for s in sources] == ["https://x.com"]
+
+
+def _incomplete_catalog_result():
+    """A catalog hit missing `manager` (a gap L3 web can fill), with provenance
+    recorded for the fields the catalog DID fill. Similarity 0.5 keeps the catalog
+    identity (>0.4) while still triggering the web step (<0.55)."""
+    from db.models import SearchResult
+
+    return SearchResult(
+        name="Fondo X",
+        currency="USD",
+        asset_class=[AssetAllocation(name="mercados_publicos", percentage=100)],
+        geographic_focus=[AssetAllocation(name="Perú", percentage=100)],
+        underlying=[AssetAllocation(name="Acciones", percentage=100)],
+        catalog_product_code="BD-00001",
+        similarity=0.5,
+        primary_source="catalog",
+        provenance={
+            "name": "catalog",
+            "currency": "catalog",
+            "asset_class": "catalog",
+            "geographic_focus": "catalog",
+            "underlying": "catalog",
+        },
+    )
+
+
+async def test_v2_populates_field_confidence_for_web_filled_gap(monkeypatch):
+    """When L3 web fills a gap the catalog left empty, its self-reported per-field
+    confidence is surfaced on the result for that field (so the card can show a %
+    on the web-sourced field)."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {"manager": "Web Manager", "field_confidence": {"manager": 77}},
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert result.manager == "Web Manager"
+    assert result.provenance["manager"] == "web_search"
+    assert result.field_confidence == {"manager": 77}
+
+
+async def test_v2_field_confidence_excludes_catalog_sourced_fields(monkeypatch):
+    """A web score reported for a field the CATALOG already owns must be dropped:
+    the per-field % only marks fields whose value actually came from the web, and
+    the catalog value is never overwritten."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {
+                "manager": "Web Manager",
+                "name": "Should Not Overwrite",
+                "field_confidence": {"manager": 80, "name": 95},
+            },
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert result.name == "Fondo X"
+    assert result.provenance["name"] == "catalog"
+    assert result.field_confidence == {"manager": 80}
+
+
+async def test_v2_field_confidence_empty_when_web_fills_nothing(monkeypatch):
+    """A weak catalog match whose web step returns only sources (no field data)
+    leaves field_confidence empty — nothing on the card came from the web."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return {}, [Source(url="https://x.com", title="X")]
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert result.field_confidence == {}
+
+
+async def test_v2_web_suggests_series_when_catalog_has_none(monkeypatch):
+    """Parse-time cascade: when the catalog match carries no series, the L3 web
+    step suggests series (with administrators + confidence) into series_options."""
+    from db.models import Source
+
+    async def catalog(query, pool):
+        return _incomplete_catalog_result()  # has no series_options
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {
+                "manager": "Web Manager",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": 0.02,
+                        "confidence": 65,
+                        "administrators": [
+                            {"administrator": "Admin Co", "confidence": 50}
+                        ],
+                    }
+                ],
+            },
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    assert [s.series for s in result.series_options] == ["A"]
+    assert result.series_options[0].confidence == 65
+    assert result.series_options[0].management_fee_ter == pytest.approx(0.02)
+    assert [a.administrator for a in result.series_options[0].administrators] == ["Admin Co"]
+    assert result.series_options[0].administrators[0].confidence == 50
+
+
+async def test_v2_web_series_never_overwrites_catalog_series(monkeypatch):
+    """The catalog is authoritative: when the matched product already carries its
+    own series, the web suggestion is ignored (catalog series kept, no confidence)."""
+    from db.models import CatalogSeriesAdminOption, CatalogSeriesOption, Source
+
+    def catalog_with_series():
+        r = _incomplete_catalog_result()
+        r.series_options = [
+            CatalogSeriesOption(
+                series="Cat-A",
+                management_fee_ter=0.01,
+                administrators=[CatalogSeriesAdminOption(administrator="Cat Admin")],
+            )
+        ]
+        return r
+
+    async def catalog(query, pool):
+        return catalog_with_series()
+
+    async def no_claude(query):
+        return {}
+
+    async def claude_web(query):
+        return (
+            {"series": [{"series": "Web-X", "confidence": 90, "administrators": []}]},
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_catalog_v2", catalog)
+    monkeypatch.setattr(search_mod, "_extract_from_claude", no_claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", claude_web)
+
+    result = await search_mod.cascade_search_v2("fondo x", object())
+
+    assert result is not None
+    # Catalog series kept; the web suggestion did NOT overwrite them.
+    assert [s.series for s in result.series_options] == ["Cat-A"]
+    # Catalog series carry no confidence (None) — not a web suggestion.
+    assert result.series_options[0].confidence is None
+
+
+def test_has_useful_web_data_requires_more_than_a_name():
+    """Only the echoed-back name (or nothing) is NOT useful data — the retry/notice
+    logic keys off real product/series fields, not the name."""
+    from db.models import AssetAllocation, SearchResult
+
+    assert search_mod._has_useful_web_data(SearchResult(name="Some Fund")) is False
+    assert search_mod._has_useful_web_data(SearchResult()) is False
+    assert search_mod._has_useful_web_data(SearchResult(name="X", manager="Mgr")) is True
+    assert (
+        search_mod._has_useful_web_data(
+            SearchResult(asset_class=[AssetAllocation(name="x", percentage=100)])
+        )
+        is True
+    )
+
+
+def test_reformulate_query_strips_issuer_and_emission():
+    alt = search_mod._reformulate_query(
+        "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión"
+    )
+    assert alt is not None
+    low = alt.lower()
+    assert "bbva" in low and "best" in low
+    assert "titulizadora" not in low
+    assert "emisión" not in low and "emision" not in low
+
+
+def test_reformulate_query_returns_none_when_nothing_to_strip():
+    assert search_mod._reformulate_query("iShares Core MSCI World") is None
+
+
+async def test_research_web_v2_retries_with_reformulated_name_and_uses_it(monkeypatch):
+    """A first search that yields only the name triggers ONE retry with the
+    reformulated name; when the retry finds useful data it is used, and the result
+    is not flagged insufficient."""
+    from db.models import Source
+
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        if "Titulizadora" in query:  # the original, noisy name -> thin
+            return {"name": "Bonos BEST"}, [Source(url="https://a.com", title="A")]
+        return (  # the reformulated name -> useful
+            {"name": "Bonos BEST", "manager": "BBVA Asset Mgmt"},
+            [Source(url="https://b.com", title="B")],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2(
+        "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión"
+    )
+
+    assert len(calls) == 2  # retried once
+    assert result.manager == "BBVA Asset Mgmt"
+    assert result.web_search_insufficient is False
+
+
+async def test_research_web_v2_flags_insufficient_when_retry_also_empty(monkeypatch):
+    """When neither the first search nor the reformulated retry find useful data,
+    the result is flagged so the UI can warn the admin (the name/source are kept)."""
+    from db.models import Source
+
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        return {"name": "Bonos BEST"}, [Source(url="https://a.com", title="A")]
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2(
+        "BBVA Sociedad Titulizadora – Bonos BEST Vigésimo Tercera Emisión"
+    )
+
+    assert len(calls) == 2  # tried the reformulated name too
+    assert result.web_search_insufficient is True
+    assert result.name == "Bonos BEST"
+    assert len(result.sources) == 1
+
+
+async def test_research_web_v2_no_retry_when_first_is_useful(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        return {"name": "Fund", "manager": "Mgr"}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("BBVA Sociedad Titulizadora Bonos Emisión")
+
+    assert len(calls) == 1  # no retry needed
+    assert result.web_search_insufficient is False
+
+
+async def test_research_web_v2_no_retry_when_name_not_reformulable(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_web(query):
+        calls.append(query)
+        return {"name": "iShares Core MSCI World"}, []
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("iShares Core MSCI World")
+
+    assert len(calls) == 1  # nothing to reformulate -> no second search
+    assert result.web_search_insufficient is True
+
+
+def test_web_research_prompt_asks_for_series_and_administrators():
+    """The web-RESEARCH step (which gathers the grounded text) must ask Claude to
+    look for the product's series/share classes and their administrators — else the
+    extraction never sees them and `series_options` stays empty even when the data
+    is on the web."""
+    prompt = search_mod._WEB_RESEARCH_PROMPT.lower()
+    assert "series" in prompt
+    assert "administrator" in prompt
 
 
 def test_ficha_extraction_prompt_uses_the_ficha_asset_class_taxonomy():
@@ -599,3 +1125,164 @@ async def test_v1_cascade_still_fills_commercial_fields(monkeypatch):
     assert result.administrator == "Chat Admin"
     assert result.liquidity == "Monthly"
     assert result.return_rate == "7%"
+
+
+# ---------------------------------------------------------------------------
+# Ficha asset-class taxonomy (feature: ficha-asset-class-classified)
+# The ficha enrichment must classify asset_class into the FICHA 7-class taxonomy
+# (reviewTableShared.ts) and keep it — the portfolio sanitize used to DROP a
+# correct ficha label ("Mercados Publicos - Variable"), leaving the select blank.
+# ---------------------------------------------------------------------------
+
+
+async def test_ficha_asset_class_label_maps_labels_and_synonyms():
+    f = search_mod._ficha_asset_class_label
+    # The 7 canonical ficha labels map to themselves.
+    assert f("Inmobiliario Directo") == "Inmobiliario Directo"
+    assert f("Mercados Publicos - Fijo") == "Mercados Publicos - Fijo"
+    assert f("Mercados Publicos - Variable") == "Mercados Publicos - Variable"
+    assert f("Mercados Privados") == "Mercados Privados"
+    assert f("Club Deal") == "Club Deal"
+    assert f("Commodities y Criptos") == "Commodities y Criptos"
+    assert f("Cash y Otros") == "Cash y Otros"
+    # Common synonyms the extraction model may return.
+    assert f("Renta Variable") == "Mercados Publicos - Variable"
+    assert f("equity") == "Mercados Publicos - Variable"
+    assert f("Renta Fija") == "Mercados Publicos - Fijo"
+    assert f("Private Equity") == "Mercados Privados"  # private wins over "equity"
+    assert f("Bitcoin / crypto") == "Commodities y Criptos"
+    # The ambiguous portfolio value and junk do not fit the ficha taxonomy.
+    assert f("mercados_publicos") == ""
+    assert f("Diversificado") == ""
+
+
+async def test_ficha_extraction_prompt_mandates_asset_class():
+    """The ficha extraction prompt must force a classification (never empty),
+    while the portfolio/chat prompt keeps the conservative empty-if-unsure rule."""
+    marker = "ALWAYS return exactly one asset_class"
+    assert marker in search_mod._FICHA_EXTRACTION_SYSTEM_PROMPT
+    assert marker not in search_mod._EXTRACTION_SYSTEM_PROMPT
+
+
+async def test_research_web_v2_keeps_ficha_asset_class(monkeypatch):
+    async def fake_web(query):
+        return (
+            {
+                "name": "VVO",
+                "asset_class": [{"name": "Mercados Publicos - Variable", "percentage": 100}],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+    result = await search_mod.research_web_v2("vvo")
+    assert [a.name for a in result.asset_class] == ["Mercados Publicos - Variable"]
+
+
+async def test_research_web_v2_canonicalizes_asset_class_synonym(monkeypatch):
+    async def fake_web(query):
+        return (
+            {"name": "X", "asset_class": [{"name": "Renta Variable", "percentage": 100}]},
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+    result = await search_mod.research_web_v2("x")
+    assert [a.name for a in result.asset_class] == ["Mercados Publicos - Variable"]
+
+
+async def test_cascade_search_v2_refines_ambiguous_class_with_web(monkeypatch):
+    """When L2 (Claude knowledge) returns the ambiguous portfolio class
+    'mercados_publicos', it is dropped so L3 web research can refine it into the
+    exact ficha class — the field never ends empty for a found product."""
+    from db.models import Source
+
+    async def no_catalog(self, query):
+        return None
+
+    async def claude(query):
+        return {
+            "name": "VVO",
+            "currency": "USD",
+            "manager": "Vanguard",
+            "asset_class": [{"name": "mercados_publicos", "percentage": 100}],
+            "geographic_focus": [{"name": "Global", "percentage": 100}],
+            "underlying": [{"name": "Equities", "percentage": 100}],
+        }
+
+    async def web(query):
+        return (
+            {"asset_class": [{"name": "Mercados Publicos - Variable", "percentage": 100}]},
+            [Source(url="https://x.com", title="X")],
+        )
+
+    monkeypatch.setattr(
+        search_mod.NormalizedCatalogRepository, "search_for_enrichment", no_catalog
+    )
+    monkeypatch.setattr(search_mod, "_extract_from_claude", claude)
+    monkeypatch.setattr(search_mod, "_search_claude_web", web)
+
+    result = await search_mod.cascade_search_v2("vvo", object())
+    assert result is not None
+    assert [a.name for a in result.asset_class] == ["Mercados Publicos - Variable"]
+
+
+async def test_research_web_v2_series_and_admin_field_confidence(monkeypatch):
+    """Each series/admin FIELD carries its own confidence; keys for null/absent
+    values are dropped, scores are clamped, junk is ignored."""
+
+    async def fake_web(query):
+        return (
+            {
+                "name": "Researched Fund",
+                "series": [
+                    {
+                        "series": "A",
+                        "management_fee_ter": 0.0384,
+                        "flows_min": None,
+                        "return_min": 0.05,
+                        "confidence": 70,
+                        "field_confidence": {
+                            "management_fee_ter": 85,
+                            "flows_min": 90,  # value is null -> dropped
+                            "return_min": 150,  # clamped
+                            "return_max": 40,  # value absent -> dropped
+                            "bogus": 10,  # unknown key -> dropped
+                        },
+                        "administrators": [
+                            {
+                                "administrator": "Admin Co",
+                                "custody_fee": 0.001,
+                                "buy_commission": None,
+                                "minimum_usd": 50000,
+                                "confidence": 60,
+                                "field_confidence": {
+                                    "custody_fee": 75,
+                                    "buy_commission": 80,  # null -> dropped
+                                    "minimum_usd": "55",
+                                },
+                            }
+                        ],
+                    },
+                    {
+                        "series": "B",
+                        "management_fee_ter": 0.01,
+                        "field_confidence": "garbage",
+                        "administrators": [],
+                    },
+                ],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(search_mod, "_search_claude_web", fake_web)
+
+    result = await search_mod.research_web_v2("x")
+
+    series = result.series_options[0]
+    assert series.field_confidence == {"management_fee_ter": 85, "return_min": 100}
+    assert series.administrators[0].field_confidence == {
+        "custody_fee": 75,
+        "minimum_usd": 55,
+    }
+    assert result.series_options[1].field_confidence == {}
