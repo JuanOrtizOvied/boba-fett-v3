@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import {
   actionLabel,
+  authorLabel,
   cascadeLabel,
   fieldLabel,
   formatChangeValue,
@@ -121,6 +122,32 @@ function ChangeLines({ event }: { event: SyncEvent }) {
   );
 }
 
+/** Who saved the workbook. A name is a violet tag after a gray "por"; "Desconocido" is
+ * an amber tag like the observations, because it may mean someone edited without
+ * a corporate account. Nothing when there is no data. */
+function Author({ changedBy }: { changedBy: string | null | undefined }) {
+  const author = authorLabel(changedBy);
+  if (!author) return null;
+  if (author.kind === "unknown") {
+    return (
+      <span
+        title="No se pudo determinar quién guardó el archivo"
+        className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap text-amber-800 uppercase"
+      >
+        {author.text}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-sabbi-neutral-500">
+      por{" "}
+      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-violet-800">
+        {author.text}
+      </span>
+    </span>
+  );
+}
+
 function EventItem({
   event,
   cascade,
@@ -152,6 +179,7 @@ function EventItem({
         <span className="text-[11px] text-sabbi-neutral-400">
           {triggerLabel(event.trigger)}
         </span>
+        <Author changedBy={event.changed_by} />
       </div>
       <ChangeLines event={event} />
       {cascade.length > 0 && (

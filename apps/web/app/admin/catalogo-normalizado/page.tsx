@@ -34,7 +34,7 @@ import {
   type ObservationScope,
 } from "@/lib/normalizedCatalogObservations";
 import {
-  changeCountLabel,
+  productDayLabel,
   formatDay,
   parseDaySummary,
   type DayProduct,
@@ -356,7 +356,8 @@ function NormalizedCatalogContent() {
               {visibleProducts.map((p) => {
                 const active = p.code === selectedCode;
                 const observationCount = observations.get(p.code)?.length ?? 0;
-                const changeCount = changesByCode.get(p.code)?.events ?? 0;
+                const dayProduct = changesByCode.get(p.code);
+                const changeLabel = dayProduct ? productDayLabel(dayProduct) : "";
                 return (
                   <li key={p.code}>
                     <button
@@ -374,9 +375,9 @@ function NormalizedCatalogContent() {
                             {observationCountLabel(observationCount)}
                           </span>
                         )}
-                        {changeCount > 0 && (
+                        {changeLabel && (
                           <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap text-sky-800 uppercase">
-                            {changeCountLabel(changeCount)}
+                            {changeLabel}
                           </span>
                         )}
                       </span>
