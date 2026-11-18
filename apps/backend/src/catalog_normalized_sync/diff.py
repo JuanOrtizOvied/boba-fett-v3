@@ -37,7 +37,7 @@ from catalog_normalized_sync.config import (
 from catalog_normalized_sync.parser import ParsedRow, ParsedWorkbook
 from db.catalog_normalized import NormalizedSnapshot
 
-MAX_DELETE_RATIO = 0.25
+MAX_DELETE_RATIO = 0.35
 
 
 @dataclass(frozen=True)

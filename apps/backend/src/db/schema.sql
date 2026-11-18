@@ -777,3 +777,31 @@ CREATE TABLE IF NOT EXISTS normalized_sync_state (
     last_processed_hash VARCHAR(64),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Change history of the normalized catalog sync: one row per create, update,
+-- delete or restore that a sync run applied (migrations/versions/
+-- c4e8a1b7d205_add_normalized_sync_event.py). Append only and independent of the
+-- catalog tables (no FK), so it survives any delete. `trigger` says what started
+-- the run; 'web' is reserved for a future write path. Separate from
+-- catalog_product_history, which belongs to the ficha curation.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS normalized_sync_event (
+    id BIGSERIAL PRIMARY KEY,
+    run_id UUID NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    trigger TEXT NOT NULL
+        CHECK (trigger IN ('webhook', 'scheduler', 'lifecycle', 'manual', 'web')),
+    action TEXT NOT NULL
+        CHECK (action IN ('create', 'update', 'delete', 'restore')),
+    level TEXT NOT NULL CHECK (level IN ('product', 'series', 'admin')),
+    product_code TEXT NOT NULL,
+    series TEXT,
+    administrator TEXT,
+    changes JSONB NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS normalized_sync_event_product_idx
+    ON normalized_sync_event (product_code, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS normalized_sync_event_occurred_idx
+    ON normalized_sync_event (occurred_at);

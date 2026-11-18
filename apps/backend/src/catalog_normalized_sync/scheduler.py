@@ -94,7 +94,11 @@ async def run_maintenance_cycle(
             sync_failed = False
             try:
                 sync_report = await run_sync_from_sharepoint(
-                    pool, settings=settings, normalized=normalized, client=graph
+                    pool,
+                    settings=settings,
+                    normalized=normalized,
+                    client=graph,
+                    trigger="scheduler",
                 )
                 logger.info(
                     "Safety sync %s", "skipped (unchanged)" if sync_report.skipped else "applied"

@@ -88,7 +88,7 @@ async def _run(args: argparse.Namespace) -> None:
     pool = await get_pool()
     try:
         if args.apply:
-            report = await run_sync_from_bytes(pool, data, force=True)
+            report = await run_sync_from_bytes(pool, data, force=True, trigger="manual")
             parsed, changeset = report.parsed, report.changeset
         else:
             parsed, changeset = await preview(pool, data)

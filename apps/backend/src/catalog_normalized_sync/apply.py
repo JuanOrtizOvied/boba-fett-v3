@@ -12,6 +12,7 @@ the workbook; only values are passed as query parameters.
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 
 import asyncpg
@@ -23,6 +24,7 @@ from catalog_normalized_sync.config import (
     SHEETS,
 )
 from catalog_normalized_sync.diff import ChangeSet
+from catalog_normalized_sync.history import events_from_changeset, store_events
 
 _TABLES = {
     LEVEL_PRODUCT: "catalog_product",
@@ -75,8 +77,18 @@ def _flag_statement(level: str, key: tuple[str, ...], *, deleted: bool) -> tuple
     return f"UPDATE {_TABLES[level]} SET {flag} WHERE {where}", list(key)
 
 
-async def apply_changeset(pool: asyncpg.Pool, changeset: ChangeSet) -> None:
-    """Write `changeset` in a single transaction."""
+async def apply_changeset(
+    pool: asyncpg.Pool,
+    changeset: ChangeSet,
+    *,
+    run_id: uuid.UUID | None = None,
+    trigger: str = "manual",
+) -> None:
+    """Write `changeset` in a single transaction, and with it one history event per
+    change (`catalog_normalized_sync.history`), so either everything lands or
+    nothing does. `trigger` says what started the run; `run_id` groups its events
+    and is generated when not given."""
+    run_id = run_id or uuid.uuid4()
     async with pool.acquire() as conn, conn.transaction():
         for restore in changeset.restores:
             sql, args = _flag_statement(restore.level, restore.key, deleted=False)
@@ -94,3 +106,4 @@ async def apply_changeset(pool: asyncpg.Pool, changeset: ChangeSet) -> None:
         for delete in changeset.deletes:
             sql, args = _flag_statement(delete.level, delete.key, deleted=True)
             await conn.execute(f"{sql} AND NOT is_deleted", *args)
+        await store_events(conn, events_from_changeset(changeset), run_id=run_id, trigger=trigger)
