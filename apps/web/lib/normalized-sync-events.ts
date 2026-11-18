@@ -1,0 +1,427 @@
+import {
+  formatFraction,
+  formatUsd,
+} from "@/components/admin/catalog-normalized/shared";
+import { seriesName } from "@/lib/normalizedCatalogObservations";
+
+/**
+ * Change history of the normalized catalog sync, as the backend serves it
+ * (`GET /api/admin/normalized-catalog/products/{code}/changes` and
+ * `.../changes/summary`). These helpers type it, check its shape and word it
+ * in Spanish. Everything here is read only.
+ */
+
+export const LIMA_TIME_ZONE = "America/Lima";
+
+export type SyncAction = "create" | "update" | "delete" | "restore";
+export type SyncLevel = "product" | "series" | "admin";
+
+const ACTIONS: readonly SyncAction[] = ["create", "update", "delete", "restore"];
+
+export interface SyncFieldChange {
+  field: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface SyncEvent {
+  id: number;
+  run_id: string;
+  occurred_at: string;
+  trigger: string;
+  action: SyncAction;
+  level: SyncLevel;
+  product_code: string;
+  series: string | null;
+  administrator: string | null;
+  changes: SyncFieldChange[];
+  /** Who saved the workbook the run read, as stored: an email, the marker
+   * `UNKNOWN_AUTHOR`, or null when there is no data (events from before the
+   * author was recorded, runs from a local file). Absent in old responses. */
+  changed_by?: string | null;
+}
+
+/** A page of a product's events, newest first, and how many it has in all. */
+export interface ProductHistoryPage {
+  total: number;
+  events: SyncEvent[];
+}
+
+/** What a product did on a day, counted once: `deleted` when it is soft-deleted
+ * now, `new` when it was created that day, `restored` when the sync reactivated
+ * it, `modified` otherwise (a changed value, or a series or administrator that
+ * was added, changed or removed). */
+export type ProductStatus = "new" | "modified" | "deleted" | "restored";
+
+const STATUSES: readonly ProductStatus[] = ["new", "modified", "deleted", "restored"];
+
+/** Number of PRODUCTS per status, each product once. */
+export type DayTotals = Record<ProductStatus, number>;
+
+/** What happened to one product on one day. `events` and the per-action counts
+ * are events of every level (product, series, administrator). */
+export interface DayProduct {
+  product_code: string;
+  name: string;
+  deleted: boolean;
+  status: ProductStatus;
+  events: number;
+  create: number;
+  update: number;
+  delete: number;
+  restore: number;
+}
+
+export interface DaySummary {
+  /** The Lima day it covers, `YYYY-MM-DD`. */
+  date: string;
+  totals: DayTotals;
+  products: DayProduct[];
+}
+
+// -- Shape checks -------------------------------------------------------------
+// The page must keep working when the backend answers something unexpected, so
+// the responses are checked instead of trusted.
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isEvent(value: unknown): value is SyncEvent {
+  return (
+    isRecord(value) &&
+    typeof value.id === "number" &&
+    typeof value.run_id === "string" &&
+    typeof value.occurred_at === "string" &&
+    typeof value.trigger === "string" &&
+    typeof value.product_code === "string" &&
+    ACTIONS.includes(value.action as SyncAction) &&
+    (value.level === "product" ||
+      value.level === "series" ||
+      value.level === "admin") &&
+    Array.isArray(value.changes) &&
+    (value.changed_by === undefined ||
+      value.changed_by === null ||
+      typeof value.changed_by === "string")
+  );
+}
+
+export function parseProductHistory(data: unknown): ProductHistoryPage | null {
+  if (!isRecord(data) || typeof data.total !== "number") return null;
+  if (!Array.isArray(data.events) || !data.events.every(isEvent)) return null;
+  return { total: data.total, events: data.events };
+}
+
+function isDayProduct(value: unknown): value is DayProduct {
+  return (
+    isRecord(value) &&
+    typeof value.product_code === "string" &&
+    typeof value.name === "string" &&
+    typeof value.deleted === "boolean" &&
+    STATUSES.includes(value.status as ProductStatus) &&
+    typeof value.events === "number" &&
+    ACTIONS.every((a) => typeof value[a] === "number")
+  );
+}
+
+export function parseDaySummary(data: unknown): DaySummary | null {
+  if (!isRecord(data) || typeof data.date !== "string") return null;
+  const totals = data.totals;
+  if (!isRecord(totals) || !STATUSES.every((s) => typeof totals[s] === "number")) {
+    return null;
+  }
+  if (!Array.isArray(data.products) || !data.products.every(isDayProduct)) {
+    return null;
+  }
+  return {
+    date: data.date,
+    totals: totals as DayTotals,
+    products: data.products,
+  };
+}
+
+// -- Wording ------------------------------------------------------------------
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** "1 cambio" / "3 cambios": the badge of a product and its line in the panel. */
+export function changeCountLabel(count: number): string {
+  return plural(count, "cambio", "cambios");
+}
+
+const STATUS_WORDS: Record<ProductStatus, { one: string; many: string }> = {
+  new: { one: "nuevo", many: "nuevos" },
+  modified: { one: "modificado", many: "modificados" },
+  deleted: { one: "eliminado", many: "eliminados" },
+  restored: { one: "reactivado", many: "reactivados" },
+};
+
+/** Header of the daily panel. It counts PRODUCTS, each once, and names the noun
+ * only in the first part: `18 productos nuevos · 20 modificados · 1 eliminado`.
+ * Statuses with no products are left out. */
+export function totalsLabel(totals: DayTotals): string {
+  const parts = STATUSES.filter((s) => totals[s] > 0).map((s, index) => {
+    const count = totals[s];
+    const word = count === 1 ? STATUS_WORDS[s].one : STATUS_WORDS[s].many;
+    return index === 0
+      ? `${count} ${count === 1 ? "producto" : "productos"} ${word}`
+      : `${count} ${word}`;
+  });
+  return parts.length > 0 ? parts.join(" · ") : "sin cambios";
+}
+
+/** How many products the day touched. */
+export function totalProducts(totals: DayTotals): number {
+  return STATUSES.reduce((sum, status) => sum + totals[status], 0);
+}
+
+/** What the line or badge of a product says about its day: "Nuevo" for a product
+ * created that day, "Reactivado" for one the sync brought back, the number of
+ * events for one that already existed ("3 cambios"), and nothing for a deleted
+ * one (it carries its own "eliminado" tag). */
+export function productDayLabel(product: DayProduct): string {
+  switch (product.status) {
+    case "new":
+      return "Nuevo";
+    case "restored":
+      return "Reactivado";
+    case "deleted":
+      return "";
+    case "modified":
+      return changeCountLabel(product.events);
+  }
+}
+
+/** What the backend stores in `changed_by` when it could not tell who saved the
+ * workbook. An email always has an `@`, so it is never mistaken for this. */
+export const UNKNOWN_AUTHOR = "unknown";
+
+/** How the author of an event is written on the screen. */
+export type AuthorLabel =
+  | { kind: "name"; text: string }
+  | { kind: "unknown"; text: string };
+
+/** The author of an event, or null when there is nothing to show.
+ * - an email: only the part before the `@` (`user@empresa.com` -> `user`), never
+ *   the domain;
+ * - the marker `unknown`: "Desconocido", flagged, because someone may have saved
+ *   the workbook without a corporate account;
+ * - null, empty or absent: nothing (old events and local runs are not flagged);
+ * - a value that has no name before the `@`: also "Desconocido". */
+export function authorLabel(
+  changedBy: string | null | undefined,
+): AuthorLabel | null {
+  const value = changedBy?.trim();
+  if (!value) return null;
+  const unknown: AuthorLabel = { kind: "unknown", text: "Desconocido" };
+  if (value === UNKNOWN_AUTHOR) return unknown;
+  const at = value.indexOf("@");
+  if (at === 0) return unknown;
+  return { kind: "name", text: at > 0 ? value.slice(0, at) : value };
+}
+
+/** What the line says about the event. A restore is the sync reactivating a row
+ * the workbook still has; it is not presented as something a person did. */
+export function actionLabel(action: SyncAction): string {
+  switch (action) {
+    case "create":
+      return "Nuevo";
+    case "update":
+      return "Cambio";
+    case "delete":
+      return "Eliminado";
+    case "restore":
+      return "Reactivado por el sync";
+  }
+}
+
+/** Which part of the product an event refers to. */
+export function levelLabel(
+  event: Pick<SyncEvent, "level" | "series" | "administrator">,
+): string {
+  if (event.level === "product") return "Producto";
+  const series = `serie ${seriesName(event.series ?? "")}`;
+  if (event.level === "series") return `Serie ${seriesName(event.series ?? "")}`;
+  return `Administrador ${event.administrator ?? ""} (${series})`;
+}
+
+/** What started the run, in plain words. Shown discreetly. */
+export function triggerLabel(trigger: string): string {
+  switch (trigger) {
+    case "webhook":
+      return "aviso de SharePoint";
+    case "scheduler":
+      return "revisión programada";
+    case "lifecycle":
+      return "recuperación de avisos";
+    case "manual":
+      return "ejecución manual";
+    case "web":
+      return "desde la web";
+    default:
+      return trigger;
+  }
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  name: "Nombre",
+  ticker_isin: "Ticker / ISIN",
+  manager: "Gestor",
+  asset_class: "Clase de activo",
+  geographic_focus: "Foco geográfico",
+  underlying: "Subyacente",
+  currency: "Moneda",
+  investment_horizon: "Horizonte de inversión",
+  management_fee_ter: "Comisión de gestión (TER)",
+  flows_min: "Flujos mínimo",
+  flows_max: "Flujos máximo",
+  return_min: "Rentabilidad mínima",
+  return_max: "Rentabilidad máxima",
+  custody_fee: "Comisión de custodia",
+  buy_commission: "Comisión de compra",
+  sell_commission: "Comisión de venta",
+  billing_currency: "Moneda de facturación",
+  minimum_usd: "Mínimo (USD)",
+  min_commission_usd: "Comisión mínima (USD)",
+};
+
+export function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? field;
+}
+
+const FRACTION_FIELDS = new Set([
+  "management_fee_ter",
+  "flows_min",
+  "flows_max",
+  "return_min",
+  "return_max",
+  "custody_fee",
+  "buy_commission",
+  "sell_commission",
+]);
+const USD_FIELDS = new Set(["minimum_usd", "min_commission_usd"]);
+
+function isAllocation(value: unknown): value is { name: string; percentage: number } {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.percentage === "number"
+  );
+}
+
+/** A stored value as the screen writes it: percentages for the fee fields, USD
+ * for the minimums, `Name 60%` lists for allocations, "—" for nothing. */
+export function formatChangeValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (Array.isArray(value)) {
+    return value.length === 0
+      ? "—"
+      : value
+          .map((item) =>
+            isAllocation(item) ? `${item.name} ${item.percentage}%` : String(item),
+          )
+          .join(", ");
+  }
+  if (typeof value === "number") {
+    if (FRACTION_FIELDS.has(field)) return formatFraction(value);
+    if (USD_FIELDS.has(field)) return formatUsd(value);
+  }
+  return String(value);
+}
+
+// -- Lima time ----------------------------------------------------------------
+
+const limaParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: LIMA_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function limaFields(iso: string): Record<string, string> | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const fields: Record<string, string> = {};
+  for (const part of limaParts.formatToParts(date)) fields[part.type] = part.value;
+  return fields;
+}
+
+/** The Lima calendar day of an instant, `YYYY-MM-DD`. */
+export function limaDay(iso: string): string {
+  const f = limaFields(iso);
+  return f ? `${f.year}-${f.month}-${f.day}` : "";
+}
+
+/** `10/11/2026 14:30`, in Lima time whatever the browser's own zone is. */
+export function formatLimaDateTime(iso: string): string {
+  const f = limaFields(iso);
+  return f ? `${f.day}/${f.month}/${f.year} ${f.hour}:${f.minute}` : iso;
+}
+
+/** `2026-11-10` as `10/11/2026`. */
+export function formatDay(day: string): string {
+  const [year, month, date] = day.split("-");
+  return year && month && date ? `${date}/${month}/${year}` : day;
+}
+
+// -- Cascades -----------------------------------------------------------------
+
+export interface HistoryRow {
+  event: SyncEvent;
+  /** The series and administrator deletes the same run made along with a
+   * product delete. Empty for every other event. */
+  children: SyncEvent[];
+}
+
+/** Collapses the deletes a product delete took along under that delete. Works
+ * over everything loaded so far: a child whose product delete is on a page not
+ * loaded yet stays on its own until it arrives. */
+export function groupCascades(events: readonly SyncEvent[]): HistoryRow[] {
+  const parentKey = (e: SyncEvent) => `${e.run_id}|${e.product_code}`;
+  const parents = new Set(
+    events
+      .filter((e) => e.action === "delete" && e.level === "product")
+      .map(parentKey),
+  );
+  const childrenOf = new Map<string, SyncEvent[]>();
+  const rows: HistoryRow[] = [];
+  for (const event of events) {
+    const isChild =
+      event.action === "delete" &&
+      event.level !== "product" &&
+      parents.has(parentKey(event));
+    if (isChild) {
+      const key = parentKey(event);
+      childrenOf.set(key, [...(childrenOf.get(key) ?? []), event]);
+    }
+  }
+  for (const event of events) {
+    const isChild =
+      event.action === "delete" &&
+      event.level !== "product" &&
+      parents.has(parentKey(event));
+    if (isChild) continue;
+    const isParent = event.action === "delete" && event.level === "product";
+    rows.push({
+      event,
+      children: isParent ? (childrenOf.get(parentKey(event)) ?? []) : [],
+    });
+  }
+  return rows;
+}
+
+/** "2 series y 3 administradores" for the collapsed children of a delete. */
+export function cascadeLabel(children: readonly SyncEvent[]): string {
+  const series = children.filter((c) => c.level === "series").length;
+  const admins = children.filter((c) => c.level === "admin").length;
+  const parts = [
+    series > 0 && plural(series, "serie", "series"),
+    admins > 0 && plural(admins, "administrador", "administradores"),
+  ].filter(Boolean);
+  return parts.join(" y ");
+}

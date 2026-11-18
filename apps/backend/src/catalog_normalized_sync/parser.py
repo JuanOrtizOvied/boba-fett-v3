@@ -30,8 +30,51 @@ class MissingColumnError(ValueError):
     """A required column is not in the header row of its sheet."""
 
 
+KIND_NON_NUMERIC = "non_numeric"
+KIND_BLANK_REQUIRED = "blank_required"
+KIND_DUPLICATE_KEY = "duplicate_key"
+
+# How much of the offending cell is kept in a report.
+_SHOWN_VALUE_LIMIT = 80
+
+
+@dataclass(frozen=True)
+class CellProblem:
+    """One bad cell of a skipped row: what is wrong (`kind`), where (`column` is the
+    header of the sheet and `field` the DB field, both empty for a repeated key) and
+    the text found there, cut to a short length."""
+
+    kind: str
+    column: str
+    field: str
+    value: str = ""
+
+    @property
+    def message(self) -> str:
+        """The reason as text, as the report has always worded it."""
+        if self.kind == KIND_NON_NUMERIC:
+            return f"non-numeric value in {self.column!r}"
+        if self.kind == KIND_BLANK_REQUIRED:
+            return f"blank {self.column!r}"
+        return "duplicate key"
+
+
+def _shown(raw: object) -> str:
+    """The cell as short text for a report."""
+    return str(raw).strip()[:_SHOWN_VALUE_LIMIT] if raw is not None else ""
+
+
 class _InvalidRowError(ValueError):
-    """The row is skipped; the message is the reason shown in the report."""
+    """The row is skipped. `problems` lists every bad cell of it; the message is the
+    text of the first one, which is the reason shown in the report."""
+
+    def __init__(self, problems: tuple[CellProblem, ...]) -> None:
+        self.problems = problems
+        super().__init__(problems[0].message)
+
+
+class _NonNumericError(ValueError):
+    """A number column holds text that is not a number."""
 
 
 @dataclass(frozen=True)
@@ -50,12 +93,15 @@ class ParsedRow:
 class SkippedRow:
     """`key` is the row's business key when it could be read. The diff counts
     such a row as still in the workbook, so a row that only has a bad value
-    never gets its database row soft-deleted."""
+    never gets its database row soft-deleted. `reason` is the text of the first
+    problem; `problems` lists every bad cell of the row, so whoever fixes the
+    workbook is told all of them at once."""
 
     sheet: str
     row_number: int
     reason: str
     key: tuple[str, ...] | None = None
+    problems: tuple[CellProblem, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -98,7 +144,7 @@ def _convert(column: Column, raw: object) -> Any:
         try:
             return _number(raw)
         except ValueError:
-            raise _InvalidRowError(f"non-numeric value in {column.headers[0]!r}") from None
+            raise _NonNumericError from None
     if column.type == "allocations":
         return _allocations(raw, fallback_100=column.fallback_100)
     return _text(raw)
@@ -132,16 +178,27 @@ def _row_is_blank(row: tuple) -> bool:
 
 
 def _row_values(row: tuple, spec: SheetSpec, index: dict[str, int]) -> dict[str, Any]:
+    """The typed values of a row. Every column is checked, not only until the first
+    failure: if any cell is bad the row is rejected with ALL its problems."""
     values: dict[str, Any] = {}
+    problems: list[CellProblem] = []
     for column in spec.columns:
         position = index.get(column.field)
         if position is None:
             continue
         raw = row[position] if position < len(row) else None
-        value = _convert(column, raw)
+        header = column.headers[0]
+        try:
+            value = _convert(column, raw)
+        except _NonNumericError:
+            problems.append(CellProblem(KIND_NON_NUMERIC, header, column.field, _shown(raw)))
+            continue
         if column.required and not column.allow_blank and not value:
-            raise _InvalidRowError(f"blank {column.headers[0]!r}")
+            problems.append(CellProblem(KIND_BLANK_REQUIRED, header, column.field))
+            continue
         values[column.field] = value
+    if problems:
+        raise _InvalidRowError(tuple(problems))
     return values
 
 
@@ -182,12 +239,17 @@ def _parse_sheet(workbook: Any, spec: SheetSpec) -> tuple[list[ParsedRow], list[
             values = _row_values(row, spec, index)
         except _InvalidRowError as exc:
             skipped.append(
-                SkippedRow(spec.sheet_name, row_number, str(exc), _raw_key(row, spec, index))
+                SkippedRow(
+                    spec.sheet_name, row_number, str(exc), _raw_key(row, spec, index), exc.problems
+                )
             )
             continue
         key = tuple(values[field] for field in spec.key_fields)
         if key in seen:
-            skipped.append(SkippedRow(spec.sheet_name, row_number, "duplicate key", key))
+            duplicate = CellProblem(KIND_DUPLICATE_KEY, "", "", _shown("|".join(key)))
+            skipped.append(
+                SkippedRow(spec.sheet_name, row_number, duplicate.message, key, (duplicate,))
+            )
             continue
         seen.add(key)
         parsed.append(ParsedRow(row_number, key, values))

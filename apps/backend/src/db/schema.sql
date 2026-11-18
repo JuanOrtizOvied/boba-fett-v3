@@ -830,3 +830,74 @@ CREATE TABLE IF NOT EXISTS normalized_sync_state (
     last_processed_hash VARCHAR(64),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Change history of the normalized catalog sync: one row per create, update,
+-- delete or restore that a sync run applied (migrations/versions/
+-- c4e8a1b7d205_add_normalized_sync_event.py). Append only and independent of the
+-- catalog tables (no FK), so it survives any delete. `trigger` says what started
+-- the run; 'web' is reserved for a future write path. Separate from
+-- catalog_product_history, which belongs to the ficha curation.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS normalized_sync_event (
+    id BIGSERIAL PRIMARY KEY,
+    run_id UUID NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    trigger TEXT NOT NULL
+        CHECK (trigger IN ('webhook', 'scheduler', 'lifecycle', 'manual', 'web')),
+    action TEXT NOT NULL
+        CHECK (action IN ('create', 'update', 'delete', 'restore')),
+    level TEXT NOT NULL CHECK (level IN ('product', 'series', 'admin')),
+    product_code TEXT NOT NULL,
+    series TEXT,
+    administrator TEXT,
+    changes JSONB NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS normalized_sync_event_product_idx
+    ON normalized_sync_event (product_code, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS normalized_sync_event_occurred_idx
+    ON normalized_sync_event (occurred_at);
+
+-- Who saved the workbook that the run read (migrations/versions/
+-- a7d3b9e2c481_add_changed_by_to_normalized_sync_event.py): the corporate email in
+-- lower case, the marker 'unknown' when the author of a SharePoint run could not
+-- be determined, or NULL when there is no data (rows from before this column and
+-- runs started from a local file). A separate statement so databases that already
+-- have the table get the column too.
+ALTER TABLE normalized_sync_event ADD COLUMN IF NOT EXISTS changed_by TEXT;
+
+-- ---------------------------------------------------------------------------
+-- Rows of the workbook that the normalized catalog sync could not apply
+-- (migrations/versions/d2f6a8c1b937_add_normalized_sync_issue.py): a skipped row (a
+-- number column with text, a blank required cell, a repeated key) or a row whose
+-- product or series parent was not found. One issue per row, kept until the
+-- workbook is fixed, so it is a condition that lasts and not an event of one run.
+-- `problems` lists the row's bad cells as of the last run; the issue is resolved
+-- (not deleted) when a run no longer finds the row among the unread ones.
+-- `first_seen_by` and `resolved_by` hold who saved the workbook at those moments.
+-- No FK, so it survives any delete.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS normalized_sync_issue (
+    id BIGSERIAL PRIMARY KEY,
+    sheet TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('product', 'series', 'admin')),
+    row_key TEXT NOT NULL,
+    product_code TEXT,
+    series TEXT,
+    administrator TEXT,
+    row_number INTEGER NOT NULL,
+    problems JSONB NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ,
+    first_seen_by TEXT,
+    resolved_by TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS normalized_sync_issue_open_idx
+    ON normalized_sync_issue (sheet, row_key) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS normalized_sync_issue_seen_idx
+    ON normalized_sync_issue (first_seen_at);
+CREATE INDEX IF NOT EXISTS normalized_sync_issue_resolved_idx
+    ON normalized_sync_issue (resolved_at);

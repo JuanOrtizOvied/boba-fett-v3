@@ -98,12 +98,13 @@ async def _sync_in_background(repo: CatalogRepository) -> None:
             )
 
 
-async def _normalized_sync_in_background(repo: CatalogRepository) -> None:
+async def _normalized_sync_in_background(repo: CatalogRepository, trigger: str = "webhook") -> None:
     """Same as `_sync_in_background`, for the normalized catalog. Graph
     notifies per drive, so one notification starts both syncs and each one
-    decides by its own flag and its own hash whether there is work."""
+    decides by its own flag and its own hash whether there is work. `trigger`
+    is stored with the history of what the run applies."""
     try:
-        report = await run_normalized_sync(repo.pool)
+        report = await run_normalized_sync(repo.pool, trigger=trigger)
     except NormalizedSyncDisabledError:
         logger.info("Normalized catalog sync notification ignored: sync is disabled")
     except Exception as exc:  # a background task must never raise
@@ -164,7 +165,7 @@ async def _handle_lifecycle_event(repo: CatalogRepository, item: dict[str, Any])
         elif event == "missed":
             # Notifications were lost: catch up from the workbook itself.
             await _sync_in_background(repo)
-            await _normalized_sync_in_background(repo)
+            await _normalized_sync_in_background(repo, trigger="lifecycle")
         else:
             logger.info("Lifecycle event ignored: %s", event)
     except Exception as exc:  # a background task must never raise

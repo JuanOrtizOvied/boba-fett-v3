@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import datetime
 from urllib.parse import quote
 
 import asyncpg
@@ -76,6 +77,8 @@ from db.models import (
     ProductCreate,
     SearchResult,
 )
+from db.normalized_sync_events import DaySummary, NormalizedSyncEventRepository, ProductHistory
+from db.normalized_sync_issues import IssueDayReport, IssueRow, NormalizedSyncIssueRepository
 from db.repository import ProductRepository
 from db.versioning import VersioningRepository
 
@@ -100,6 +103,14 @@ def _catalog_repo(request: Request) -> CatalogRepository:
 
 def _normalized_catalog_repo(request: Request) -> NormalizedCatalogRepository:
     return request.app.state.normalized_catalog_repo
+
+
+def _sync_events_repo(request: Request) -> NormalizedSyncEventRepository:
+    return request.app.state.normalized_sync_events_repo
+
+
+def _sync_issues_repo(request: Request) -> NormalizedSyncIssueRepository:
+    return request.app.state.normalized_sync_issues_repo
 
 
 def _ficha_repo(request: Request) -> FichaRepository:
@@ -983,6 +994,50 @@ async def list_normalized_observations(
     """Products with something missing or outside the official lists. The ones
     that are complete are left out."""
     return catalog_observations(await repo.list_with_children())
+
+
+@router.get("/normalized-catalog/changes/summary")
+async def normalized_changes_summary(
+    date: datetime.date | None = None,
+    repo: NormalizedSyncEventRepository = Depends(_sync_events_repo),
+) -> DaySummary:
+    """What the sync changed on one day (00:00 to 24:00, Lima time): one entry per
+    product with its status, and the number of products per status (new, modified,
+    deleted, restored). Today when `date` is left out."""
+    return await repo.day_summary(date)
+
+
+@router.get("/normalized-catalog/sync-issues")
+async def list_normalized_sync_issues(
+    repo: NormalizedSyncIssueRepository = Depends(_sync_issues_repo),
+) -> list[IssueRow]:
+    """The rows of the workbook that the sync could not apply and that are still
+    unread, the most recent first. Each one lists its bad cells and who saved the
+    workbook when it was first seen."""
+    return await repo.list_open()
+
+
+@router.get("/normalized-catalog/sync-issues/day")
+async def normalized_sync_issues_day(
+    date: datetime.date | None = None,
+    repo: NormalizedSyncIssueRepository = Depends(_sync_issues_repo),
+) -> IssueDayReport:
+    """The unread rows on one day (00:00 to 24:00, Lima time): the ones that opened,
+    the ones that were resolved, and the ones still open when the day ended. Today
+    when `date` is left out."""
+    return await repo.day_report(date)
+
+
+@router.get("/normalized-catalog/products/{code}/changes")
+async def list_normalized_product_changes(
+    code: str,
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    repo: NormalizedSyncEventRepository = Depends(_sync_events_repo),
+) -> ProductHistory:
+    """History of a product, newest first. It also answers for products that were
+    soft-deleted, and with an empty page when there are no events."""
+    return await repo.list_for_product(code, limit=limit, offset=offset)
 
 
 @router.get("/normalized-catalog/products/{code}")
