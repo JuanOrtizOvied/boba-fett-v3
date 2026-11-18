@@ -312,6 +312,28 @@ class NormalizedCatalogRepository:
         )
         return [_product_from_record(r) for r in rows]
 
+    async def backfill_allocation_slugs(self) -> dict[str, int]:
+        """Fill `slugs` on every allocation item still missing them, across the
+        three JSONB fields. Returns rows updated per field. Idempotent."""
+        counts: dict[str, int] = {}
+        # `column` comes from this fixed tuple, never from user input.
+        for column in ("asset_class", "geographic_focus", "underlying"):
+            counts[column] = await self._pool.fetchval(
+                f"""
+                WITH updated AS (
+                    UPDATE catalog_product
+                    SET {column} = catalog_allocation_with_slugs({column})
+                    WHERE EXISTS (
+                        SELECT 1 FROM jsonb_array_elements({column}) e
+                        WHERE NOT (e ? 'slugs')
+                    )
+                    RETURNING 1
+                )
+                SELECT count(*) FROM updated
+                """
+            )
+        return counts
+
     async def list_for_sync(self) -> NormalizedSnapshot:
         """All products, series and administrators in three plain queries,
         soft-deleted ones included so the sync can restore a key that returns."""

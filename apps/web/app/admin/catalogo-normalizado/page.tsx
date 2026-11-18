@@ -119,6 +119,40 @@ function NormalizedCatalogContent() {
     [loadList, debouncedSearch],
   );
 
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const handleBackfillSlugs = async () => {
+    setIsBackfilling(true);
+    try {
+      const res = await fetchWithAuth(`${BASE}/backfill-slugs`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, "No se pudieron generar los slugs"),
+        );
+      }
+      const data: { updated: Record<string, number>; total: number } =
+        await res.json();
+      if (data.total > 0) {
+        const detail = Object.entries(data.updated)
+          .filter(([, n]) => n > 0)
+          .map(([field, n]) => `${field}: ${n}`)
+          .join(", ");
+        toast(
+          `Slugs generados: ${data.total} producto(s) actualizado(s) (${detail})`,
+          "success",
+        );
+        await refetchList();
+      } else {
+        toast("No faltaban slugs", "success");
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   const loadDetail = useCallback(
     async (code: string, signal?: AbortSignal) => {
       const res = await fetchWithAuth(
@@ -263,6 +297,14 @@ function NormalizedCatalogContent() {
             className="w-fit rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-sabbi-primary-hover"
           >
             + Nuevo producto
+          </button>
+          <button
+            type="button"
+            onClick={handleBackfillSlugs}
+            disabled={isBackfilling}
+            className="w-fit rounded-lg border border-sabbi-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-sabbi-neutral-900 transition-colors hover:bg-sabbi-neutral-100 disabled:opacity-50"
+          >
+            {isBackfilling ? "Generando slugs…" : "Generar slugs faltantes"}
           </button>
 
           {listError && <p className="text-sm text-red-600">{listError}</p>}
