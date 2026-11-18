@@ -901,3 +901,46 @@ CREATE INDEX IF NOT EXISTS normalized_sync_issue_seen_idx
     ON normalized_sync_issue (first_seen_at);
 CREATE INDEX IF NOT EXISTS normalized_sync_issue_resolved_idx
     ON normalized_sync_issue (resolved_at);
+
+-- ---------------------------------------------------------------------------
+-- Properties section, fed from the sheet `6. Propiedades` of the SharePoint
+-- workbook (migrations/versions/b6e1c9f3a874_add_property_holding.py). One row per
+-- (code, client), the grain of the sheet: a property owned by two clients has two
+-- rows and the API groups them by code. Number columns are nullable (a blank cell
+-- or a `-` is stored as NULL). A row that leaves the sheet is soft deleted
+-- (is_deleted) and restored if it comes back. No FK to any other table: nothing of
+-- the catalog changes.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS property_holding (
+    id SERIAL PRIMARY KEY,
+    code TEXT NOT NULL,
+    client TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    manager TEXT DEFAULT '',
+    administrator TEXT DEFAULT '',
+    asset_class JSONB DEFAULT '[]',
+    geographic_focus JSONB DEFAULT '[]',
+    underlying JSONB DEFAULT '[]',
+    currency TEXT DEFAULT '',
+    investment_horizon TEXT DEFAULT '',
+    usage TEXT DEFAULT '',
+    flows_min NUMERIC,
+    flows_max NUMERIC,
+    return_min NUMERIC,
+    return_max NUMERIC,
+    ownership_pct NUMERIC,
+    estimated_value_usd NUMERIC,
+    monthly_rent_usd NUMERIC,
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (code, client)
+);
+
+-- Hash of the last properties workbook applied, so an unchanged file is skipped.
+-- One row only (id is always 1), separate from normalized_sync_state.
+CREATE TABLE IF NOT EXISTS properties_sync_state (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    last_processed_hash VARCHAR(64),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
