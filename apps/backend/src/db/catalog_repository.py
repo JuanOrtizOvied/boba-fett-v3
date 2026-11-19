@@ -593,9 +593,7 @@ class CatalogRepository:
         return self._row_to_catalog_product(row) if row else None
 
     async def list_administrators(self) -> list[Administrator]:
-        rows = await self.pool.fetch(
-            "SELECT id, name, score, score_is_fixed FROM administrator ORDER BY name ASC"
-        )
+        rows = await self.pool.fetch("SELECT id, name, score FROM administrator ORDER BY name ASC")
         return [Administrator(**dict(r)) for r in rows]
 
     async def list_managers(self) -> list[Manager]:
@@ -606,9 +604,7 @@ class CatalogRepository:
         """Inserts a new administrator (`task_fffceb1e` — persisting
         free-text names typed in the catalog edit modal). Returns `None` on
         a case/whitespace-insensitive duplicate instead of inserting, same
-        convention as `insert_if_not_duplicate`. New entries are always
-        `score_is_fixed=true` — the "Cash o efectivo" manual-score exception
-        is a fixed, pre-seeded special case, not something admins create."""
+        convention as `insert_if_not_duplicate`."""
         existing = await self.pool.fetchrow(
             "SELECT id FROM administrator WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1",
             name,
@@ -617,9 +613,9 @@ class CatalogRepository:
             return None
         row = await self.pool.fetchrow(
             """
-            INSERT INTO administrator (name, score, score_is_fixed)
-            VALUES ($1, $2, true)
-            RETURNING id, name, score, score_is_fixed
+            INSERT INTO administrator (name, score)
+            VALUES ($1, $2)
+            RETURNING id, name, score
             """,
             name,
             score,

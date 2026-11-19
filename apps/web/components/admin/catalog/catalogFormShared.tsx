@@ -86,13 +86,13 @@ export function parseReturnRate(raw: string): { min: string; max: string } {
  * extra option when it's a legacy/free-text value not in the list) paired
  * with a score input, plus an always-visible "add new" text input below.
  *
- * Selecting an entity autofills its score, locked read-only — unless
- * `score_is_fixed` is false ("Cash o efectivo": the real risk depends on
- * which bank holds the cash for that specific product, so it's entered
- * manually per product instead of coming from the entity). Typing a brand
- * new name always requires a manually-entered score, since there's no
- * entity to autofill from yet — the caller persists it as a new entity via
- * POST before saving the catalog entry itself.
+ * Selecting an entity autofills its score, locked read-only — unless the
+ * entity has no score ("Cash o efectivo": the real risk depends on which
+ * bank holds the cash for that specific product, so it's entered manually
+ * per product instead of coming from the entity). Typing a brand new name
+ * always requires a manually-entered score, since there's no entity to
+ * autofill from yet — the caller persists it as a new entity via POST
+ * before saving the catalog entry itself.
  *
  * Pass a `key` from the caller so the draft input resets when the
  * underlying record changes (e.g. a different catalog entry loaded for edit).
@@ -108,7 +108,7 @@ export function ScoredVocabularyField({
   scoreInvalid,
   disabled,
 }: {
-  entities: { name: string; score: number | null; score_is_fixed?: boolean }[];
+  entities: { name: string; score: number | null }[];
   name: string;
   score: number | null;
   onNameChange: (name: string) => void;
@@ -118,12 +118,12 @@ export function ScoredVocabularyField({
   scoreInvalid?: boolean;
   /** Locks the name controls (dropdown and "add new" input). The score
    * keeps following its own rules: it has no Excel column, so it stays
-   * editable whenever the matched entity doesn't fix it. */
+   * editable whenever the matched entity has no score. */
   disabled?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const matched = entities.find((e) => e.name === name);
-  const scoreEditable = !matched || matched.score_is_fixed === false;
+  const scoreEditable = !matched || matched.score === null;
   const lockedClass = disabled ? modalInputReadOnlyClass : "";
   const nameInvalidClass = nameInvalid ? " border-red-400 focus:border-red-500" : "";
   const scoreInvalidClass = scoreInvalid ? " border-red-400 focus:border-red-500" : "";
@@ -139,7 +139,7 @@ export function ScoredVocabularyField({
             const selectedName = e.target.value;
             onNameChange(selectedName);
             const found = entities.find((en) => en.name === selectedName);
-            onScoreChange(found && found.score_is_fixed !== false ? found.score : null);
+            onScoreChange(found ? found.score : null);
           }}
           className={modalInputClass + " min-w-0 flex-1" + nameInvalidClass + lockedClass}
         >

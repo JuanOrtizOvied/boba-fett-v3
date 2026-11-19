@@ -244,21 +244,38 @@ SET slugs = (
 )
 WHERE slugs = '{}';
 
--- Mirrors migrations/versions/d4e5f6a1b2c3_add_administrator_manager_entities.py.
+-- Mirrors migrations/versions/d4e5f6a1b2c3_add_administrator_manager_entities.py and
+-- e3a7c5b9d102_update_administrator_manager_tables.py (no score_is_fixed; slugs and
+-- updated_at added).
 CREATE TABLE IF NOT EXISTS administrator (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     score INTEGER,
-    score_is_fixed BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT now()
+    slugs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS manager (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     score INTEGER,
-    created_at TIMESTAMPTZ DEFAULT now()
+    slugs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- A database created with the old shape is brought to the new one in place. The seed
+-- inserts below come after this, so they never see score_is_fixed.
+ALTER TABLE administrator DROP COLUMN IF EXISTS score_is_fixed;
+ALTER TABLE administrator ADD COLUMN IF NOT EXISTS slugs JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE administrator ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+UPDATE administrator SET updated_at = COALESCE(created_at, now()) WHERE updated_at IS NULL;
+ALTER TABLE administrator ALTER COLUMN updated_at SET DEFAULT now();
+ALTER TABLE manager ADD COLUMN IF NOT EXISTS slugs JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE manager ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+UPDATE manager SET updated_at = COALESCE(created_at, now()) WHERE updated_at IS NULL;
+ALTER TABLE manager ALTER COLUMN updated_at SET DEFAULT now();
 
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS administrator_score INTEGER;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS manager_score INTEGER;
@@ -282,88 +299,88 @@ END $$;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS cash_flows TEXT NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS uq_product_catalog_codigo ON product_catalog (codigo);
 
-INSERT INTO administrator (name, score, score_is_fixed) VALUES
-    ('ACRES Sociedad Titulizadora S.A', 5, true),
-    ('AFP Habitat', 8, true),
-    ('Amara Foods EIRL', 2, true),
-    ('American Ventures', 5, true),
-    ('Art Atlas S.R.L', 5, true),
-    ('Aurora Grupo Inmobiliario', 4, true),
-    ('Banco comercio', 5, true),
-    ('Baring', 10, true),
-    ('Barings', 10, true),
-    ('BBVA SAB', 9, true),
-    ('BBVA SAF', 9, true),
-    ('BCP', 9, true),
-    ('Blum SAF', 7, true),
-    ('BNP Paribas', 10, true),
-    ('BNY', 10, true),
-    ('BTG Pactual SAB', 8, true),
-    ('BTG Pactual SAF', 8, true),
-    ('Caja Arequipa', 8, true),
-    ('Caja Huancayo', 5, true),
-    ('Caja Piura', 6, true),
-    ('Cash o efectivo', NULL, false),
-    ('Celta Contratistas', 4, true),
-    ('Charles Schwab', 10, true),
-    ('Citibank', 10, true),
-    ('Compartamos', 8, true),
-    ('Compass SAF', 8, true),
-    ('Cooperativa Kori', 7, true),
-    ('Core Capital', 6, true),
-    ('Coril', 5, true),
-    ('Coril SAF', 8, true),
-    ('Credicorp Capital SAB', 9, true),
-    ('Credicorp Capital SAF', 9, true),
-    ('El Dorado SAF', 5, true),
-    ('Faro Capital / Edifica', 8, true),
-    ('Fidelity', 10, true),
-    ('Financiera Oh', 6, true),
-    ('Financiera surgir', 6, true),
-    ('Flip', 4, true),
-    ('GSDynamic', 6, true),
-    ('HAPI', 6, true),
-    ('HSBC', 10, true),
-    ('Inteligo Bank', 8, true),
-    ('Inteligo SAB', 9, true),
-    ('Interactive Brokers', 9, true),
-    ('Interbank', 9, true),
-    ('Interfondos SAF', 9, true),
-    ('Inversiones directas en empresas fuera de Peru', 6, true),
-    ('Inversiones directas en empresas Peru', 5, true),
-    ('Inversiones directas en propiedades fuera de peru', 9, true),
-    ('Inversiones directas en propiedades Peru', 9, true),
-    ('JPM', 10, true),
-    ('Kallpa SAB', 7, true),
-    ('LarrainVial SAB', 8, true),
-    ('LPL', 10, true),
-    ('Macrocapitales SAF', 7, true),
-    ('Mapfre', 8, true),
-    ('Medalist Partners', 9, true),
-    ('Northern Trust', 10, true),
-    ('Numa', 8, true),
-    ('Pacifico Seguros', 6, true),
-    ('PAHO', 7, true),
-    ('Pershing', 10, true),
-    ('Pichincha', 6, true),
-    ('Prisma Inmobiliaria', 4, true),
-    ('Produbanco', 7, true),
-    ('Propio', 5, true),
-    ('Propio / Exchange', 5, true),
-    ('Prudential SAF', 7, true),
-    ('S &T Comunicaciones Integral', 2, true),
-    ('Sabadell', 9, true),
-    ('Scotia Fondos SAF', 9, true),
-    ('Scotia SAB', 9, true),
-    ('Seminario SAB', 7, true),
-    ('State Street', 10, true),
-    ('Sura', 7, true),
-    ('Sura SAB', 8, true),
-    ('Sura SAF', 8, true),
-    ('Tyba - Credicorp', 9, true),
-    ('UBS', 10, true),
-    ('Vanguard', 10, true),
-    ('Zest Capital', 4, true)
+INSERT INTO administrator (name, score) VALUES
+    ('ACRES Sociedad Titulizadora S.A', 5),
+    ('AFP Habitat', 8),
+    ('Amara Foods EIRL', 2),
+    ('American Ventures', 5),
+    ('Art Atlas S.R.L', 5),
+    ('Aurora Grupo Inmobiliario', 4),
+    ('Banco comercio', 5),
+    ('Baring', 10),
+    ('Barings', 10),
+    ('BBVA SAB', 9),
+    ('BBVA SAF', 9),
+    ('BCP', 9),
+    ('Blum SAF', 7),
+    ('BNP Paribas', 10),
+    ('BNY', 10),
+    ('BTG Pactual SAB', 8),
+    ('BTG Pactual SAF', 8),
+    ('Caja Arequipa', 8),
+    ('Caja Huancayo', 5),
+    ('Caja Piura', 6),
+    ('Cash o efectivo', NULL),
+    ('Celta Contratistas', 4),
+    ('Charles Schwab', 10),
+    ('Citibank', 10),
+    ('Compartamos', 8),
+    ('Compass SAF', 8),
+    ('Cooperativa Kori', 7),
+    ('Core Capital', 6),
+    ('Coril', 5),
+    ('Coril SAF', 8),
+    ('Credicorp Capital SAB', 9),
+    ('Credicorp Capital SAF', 9),
+    ('El Dorado SAF', 5),
+    ('Faro Capital / Edifica', 8),
+    ('Fidelity', 10),
+    ('Financiera Oh', 6),
+    ('Financiera surgir', 6),
+    ('Flip', 4),
+    ('GSDynamic', 6),
+    ('HAPI', 6),
+    ('HSBC', 10),
+    ('Inteligo Bank', 8),
+    ('Inteligo SAB', 9),
+    ('Interactive Brokers', 9),
+    ('Interbank', 9),
+    ('Interfondos SAF', 9),
+    ('Inversiones directas en empresas fuera de Peru', 6),
+    ('Inversiones directas en empresas Peru', 5),
+    ('Inversiones directas en propiedades fuera de peru', 9),
+    ('Inversiones directas en propiedades Peru', 9),
+    ('JPM', 10),
+    ('Kallpa SAB', 7),
+    ('LarrainVial SAB', 8),
+    ('LPL', 10),
+    ('Macrocapitales SAF', 7),
+    ('Mapfre', 8),
+    ('Medalist Partners', 9),
+    ('Northern Trust', 10),
+    ('Numa', 8),
+    ('Pacifico Seguros', 6),
+    ('PAHO', 7),
+    ('Pershing', 10),
+    ('Pichincha', 6),
+    ('Prisma Inmobiliaria', 4),
+    ('Produbanco', 7),
+    ('Propio', 5),
+    ('Propio / Exchange', 5),
+    ('Prudential SAF', 7),
+    ('S &T Comunicaciones Integral', 2),
+    ('Sabadell', 9),
+    ('Scotia Fondos SAF', 9),
+    ('Scotia SAB', 9),
+    ('Seminario SAB', 7),
+    ('State Street', 10),
+    ('Sura', 7),
+    ('Sura SAB', 8),
+    ('Sura SAF', 8),
+    ('Tyba - Credicorp', 9),
+    ('UBS', 10),
+    ('Vanguard', 10),
+    ('Zest Capital', 4)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO manager (name, score) VALUES
@@ -460,6 +477,27 @@ INSERT INTO manager (name, score) VALUES
     ('Xtrackers', 7),
     ('Zest Capital', 4)
 ON CONFLICT (name) DO NOTHING;
+
+-- Slugs of the rows the seeds above just added (same rule as slugify_name).
+UPDATE administrator AS t
+SET slugs = CASE WHEN s.slug = '' THEN '[]'::jsonb ELSE jsonb_build_array(s.slug) END
+FROM (
+    SELECT id, trim(both '-' from regexp_replace(
+        normalize_catalog_text(name), '[^a-z0-9]+', '-', 'g'
+    )) AS slug
+    FROM administrator
+) AS s
+WHERE t.id = s.id AND t.slugs = '[]'::jsonb;
+
+UPDATE manager AS t
+SET slugs = CASE WHEN s.slug = '' THEN '[]'::jsonb ELSE jsonb_build_array(s.slug) END
+FROM (
+    SELECT id, trim(both '-' from regexp_replace(
+        normalize_catalog_text(name), '[^a-z0-9]+', '-', 'g'
+    )) AS slug
+    FROM manager
+) AS s
+WHERE t.id = s.id AND t.slugs = '[]'::jsonb;
 
 -- Mirrors migrations/versions/e5f6a1b2c3d4_add_catalog_slugs_trgm_index.py.
 -- array_to_string() is STABLE, not IMMUTABLE, so it can't be used directly
