@@ -363,7 +363,6 @@ class Administrator(BaseModel):
     id: int
     name: str
     score: int | None = None
-    score_is_fixed: bool = True
 
 
 class Manager(BaseModel):

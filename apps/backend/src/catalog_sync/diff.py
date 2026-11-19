@@ -50,9 +50,8 @@ class OfficialLists:
     table by the caller, since it can grow. `administrator` has no source
     column in the Excel sheet and is intentionally absent.
 
-    `manager_scores` maps each official manager name to its fixed score
-    (only managers with a known score — e.g. skip "Cash o efectivo",
-    `score_is_fixed=false`), for the derived `manager_score` rule (Open
+    `manager_scores` maps each official manager name to its score (only
+    managers with a known score), for the derived `manager_score` rule (Open
     Decision 2). Defaults to empty, so existing callers that don't care
     about derived scores don't need to pass it."""
 

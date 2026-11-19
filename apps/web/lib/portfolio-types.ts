@@ -378,7 +378,6 @@ export interface AdministratorEntity {
   id: number;
   name: string;
   score: number | null;
-  score_is_fixed: boolean;
 }
 
 /** Mirrors `db.models.Manager` — one row from `GET /admin/managers`. */

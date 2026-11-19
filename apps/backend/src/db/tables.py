@@ -109,16 +109,14 @@ product_catalog = Table(
 )
 
 # Reference entities behind the catalog edit modal's Administrador/Gestor
-# dropdowns. `administrator.score_is_fixed=false` marks "Cash o efectivo":
-# its risk score depends on which bank actually holds the cash for a given
-# product, so it's entered manually per product instead of coming from here.
+# dropdowns. An entity with no score ("Cash o efectivo": its risk depends on which
+# bank actually holds the cash) gets its score entered per product instead.
 administrator = Table(
     "administrator",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("name", Text, unique=True, nullable=False),
     Column("score", Integer),
-    Column("score_is_fixed", Boolean, nullable=False, server_default=text("true")),
     Column("created_at", DateTime(timezone=True), server_default=text("now()")),
 )
 
