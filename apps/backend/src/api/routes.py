@@ -63,6 +63,7 @@ from db.versioning import (
     SnapshotUnchangedError,
     VersioningRepository,
 )
+from properties_sync.scheduler import start_maintenance_task as start_properties_maintenance_task
 
 
 async def _init_chat_graph(app: FastAPI, stack: AsyncExitStack) -> None:
@@ -115,6 +116,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     maintenance_task = start_maintenance_task(app.state.catalog_repo)
     # Same for the normalized catalog, behind SHAREPOINT_NORMALIZED_SYNC_ENABLED.
     normalized_maintenance_task = start_normalized_maintenance_task(pool)
+    # And the properties sheet, which rides on the normalized sync's flag.
+    properties_maintenance_task = start_properties_maintenance_task(pool)
     try:
         async with AsyncExitStack() as stack:
             await _init_chat_graph(app, stack)
@@ -122,6 +125,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await stop_maintenance_task(maintenance_task)
         await stop_maintenance_task(normalized_maintenance_task)
+        await stop_maintenance_task(properties_maintenance_task)
 
     await close_pool()
 

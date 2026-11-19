@@ -9,6 +9,7 @@ spacing.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Literal
 
@@ -57,3 +58,28 @@ PROPERTY_COLUMNS = (
 
 # One row per client and property: the key of a row.
 KEY_FIELDS = ("code", "client")
+
+
+@dataclass(frozen=True)
+class PropertiesSettings:
+    """Settings of this sync on top of the Azure and site ones that
+    `catalog_sync.config.Settings` already reads.
+
+    It has no flag and no variable of its own: the sheet is in the same workbook
+    the normalized catalog sync reads, so this sync runs when
+    `SHAREPOINT_NORMALIZED_SYNC_ENABLED` is true and uses the same
+    `SHAREPOINT_NORMALIZED_FILE_PATH`. Only the variables are read; no settings
+    class of the catalog is imported."""
+
+    sync_enabled: bool
+    file_path: str | None = None
+
+    @classmethod
+    def from_env(cls) -> PropertiesSettings:
+        return cls(
+            sync_enabled=os.environ.get("SHAREPOINT_NORMALIZED_SYNC_ENABLED", "false")
+            .strip()
+            .lower()
+            == "true",
+            file_path=os.environ.get("SHAREPOINT_NORMALIZED_FILE_PATH"),
+        )
