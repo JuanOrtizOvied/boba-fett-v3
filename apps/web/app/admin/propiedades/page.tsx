@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useUrlSearch } from "@/hooks/useUrlSearch";
 import { PropertyDetail } from "@/components/admin/properties/PropertyDetail";
@@ -39,6 +40,9 @@ function PropertiesContent() {
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [detail, setDetail] = useState<PropertyDetailData | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const { toast } = useToast();
 
   const [searchInput, setSearchInput] = useUrlSearch("search");
   const debouncedSearch = useDebouncedValue(searchInput, 300);
@@ -66,7 +70,7 @@ function PropertiesContent() {
         if (!controller.signal.aborted) setIsFetching(false);
       });
     return () => controller.abort();
-  }, [term]);
+  }, [term, reloadKey]);
 
   useEffect(() => {
     if (!selectedCode) {
@@ -92,6 +96,31 @@ function PropertiesContent() {
     return () => controller.abort();
   }, [selectedCode]);
 
+  const handleBackfillSlugs = async () => {
+    setIsBackfilling(true);
+    try {
+      const res = await fetchWithAuth(`${BASE}/backfill-slugs`, { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await readError(res, "No se pudieron generar los slugs"));
+      }
+      const data: { updated: Record<string, number>; total: number } = await res.json();
+      if (data.total > 0) {
+        const detail = Object.entries(data.updated)
+          .filter(([, n]) => n > 0)
+          .map(([field, n]) => `${field}: ${n}`)
+          .join(", ");
+        toast(`Slugs generados: ${data.total} fila(s) actualizada(s) (${detail})`, "success");
+        setReloadKey((k) => k + 1);
+      } else {
+        toast("No faltaban slugs", "success");
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-sabbi-neutral-900">Propiedades</h1>
@@ -104,6 +133,14 @@ function PropertiesContent() {
             onChange={setSearchInput}
             isLoading={isFetching || isDebouncing}
           />
+          <button
+            type="button"
+            onClick={handleBackfillSlugs}
+            disabled={isBackfilling}
+            className="w-fit rounded-lg border border-sabbi-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-sabbi-neutral-900 transition-colors hover:bg-sabbi-neutral-100 disabled:opacity-50"
+          >
+            {isBackfilling ? "Generando slugs…" : "Generar slugs faltantes"}
+          </button>
           <PropertyList
             properties={properties}
             error={listError}
