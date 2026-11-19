@@ -29,6 +29,9 @@ from catalog_sync.subscriptions import (
     renew_subscription,
 )
 from db.catalog_repository import CatalogRepository
+from properties_sync.service import SyncDisabledError as PropertiesSyncDisabledError
+from properties_sync.service import describe_error as describe_properties_error
+from properties_sync.service import run_sync_from_sharepoint as run_properties_sync
 
 logger = logging.getLogger("catalog_sync.webhook")
 
@@ -121,6 +124,31 @@ async def _normalized_sync_in_background(repo: CatalogRepository, trigger: str =
             )
 
 
+async def _properties_sync_in_background(repo: CatalogRepository, trigger: str = "webhook") -> None:
+    """Same as `_normalized_sync_in_background`, for the properties sheet. It runs
+    when the normalized sync is enabled and decides by its own hash whether there
+    is work. It never raises, and it logs counts and the type of an error, never a
+    client name or a value."""
+    try:
+        report = await run_properties_sync(repo.pool, trigger=trigger)
+    except PropertiesSyncDisabledError:
+        logger.info("Properties sync notification ignored: sync is disabled")
+    except Exception as exc:  # a background task must never raise
+        logger.error("Properties sync failed: %s", describe_properties_error(exc))
+    else:
+        if report.skipped:
+            logger.info("Properties sync skipped: content unchanged")
+        else:
+            changes = report.changeset
+            logger.info(
+                "Properties sync applied: inserts=%d updates=%d deletes=%d restores=%d",
+                len(changes.inserts),
+                len(changes.updates),
+                len(changes.soft_deletes),
+                len(changes.restores),
+            )
+
+
 @router.post("/notifications")
 async def graph_notifications(
     request: Request, background_tasks: BackgroundTasks, validationToken: str | None = None
@@ -141,6 +169,7 @@ async def graph_notifications(
 
     background_tasks.add_task(_sync_in_background, repo)
     background_tasks.add_task(_normalized_sync_in_background, repo)
+    background_tasks.add_task(_properties_sync_in_background, repo)
     return Response(status_code=202)
 
 
@@ -166,6 +195,7 @@ async def _handle_lifecycle_event(repo: CatalogRepository, item: dict[str, Any])
             # Notifications were lost: catch up from the workbook itself.
             await _sync_in_background(repo)
             await _normalized_sync_in_background(repo, trigger="lifecycle")
+            await _properties_sync_in_background(repo, trigger="lifecycle")
         else:
             logger.info("Lifecycle event ignored: %s", event)
     except Exception as exc:  # a background task must never raise
