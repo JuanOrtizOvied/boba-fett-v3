@@ -1,8 +1,8 @@
-"""Read-only admin endpoints of the properties section.
+"""Admin endpoints of the properties section.
 
 Own router, apart from `admin_routes`. Every route requires `require_admin`, like
-the rest of the admin area. There is no route that writes: the table is filled by
-the sync from the SharePoint workbook.
+the rest of the admin area. The table is filled by the sync from the SharePoint
+workbook; the only write here is the on-demand slug backfill.
 """
 
 from __future__ import annotations
@@ -27,6 +27,12 @@ async def list_properties(
     search: str | None = Query(default=None, max_length=200),
 ) -> list[PropertySummary]:
     return await _property_repo(request).list_properties(search)
+
+
+@router.post("/backfill-slugs")
+async def backfill_property_allocation_slugs(request: Request) -> dict:
+    updated = await _property_repo(request).backfill_allocation_slugs()
+    return {"updated": updated, "total": sum(updated.values())}
 
 
 @router.get("/{code}", response_model=PropertyDetail)

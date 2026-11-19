@@ -3,7 +3,8 @@
 Two read sides live here. The sync one returns every row typed like the parser's
 values so the diff can compare them. The admin one groups the active rows by
 property code: the table has one row per `(code, client)`, the screen shows one
-property with its owners. Nothing here writes; the sync is the only writer.
+property with its owners. The sync is the main writer; the only other write is the
+on-demand `backfill_allocation_slugs` maintenance action.
 """
 
 from __future__ import annotations
@@ -122,6 +123,28 @@ class PropertyRepository:
     @property
     def pool(self) -> asyncpg.Pool:
         return self._pool
+
+    async def backfill_allocation_slugs(self) -> dict[str, int]:
+        """Fill `slugs` on every allocation item still missing them, across the
+        three JSONB fields. Returns rows updated per field. Idempotent."""
+        counts: dict[str, int] = {}
+        # `column` comes from this fixed tuple, never from user input.
+        for column in ("asset_class", "geographic_focus", "underlying"):
+            counts[column] = await self._pool.fetchval(
+                f"""
+                WITH updated AS (
+                    UPDATE property_holding
+                    SET {column} = catalog_allocation_with_slugs({column})
+                    WHERE EXISTS (
+                        SELECT 1 FROM jsonb_array_elements({column}) e
+                        WHERE NOT (e ? 'slugs')
+                    )
+                    RETURNING 1
+                )
+                SELECT count(*) FROM updated
+                """
+            )
+        return counts
 
     async def list_for_sync(self) -> list[ExistingRow]:
         """Every row of the table, deleted ones included, for the diff."""
