@@ -36,6 +36,7 @@ from api.admin_routes import router as admin_router
 from api.auth_routes import router as auth_router
 from api.chat_routes import router as chat_router
 from api.logging_config import configure_logging
+from api.properties_routes import router as properties_router
 from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
 from auth.repository import UserRepository
@@ -56,6 +57,7 @@ from db.portfolio_template_export import (
     build_portfolio_template_workbook,
     template_export_filename,
 )
+from db.properties import PropertyRepository
 from db.repository import ProductRepository
 from db.versioning import (
     SnapshotAccessError,
@@ -110,6 +112,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.normalized_sync_issues_repo = NormalizedSyncIssueRepository(pool)
     app.state.ficha_repo = FichaRepository(pool)
     app.state.history_repo = CatalogHistoryRepository(pool)
+    app.state.property_repo = PropertyRepository(pool)
 
     # SharePoint catalog sync upkeep; None (and no Graph call) unless
     # SHAREPOINT_SYNC_ENABLED is true.
@@ -133,6 +136,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="SABBI Portfolio API", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(properties_router)
 app.include_router(chat_router)
 # Microsoft Graph calls these without a session; they authenticate by clientState.
 app.include_router(webhook_router)
