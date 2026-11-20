@@ -593,11 +593,15 @@ class CatalogRepository:
         return self._row_to_catalog_product(row) if row else None
 
     async def list_administrators(self) -> list[Administrator]:
-        rows = await self.pool.fetch("SELECT id, name, score FROM administrator ORDER BY name ASC")
+        rows = await self.pool.fetch(
+            "SELECT id, name, score FROM administrator WHERE deleted_at IS NULL ORDER BY name ASC"
+        )
         return [Administrator(**dict(r)) for r in rows]
 
     async def list_managers(self) -> list[Manager]:
-        rows = await self.pool.fetch("SELECT id, name, score FROM manager ORDER BY name ASC")
+        rows = await self.pool.fetch(
+            "SELECT id, name, score FROM manager WHERE deleted_at IS NULL ORDER BY name ASC"
+        )
         return [Manager(**dict(r)) for r in rows]
 
     async def create_administrator(self, name: str, score: int) -> Administrator | None:
