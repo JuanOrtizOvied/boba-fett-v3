@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "/admin/portfolios", label: "Portafolios" },
   { href: "/admin/catalogo-normalizado", label: "Catálogo" },
   { href: "/admin/propiedades", label: "Propiedades" },
+  { href: "/admin/administradores-gestores", label: "Administradores y gestores" },
   { href: "/admin/buscar-producto", label: "Buscar producto" },
   { href: "/admin/ficha-patrimonial", label: "Ficha Patrimonial" },
   { href: "/admin/threads", label: "Chats" },
