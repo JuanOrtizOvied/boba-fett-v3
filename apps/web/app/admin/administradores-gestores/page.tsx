@@ -1,8 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useUrlSearch } from "@/hooks/useUrlSearch";
+import { useToast } from "@/components/ui/Toast";
+import { EntityScoreDeleteModal } from "@/components/admin/entity-scores/EntityScoreDeleteModal";
+import { EntityScoreFormModal } from "@/components/admin/entity-scores/EntityScoreFormModal";
 import { EntityScoreSearch } from "@/components/admin/entity-scores/EntityScoreSearch";
 import { EntityScoreTable } from "@/components/admin/entity-scores/EntityScoreTable";
 import {
@@ -11,7 +14,9 @@ import {
   SEARCH_PARAM,
   activeRows,
   deletedCount,
+  describeWriteError,
   listEntityScores,
+  restoreEntityScore,
   tabFromParam,
   tabToParam,
   type EntityKind,
@@ -25,8 +30,14 @@ function isAbort(err: unknown): boolean {
 const message = (err: unknown, fallback: string): string =>
   err instanceof Error && err.message ? err.message : fallback;
 
+const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
 type Lists = Record<EntityKind, EntityScore[] | null>;
 type Errors = Record<EntityKind, string | null>;
+type ModalState =
+  | { type: "form"; mode: "create" | "edit"; entity: EntityScore | null }
+  | { type: "delete"; entity: EntityScore }
+  | null;
 
 export default function EntityScoresPage() {
   // useUrlSearch -> useSearchParams requires a <Suspense> boundary in App Router.
@@ -38,6 +49,7 @@ export default function EntityScoresPage() {
 }
 
 function EntityScoresContent() {
+  const { toast } = useToast();
   const [tabParam, setTabParam] = useUrlSearch("tab");
   const kind = tabFromParam(tabParam);
 
@@ -67,26 +79,32 @@ function EntityScoresContent() {
   } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isFetching, setIsFetching] = useState(false);
+  // Bumped after a write, so a search that is on screen asks the server again.
+  const [searchKey, setSearchKey] = useState(0);
+
+  const [modal, setModal] = useState<ModalState>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const loadKind = useCallback(async (k: EntityKind, signal?: AbortSignal) => {
+    try {
+      const rows = await listEntityScores(k, { includeDeleted: true, signal });
+      if (signal?.aborted) return;
+      setLists((prev) => ({ ...prev, [k]: rows }));
+      setListErrors((prev) => ({ ...prev, [k]: null }));
+    } catch (err) {
+      if (signal?.aborted || isAbort(err)) return;
+      setListErrors((prev) => ({
+        ...prev,
+        [k]: message(err, `No se pudieron cargar los ${KIND_TEXT[k].plural}`),
+      }));
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    for (const k of ENTITY_KINDS) {
-      listEntityScores(k, { includeDeleted: true, signal: controller.signal })
-        .then((rows) => {
-          if (controller.signal.aborted) return;
-          setLists((prev) => ({ ...prev, [k]: rows }));
-          setListErrors((prev) => ({ ...prev, [k]: null }));
-        })
-        .catch((err: unknown) => {
-          if (controller.signal.aborted || isAbort(err)) return;
-          setListErrors((prev) => ({
-            ...prev,
-            [k]: message(err, `No se pudieron cargar los ${KIND_TEXT[k].plural}`),
-          }));
-        });
-    }
+    for (const k of ENTITY_KINDS) void loadKind(k, controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [loadKind]);
 
   useEffect(() => {
     if (term === "") {
@@ -110,7 +128,42 @@ function EntityScoresContent() {
         if (!controller.signal.aborted) setIsFetching(false);
       });
     return () => controller.abort();
-  }, [kind, term, showDeleted]);
+  }, [kind, term, showDeleted, searchKey]);
+
+  /** After a write: read the table again (the totals follow) and the search, if any. */
+  const refresh = useCallback(() => {
+    void loadKind(kind);
+    setSearchKey((n) => n + 1);
+  }, [kind, loadKind]);
+
+  const singular = KIND_TEXT[kind].singular;
+
+  const handleSaved = (_saved: EntityScore, mode: "create" | "edit") => {
+    setModal(null);
+    refresh();
+    toast(`${capitalize(singular)} ${mode === "create" ? "creado" : "guardado"}`, "success");
+  };
+
+  const handleDeleted = () => {
+    setModal(null);
+    refresh();
+    toast(`${capitalize(singular)} eliminado`, "success");
+  };
+
+  const handleRestore = async (row: EntityScore) => {
+    setBusyId(row.id);
+    try {
+      await restoreEntityScore(kind, row.id);
+      refresh();
+      toast(`${capitalize(singular)} restaurado`, "success");
+    } catch (err) {
+      const described = describeWriteError(err, kind);
+      toast(described.form ?? `No se pudo restaurar el ${singular}`);
+      if (described.gone) refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const all = lists[kind];
   let rows: EntityScore[] | null;
@@ -128,7 +181,17 @@ function EntityScoresContent() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <h1 className="text-lg font-semibold text-sabbi-neutral-900">Administradores y gestores</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold text-sabbi-neutral-900">Administradores y gestores</h1>
+        <button
+          type="button"
+          onClick={() => setModal({ type: "form", mode: "create", entity: null })}
+          disabled={all === null}
+          className="rounded-lg bg-sabbi-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sabbi-primary-hover disabled:opacity-50"
+        >
+          + Nuevo {text.singular}
+        </button>
+      </div>
 
       <div
         role="tablist"
@@ -190,8 +253,39 @@ function EntityScoresContent() {
           </span>
         )}
 
-        <EntityScoreTable rows={rows} error={error} kind={kind} searching={term !== ""} />
+        <EntityScoreTable
+          rows={rows}
+          error={error}
+          kind={kind}
+          searching={term !== ""}
+          onEdit={(row) => setModal({ type: "form", mode: "edit", entity: row })}
+          onDelete={(row) => setModal({ type: "delete", entity: row })}
+          onRestore={(row) => void handleRestore(row)}
+          busyId={busyId}
+        />
       </div>
+
+      {modal?.type === "form" && (
+        <EntityScoreFormModal
+          key={`${kind}-${modal.entity?.id ?? "new"}`}
+          kind={kind}
+          mode={modal.mode}
+          entity={modal.entity}
+          rows={all ?? []}
+          onClose={() => setModal(null)}
+          onSaved={handleSaved}
+          onGone={refresh}
+        />
+      )}
+      {modal?.type === "delete" && (
+        <EntityScoreDeleteModal
+          kind={kind}
+          entity={modal.entity}
+          onClose={() => setModal(null)}
+          onDeleted={handleDeleted}
+          onGone={refresh}
+        />
+      )}
     </div>
   );
 }

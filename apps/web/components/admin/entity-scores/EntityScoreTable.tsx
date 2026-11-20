@@ -16,15 +16,34 @@ interface EntityScoreTableProps {
   kind: EntityKind;
   /** True when the rows were filtered by a search term. */
   searching: boolean;
+  /** The row actions. The column shows only when at least one is given. */
+  onEdit?: (row: EntityScore) => void;
+  onDelete?: (row: EntityScore) => void;
+  onRestore?: (row: EntityScore) => void;
+  /** A row whose action is running: its buttons are off until it ends. */
+  busyId?: number | null;
 }
+
+const ACTION =
+  "rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
 const HEADER =
   "sticky top-0 z-10 border-b border-sabbi-neutral-200 bg-sabbi-neutral-100 px-4 py-2 text-left text-xs font-semibold text-sabbi-neutral-600";
 
 /** The rows of one table: name, score and slugs. Read only; a deleted row shows struck
  * through with an "Eliminado" tag. */
-export function EntityScoreTable({ rows, error, kind, searching }: EntityScoreTableProps) {
+export function EntityScoreTable({
+  rows,
+  error,
+  kind,
+  searching,
+  onEdit,
+  onDelete,
+  onRestore,
+  busyId = null,
+}: EntityScoreTableProps) {
   const plural = KIND_TEXT[kind].plural;
+  const hasActions = Boolean(onEdit || onDelete || onRestore);
 
   if (error) {
     return (
@@ -62,6 +81,11 @@ export function EntityScoreTable({ rows, error, kind, searching }: EntityScoreTa
             <th scope="col" className={HEADER}>
               Slugs
             </th>
+            {hasActions && (
+              <th scope="col" className={`${HEADER} right-0 z-20 text-right`}>
+                <span className="sr-only">Acciones</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-sabbi-neutral-200">
@@ -70,7 +94,7 @@ export function EntityScoreTable({ rows, error, kind, searching }: EntityScoreTa
             return (
               <tr
                 key={row.id}
-                className={`transition-colors hover:bg-[#f0fcd4] ${
+                className={`group transition-colors hover:bg-[#f0fcd4] ${
                   gone ? "text-sabbi-neutral-500" : "text-sabbi-neutral-900"
                 }`}
               >
@@ -107,6 +131,50 @@ export function EntityScoreTable({ rows, error, kind, searching }: EntityScoreTa
                     </ul>
                   )}
                 </td>
+                {hasActions && (
+                  // Stuck to the right edge, so the buttons stay in view when the table
+                  // scrolls sideways. It paints its own background, which follows the row's.
+                  <td className="sticky right-0 bg-white px-3 py-2 text-right align-top whitespace-nowrap group-hover:bg-[#f0fcd4]">
+                    {gone ? (
+                      onRestore && (
+                        <button
+                          type="button"
+                          aria-label={`Restaurar ${row.name}`}
+                          disabled={busyId === row.id}
+                          onClick={() => onRestore(row)}
+                          className={`${ACTION} text-sabbi-primary hover:bg-sabbi-neutral-100`}
+                        >
+                          Restaurar
+                        </button>
+                      )
+                    ) : (
+                      <>
+                        {onEdit && (
+                          <button
+                            type="button"
+                            aria-label={`Editar ${row.name}`}
+                            disabled={busyId === row.id}
+                            onClick={() => onEdit(row)}
+                            className={`${ACTION} text-sabbi-neutral-700 hover:bg-sabbi-neutral-100`}
+                          >
+                            Editar
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button
+                            type="button"
+                            aria-label={`Eliminar ${row.name}`}
+                            disabled={busyId === row.id}
+                            onClick={() => onDelete(row)}
+                            className={`${ACTION} text-red-700 hover:bg-red-50`}
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}
