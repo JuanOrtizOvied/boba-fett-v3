@@ -41,7 +41,13 @@ def _db_value(field: str, value: Any) -> Any:
 
 
 def _placeholder(position: int, field: str) -> str:
-    return f"${position}::jsonb" if field in _ALLOCATION_FIELDS else f"${position}"
+    """An allocation field is written through `catalog_allocation_with_slugs`, the SQL
+    function behind the on-demand backfill, so the slug of each item is derived from its
+    name in the same statement. The workbook only gives name and percentage; without
+    this, a field that changes in the workbook would be stored without the slugs it had."""
+    if field in _ALLOCATION_FIELDS:
+        return f"catalog_allocation_with_slugs(${position}::jsonb)"
+    return f"${position}"
 
 
 def _insert_statement(values: dict[str, Any]) -> tuple[str, list[Any]]:
