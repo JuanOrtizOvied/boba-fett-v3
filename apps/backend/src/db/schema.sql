@@ -246,14 +246,16 @@ WHERE slugs = '{}';
 
 -- Mirrors migrations/versions/d4e5f6a1b2c3_add_administrator_manager_entities.py and
 -- e3a7c5b9d102_update_administrator_manager_tables.py (no score_is_fixed; slugs and
--- updated_at added).
+-- updated_at added) and b7d3f1a9c245_add_deleted_at_to_administrator_manager.py
+-- (deleted_at, the soft delete marker: null means active).
 CREATE TABLE IF NOT EXISTS administrator (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     score INTEGER,
     slugs JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS manager (
@@ -262,7 +264,8 @@ CREATE TABLE IF NOT EXISTS manager (
     score INTEGER,
     slugs JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ
 );
 
 -- A database created with the old shape is brought to the new one in place. The seed
@@ -276,6 +279,8 @@ ALTER TABLE manager ADD COLUMN IF NOT EXISTS slugs JSONB NOT NULL DEFAULT '[]'::
 ALTER TABLE manager ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 UPDATE manager SET updated_at = COALESCE(created_at, now()) WHERE updated_at IS NULL;
 ALTER TABLE manager ALTER COLUMN updated_at SET DEFAULT now();
+ALTER TABLE administrator ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE manager ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS administrator_score INTEGER;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS manager_score INTEGER;
