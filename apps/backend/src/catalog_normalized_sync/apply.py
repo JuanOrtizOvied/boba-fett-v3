@@ -26,6 +26,7 @@ from catalog_normalized_sync.config import (
 from catalog_normalized_sync.diff import ChangeSet
 from catalog_normalized_sync.history import events_from_changeset, store_events
 from catalog_normalized_sync.issues import IssueDelta, write_issue_delta
+from db.catalog_normalized import slugify_name
 
 _TABLES = {
     LEVEL_PRODUCT: "catalog_product",
@@ -38,9 +39,17 @@ _ALLOCATION_FIELDS = {
 }
 
 
+def _allocation_item(name: str, percentage: float) -> dict[str, Any]:
+    """One allocation as stored: the workbook gives name and percentage, and the slug is
+    derived from the name here, with the same rule as the on-demand backfill. Writing it on
+    every insert and update keeps a changed field from losing the slugs it had."""
+    slug = slugify_name(name)
+    return {"name": name, "slugs": [slug] if slug else [], "percentage": percentage}
+
+
 def _db_value(field: str, value: Any) -> Any:
     if field in _ALLOCATION_FIELDS:
-        return json.dumps([{"name": name, "percentage": pct} for name, pct in value])
+        return json.dumps([_allocation_item(name, pct) for name, pct in value])
     return value
 
 
