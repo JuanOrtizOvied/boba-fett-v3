@@ -179,3 +179,347 @@ export const LEGEND_GRADIENT = `linear-gradient(90deg, rgba(${NEGATIVE}, 0.55) 0
 export function nameById(assets: MarkowitzAsset[], id: number): string {
   return assets.find((a) => a.id === id)?.name ?? `#${id}`;
 }
+
+// -- Form rules (the server checks them again and has the last word) -------------
+
+export const MAX_NAME = 200;
+export const MAX_SLUGS = 30;
+export const MAX_SLUG = 100;
+export const MAX_DECIMALS = 4;
+
+/** Trimmed, with every run of spaces collapsed to one. */
+export function cleanName(value: string): string {
+  return value.split(/\s+/).filter(Boolean).join(" ");
+}
+
+/** Lower case, no accents, spaces collapsed: what two names are compared by. */
+export function foldName(value: string): string {
+  return cleanName(value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase());
+}
+
+/** The stored form of a text: unaccented, lower case, `-` between runs of anything else. */
+export function slugifyName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Adds one alternative name typed by the user: normalized, and only if it is new and not
+ * empty. */
+export function addSlug(slugs: string[], raw: string): string[] {
+  const slug = slugifyName(raw);
+  return slug === "" || slugs.includes(slug) ? slugs : [...slugs, slug];
+}
+
+/** The asset, other than `excludeId`, that holds the alternative name `slug`, if any. */
+export function holderOfSlug(
+  assets: MarkowitzAsset[],
+  slug: string,
+  excludeId: number | null,
+): MarkowitzAsset | null {
+  return assets.find((a) => a.id !== excludeId && a.slugs.includes(slug)) ?? null;
+}
+
+/** True when another asset already has this name, ignoring case, accents and spaces. */
+export function nameTaken(assets: MarkowitzAsset[], name: string, excludeId: number | null) {
+  const wanted = foldName(name);
+  return assets.some((a) => a.id !== excludeId && foldName(a.name) === wanted);
+}
+
+export const NAME_ERROR = `El nombre debe tener entre 1 y ${MAX_NAME} caracteres.`;
+export const NAME_TAKEN_ERROR = "Ya existe un activo con ese nombre.";
+export const SLUGS_ERROR = `Máximo ${MAX_SLUGS} nombres alternativos, de hasta ${MAX_SLUG} caracteres cada uno.`;
+export const VALUE_HELP = "Un número de -1 a 1, con hasta 4 decimales.";
+
+export const slugTakenError = (slug: string, holder: string): string =>
+  `«${slug}» ya lo tiene ${holder}. Un nombre alternativo solo puede ser de un activo.`;
+
+/** What is wrong with a typed correlation, or null when it is a good one: a number from -1
+ * to 1 with at most four decimals. */
+export function valueError(raw: string): string | null {
+  const text = raw.trim();
+  if (text === "") return "Escribe un valor.";
+  if (!/^-?(\d+\.?\d*|\.\d+)$/.test(text)) return `${VALUE_HELP} No uses letras ni comas.`;
+  const decimals = text.includes(".") ? text.split(".")[1].length : 0;
+  if (decimals > MAX_DECIMALS) return `Máximo ${MAX_DECIMALS} decimales.`;
+  const n = Number(text);
+  if (n < -1 || n > 1) return "El valor debe estar entre -1 y 1.";
+  return null;
+}
+
+/** The number of a typed value that passed `valueError`. */
+export const valueFromText = (raw: string): number => Number(raw.trim());
+
+/** A number as it is put back in a box: no float noise, no padding. */
+export const valueToText = (value: number): string => String(Number(value.toFixed(MAX_DECIMALS)));
+
+export interface AssetFormValues {
+  name: string;
+  slugs: string[];
+}
+
+export interface AssetFormErrors {
+  name?: string;
+  slugs?: string;
+}
+
+/** The checks of the asset forms, against the assets already in the matrix. `slugs` should
+ * be the final list (what is still typed in the box included). The slug of the name is
+ * checked too, because the server adds it on save. */
+export function validateAssetForm(
+  values: AssetFormValues,
+  assets: MarkowitzAsset[],
+  excludeId: number | null,
+): AssetFormErrors {
+  const errors: AssetFormErrors = {};
+  const name = cleanName(values.name);
+  if (name === "" || name.length > MAX_NAME) errors.name = NAME_ERROR;
+  else if (nameTaken(assets, name, excludeId)) errors.name = NAME_TAKEN_ERROR;
+
+  if (values.slugs.length > MAX_SLUGS || values.slugs.some((s) => s.length > MAX_SLUG)) {
+    errors.slugs = SLUGS_ERROR;
+    return errors;
+  }
+  const own = slugifyName(name);
+  for (const slug of own ? [own, ...values.slugs] : values.slugs) {
+    const holder = holderOfSlug(assets, slug, excludeId);
+    if (holder) {
+      errors.slugs = slugTakenError(slug, holder.name);
+      break;
+    }
+  }
+  return errors;
+}
+
+/** The values of the row of `matrix.assets[index]` as text boxes, keyed by asset id, to start
+ * a new asset from it. The value against the asset itself (the diagonal) and the cells the
+ * database does not hold stay out: those are for the user to write. */
+export function valuesFromRow(matrix: MarkowitzMatrix, index: number): Record<number, string> {
+  const out: Record<number, string> = {};
+  matrix.assets.forEach((asset, j) => {
+    const value = matrix.values[index]?.[j];
+    if (j !== index && typeof value === "number") out[asset.id] = valueToText(value);
+  });
+  return out;
+}
+
+/** How many of the assets still have no good value in `texts`. */
+export function missingValues(assets: MarkowitzAsset[], texts: Record<number, string>): number {
+  return assets.filter((a) => valueError(texts[a.id] ?? "") !== null).length;
+}
+
+// -- Writes -------------------------------------------------------------------
+
+/** A failed write. `status` is the HTTP status, `code` the short word the server sent
+ * (`exists`, `slug_taken`, `incomplete`), `fields` the fields a 422 names, and the rest
+ * the details that go with some codes. */
+export class MarkowitzApiError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly fields: string[];
+  readonly slug: string | null;
+  readonly asset: string | null;
+  readonly missing: number[];
+
+  constructor(
+    message: string,
+    status: number,
+    extra: {
+      code?: string | null;
+      fields?: string[];
+      slug?: string | null;
+      asset?: string | null;
+      missing?: number[];
+    } = {},
+  ) {
+    super(message);
+    this.name = "MarkowitzApiError";
+    this.status = status;
+    this.code = extra.code ?? null;
+    this.fields = extra.fields ?? [];
+    this.slug = extra.slug ?? null;
+    this.asset = extra.asset ?? null;
+    this.missing = extra.missing ?? [];
+  }
+}
+
+async function failure(res: Response, fallback: string): Promise<MarkowitzApiError> {
+  const extra: ConstructorParameters<typeof MarkowitzApiError>[2] = {};
+  try {
+    const body: unknown = await res.json();
+    if (isRec(body)) {
+      const detail = body.detail;
+      if (isText(detail)) extra.code = detail;
+      else if (isRec(detail)) {
+        if (isText(detail.code)) extra.code = detail.code;
+        if (isText(detail.slug)) extra.slug = detail.slug;
+        if (isText(detail.asset)) extra.asset = detail.asset;
+        if (Array.isArray(detail.missing)) extra.missing = detail.missing.filter(isNumber);
+      } else if (Array.isArray(detail)) {
+        const fields: string[] = [];
+        for (const item of detail) {
+          const where = isRec(item) && Array.isArray(item.loc) ? item.loc[1] : null;
+          if (isText(where) && !fields.includes(where)) fields.push(where);
+        }
+        extra.fields = fields;
+      }
+    }
+  } catch {
+    // Not JSON: the fallback says enough.
+  }
+  return new MarkowitzApiError(fallback, res.status, extra);
+}
+
+const jsonInit = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+export interface SavedCell {
+  row_id: number;
+  col_id: number;
+  value: number;
+  updated_at: string;
+}
+
+function isSavedCell(value: unknown): value is SavedCell {
+  return (
+    isRec(value) &&
+    isNumber(value.row_id) &&
+    isNumber(value.col_id) &&
+    isNumber(value.value) &&
+    isText(value.updated_at)
+  );
+}
+
+const CELL_ERROR = "No se pudo guardar la correlación";
+const ASSET_SAVE_ERROR = "No se pudo guardar el activo";
+const ASSET_CREATE_ERROR = "No se pudo crear el activo";
+
+/** Sets one cell, and the opposite one when `bothDirections`. Returns the cells written. */
+export async function setMarkowitzCell(input: {
+  rowId: number;
+  colId: number;
+  value: number;
+  bothDirections: boolean;
+}): Promise<SavedCell[]> {
+  const res = await fetchWithAuth(
+    `${BASE}/cells`,
+    jsonInit("PATCH", {
+      row_id: input.rowId,
+      col_id: input.colId,
+      value: input.value,
+      both_directions: input.bothDirections,
+    }),
+  );
+  if (!res.ok) throw await failure(res, CELL_ERROR);
+  const parsed: unknown = await res.json();
+  if (!Array.isArray(parsed) || !parsed.every(isSavedCell)) {
+    throw new MarkowitzApiError(CELL_ERROR, 200);
+  }
+  return parsed;
+}
+
+export interface NewAssetInput {
+  name: string;
+  slugs: string[];
+  correlations: { asset_id: number; value: number }[];
+}
+
+export async function createMarkowitzAsset(input: NewAssetInput): Promise<MarkowitzAsset> {
+  const res = await fetchWithAuth(`${BASE}/assets`, jsonInit("POST", input));
+  if (!res.ok) throw await failure(res, ASSET_CREATE_ERROR);
+  const parsed: unknown = await res.json();
+  if (!isAsset(parsed)) throw new MarkowitzApiError(ASSET_CREATE_ERROR, 200);
+  return parsed;
+}
+
+/** Only the fields in `patch` change. */
+export async function updateMarkowitzAsset(
+  id: number,
+  patch: Partial<AssetFormValues>,
+): Promise<MarkowitzAsset> {
+  const res = await fetchWithAuth(`${BASE}/assets/${id}`, jsonInit("PATCH", patch));
+  if (!res.ok) throw await failure(res, ASSET_SAVE_ERROR);
+  const parsed: unknown = await res.json();
+  if (!isAsset(parsed)) throw new MarkowitzApiError(ASSET_SAVE_ERROR, 200);
+  return parsed;
+}
+
+export interface WriteProblem {
+  /** A message for the bottom of the modal. */
+  form?: string;
+  /** Messages for the fields they belong to. */
+  fields: { name?: string; slugs?: string; value?: string };
+  /** The asset (or one of them) no longer exists: the page should read the matrix again. */
+  gone: boolean;
+  /** The matrix changed while the modal was open: read it again and let the user finish. */
+  stale: boolean;
+}
+
+const GENERIC = "No se pudo completar la acción. Inténtalo de nuevo.";
+
+/** What to tell the user about a failed cell write. */
+export function describeCellError(err: unknown): WriteProblem {
+  if (!(err instanceof MarkowitzApiError)) {
+    return { form: GENERIC, fields: {}, gone: false, stale: false };
+  }
+  if (err.status === 404) {
+    return {
+      form: "Uno de los dos activos ya no existe. Se actualizó la matriz.",
+      fields: {},
+      gone: true,
+      stale: false,
+    };
+  }
+  if (err.status === 422) {
+    return { fields: { value: `${VALUE_HELP}` }, gone: false, stale: false };
+  }
+  return { form: err.message, fields: {}, gone: false, stale: false };
+}
+
+/** What to tell the user about a failed asset write (create or edit). */
+export function describeAssetError(err: unknown): WriteProblem {
+  if (!(err instanceof MarkowitzApiError)) {
+    return { form: GENERIC, fields: {}, gone: false, stale: false };
+  }
+  if (err.status === 409 && err.code === "slug_taken" && err.slug) {
+    return {
+      fields: { slugs: slugTakenError(err.slug, err.asset ?? "otro activo") },
+      gone: false,
+      stale: false,
+    };
+  }
+  if (err.status === 409) {
+    return { fields: { name: NAME_TAKEN_ERROR }, gone: false, stale: false };
+  }
+  if (err.status === 404) {
+    return {
+      form: "Este activo ya no existe. Se actualizó la matriz.",
+      fields: {},
+      gone: true,
+      stale: false,
+    };
+  }
+  if (err.status === 422 && err.code === "incomplete") {
+    return {
+      form: "Se agregó otro activo mientras tanto. Ya aparece en la lista: escribe su valor.",
+      fields: {},
+      gone: false,
+      stale: true,
+    };
+  }
+  if (err.status === 422) {
+    const fields: WriteProblem["fields"] = {};
+    if (err.fields.includes("name")) fields.name = NAME_ERROR;
+    if (err.fields.includes("slugs")) fields.slugs = SLUGS_ERROR;
+    return Object.keys(fields).length > 0
+      ? { fields, gone: false, stale: false }
+      : { form: "Revisa los datos del formulario.", fields: {}, gone: false, stale: false };
+  }
+  return { form: err.message, fields: {}, gone: false, stale: false };
+}
