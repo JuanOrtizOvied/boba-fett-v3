@@ -178,8 +178,8 @@ export function EntityScoreFormModal({
             {errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
             {renamed && (
               <p className="text-xs text-sabbi-neutral-500">
-                Los productos que ya usan el nombre anterior no cambian. El slug del nombre anterior se
-                conserva.
+                Los productos que ya usan el nombre anterior no cambian. El nombre anterior se conserva
+                como nombre alternativo.
               </p>
             )}
           </div>
@@ -211,10 +211,10 @@ export function EntityScoreFormModal({
 
           <div className="flex flex-col gap-2">
             <label htmlFor={slugId} className="text-xs font-medium text-sabbi-neutral-700">
-              Slugs
+              Nombres alternativos
             </label>
             {slugs.length === 0 ? (
-              <p className="text-xs text-sabbi-neutral-500 italic">Sin slugs todavía.</p>
+              <p className="text-xs text-sabbi-neutral-500 italic">Sin nombres alternativos todavía.</p>
             ) : (
               <ul className="flex flex-wrap gap-1.5">
                 {slugs.map((slug) => (
@@ -254,7 +254,7 @@ export function EntityScoreFormModal({
                     commitDraft();
                   }
                 }}
-                placeholder="Agregar slug y presionar Enter"
+                placeholder="Agregar nombre alternativo y presionar Enter"
                 className={`${INPUT} min-w-0 flex-1`}
               />
               <button
@@ -268,8 +268,8 @@ export function EntityScoreFormModal({
             </div>
             {errors.slugs && <p className="text-xs text-red-600">{errors.slugs}</p>}
             <p className="text-xs text-sabbi-neutral-500">
-              El slug del nombre se agrega solo al guardar. Los demás sirven para reconocer otras
-              formas de escribirlo.
+              El nombre alternativo que corresponde al propio nombre se agrega solo al guardar. Los
+              demás sirven para reconocer otras formas de escribirlo.
             </p>
           </div>
         </div>

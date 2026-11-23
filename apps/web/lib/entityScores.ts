@@ -19,7 +19,7 @@ export const KIND_TEXT: Record<EntityKind, { tab: string; plural: string; singul
 };
 
 export const NO_SCORE = "Sin score";
-export const NO_SLUGS = "Sin slugs";
+export const NO_SLUGS = "Sin nombres alternativos";
 
 const BASE = "/api/admin/entity-scores";
 
@@ -203,7 +203,7 @@ export interface FormErrors {
 
 export const NAME_ERROR = `El nombre debe tener entre 1 y ${MAX_NAME} caracteres.`;
 export const SCORE_ERROR = "El score es un número entero del 1 al 10.";
-export const SLUGS_ERROR = `Máximo ${MAX_SLUGS} slugs, de hasta ${MAX_SLUG} caracteres cada uno.`;
+export const SLUGS_ERROR = `Máximo ${MAX_SLUGS} nombres alternativos, de hasta ${MAX_SLUG} caracteres cada uno.`;
 
 /** The same checks the server makes, so a mistake shows before the request. */
 export function validateForm(values: FormValues): FormErrors {

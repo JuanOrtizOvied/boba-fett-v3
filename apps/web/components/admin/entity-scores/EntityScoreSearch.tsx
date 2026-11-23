@@ -37,7 +37,7 @@ export function EntityScoreSearch({
       <input
         type="text"
         aria-label={label}
-        placeholder="Buscar por nombre o slug..."
+        placeholder="Buscar por nombre o nombre alternativo..."
         className="block w-full rounded-md border border-sabbi-neutral-200 bg-sabbi-neutral-50 py-2 pr-10 pl-10 text-sabbi-neutral-900 transition-all placeholder:text-sabbi-neutral-400 focus:border-transparent focus:ring-2 focus:ring-sabbi-neutral-900 focus:outline-none"
         value={value}
         onChange={(e) => onChange(e.target.value)}

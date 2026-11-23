@@ -83,7 +83,7 @@ export function EntityScoreTable({
               Score
             </th>
             <th scope="col" className={HEADER}>
-              Slugs
+              Nombres alternativos
             </th>
             {hasActions && (
               <th scope="col" className={`${HEADER} right-0 z-20 text-right`}>
