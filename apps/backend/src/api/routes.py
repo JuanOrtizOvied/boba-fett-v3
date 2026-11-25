@@ -37,6 +37,7 @@ from api.auth_routes import router as auth_router
 from api.chat_routes import router as chat_router
 from api.entity_scores_routes import router as entity_scores_router
 from api.logging_config import configure_logging
+from api.markowitz_routes import router as markowitz_router
 from api.properties_routes import router as properties_router
 from api.webhook_routes import router as webhook_router
 from auth.dependencies import get_current_user
@@ -52,6 +53,7 @@ from db.connection import close_pool, get_pool
 from db.encryption import get_serde
 from db.entity_scores import EntityScoreRepository
 from db.ficha_repository import FichaRepository
+from db.markowitz import MarkowitzRepository
 from db.models import ProductCreate, ProductUpdate, SnapshotCreate
 from db.normalized_sync_events import NormalizedSyncEventRepository
 from db.normalized_sync_issues import NormalizedSyncIssueRepository
@@ -116,6 +118,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.history_repo = CatalogHistoryRepository(pool)
     app.state.property_repo = PropertyRepository(pool)
     app.state.entity_score_repo = EntityScoreRepository(pool)
+    app.state.markowitz_repo = MarkowitzRepository(pool)
 
     # SharePoint catalog sync upkeep; None (and no Graph call) unless
     # SHAREPOINT_SYNC_ENABLED is true.
@@ -141,6 +144,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(properties_router)
 app.include_router(entity_scores_router)
+app.include_router(markowitz_router)
 app.include_router(chat_router)
 # Microsoft Graph calls these without a session; they authenticate by clientState.
 app.include_router(webhook_router)

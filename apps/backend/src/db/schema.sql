@@ -282,6 +282,28 @@ ALTER TABLE manager ALTER COLUMN updated_at SET DEFAULT now();
 ALTER TABLE administrator ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE manager ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+-- Markowitz correlation matrix of asset classes. Mirrors
+-- migrations/versions/c9a4e6d2f815_add_markowitz_matrix.py. One row per asset and one row per
+-- cell (both directions stored); the diagonal is always 1 and a value stays within -1 to 1.
+CREATE TABLE IF NOT EXISTS markowitz_asset (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    slugs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    position INTEGER NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS markowitz_correlation (
+    row_asset_id INTEGER NOT NULL REFERENCES markowitz_asset(id) ON DELETE RESTRICT,
+    col_asset_id INTEGER NOT NULL REFERENCES markowitz_asset(id) ON DELETE RESTRICT,
+    value NUMERIC(5, 4) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (row_asset_id, col_asset_id),
+    CONSTRAINT markowitz_correlation_value_range CHECK (value BETWEEN -1 AND 1),
+    CONSTRAINT markowitz_correlation_diagonal CHECK (row_asset_id <> col_asset_id OR value = 1)
+);
+CREATE INDEX IF NOT EXISTS idx_markowitz_correlation_col ON markowitz_correlation (col_asset_id);
+
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS administrator_score INTEGER;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS manager_score INTEGER;
 ALTER TABLE product_catalog ADD COLUMN IF NOT EXISTS isin TEXT DEFAULT '';
